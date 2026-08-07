@@ -1492,6 +1492,68 @@ tbody tr.is-expanded td {
   outline: 0;
   box-shadow: 0 0 0 3px rgba(22, 122, 85, 0.1);
 }
+
+.license-fields,
+.serial-fields { margin-top: 18px; }
+.file-field input[type='file'] { padding: 9px; background: #fbfdfc; }
+.file-field small { color: var(--muted); font-size: .76rem; }
+.equipment-picker { display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); gap: 10px; margin: 18px 0; }
+.equipment-picker article { border: 1px solid var(--border); border-radius: 14px; padding: 12px; background: #fff; display: grid; gap: 12px; }
+.equipment-picker article.is-selected { border-color: #94cbb8; background: #f2faf7; }
+.equipment-picker article > label { display: flex; align-items: center; gap: 8px; }
+.equipment-picker input[type='checkbox'],.consent-check input { width: 18px; height: 18px; accent-color: var(--primary); }
+.quantity-control { display: flex; align-items: center; justify-content: center; gap: 10px; direction: ltr; }
+.quantity-control button { width: 34px; height: 34px; border: 1px solid var(--border); border-radius: 9px; background: #fff; display: grid; place-items: center; color: var(--primary); }
+.quantity-control button:disabled { opacity: .35; }
+.quantity-control svg { width: 15px; }
+.quantity-control span,.quantity-control b { min-width: 30px; text-align: center; }
+.signature-pad { max-width: 720px; }
+.signature-toolbar { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; font-weight:700; }
+.signature-toolbar button { border:0; background:none; color:var(--primary); font-weight:700; }
+.signature-pad canvas { display:block; width:100%; height:180px; background:#fff; border:1.5px dashed #91aa9f; border-radius:14px; touch-action:none; }
+.signature-pad > small { display:block; color:var(--muted); margin-top:7px; }
+.consent-check { display:flex !important; flex-direction:row !important; align-items:flex-start; gap:10px; margin-top:16px; font-weight:600; }
+.return-list { display:grid; gap:8px; }
+.return-list > div { display:flex; align-items:center; justify-content:space-between; gap:14px; border:1px solid var(--border); border-radius:12px; padding:10px 12px; }
+.return-list > div > span { display:grid; gap:2px; }
+.return-list small { color:var(--muted); }
+.row-actions { display:flex; gap:6px; white-space:nowrap; }
+.description-cell { min-width:220px; max-width:420px; white-space:normal; }
+.module-table-card td small { display:block; color:var(--muted); margin-top:3px; }
+
+/* Compact SaaS density: keeps primary controls and records visible in one viewport. */
+.compact-page { padding-block: 22px 30px; }
+.compact-page .page-title { margin-bottom: 18px; }
+.compact-page .page-title h1 { font-size: clamp(1.65rem,2.2vw,2.15rem); }
+.compact-page .module-stats { gap: 10px; margin-bottom: 12px; }
+.compact-page .module-stats article { min-height: 108px; padding: 16px 18px; }
+.compact-page .module-toolbar,.compact-page .toolbar { margin-bottom: 12px; }
+.compact-page .module-table-card > header { padding: 15px 18px; }
+.compact-page table th,.compact-page table td { padding-top: 11px; padding-bottom: 11px; }
+.dashboard-chart { min-width: 0; }
+.bar-chart { display:grid; gap:14px; padding:18px 20px; }
+.bar-chart > div { display:grid; grid-template-columns:90px minmax(120px,1fr) 54px; align-items:center; gap:12px; }
+.bar-chart > div > div { height:24px; position:relative; background:#edf2ef; border-radius:7px; overflow:hidden; direction:rtl; }
+.bar-chart i,.bar-chart b { position:absolute; right:0; display:block; border-radius:7px; }
+.bar-chart i { top:0; bottom:0; background:#cce8dd; }
+.bar-chart b { top:7px; bottom:7px; background:#15835e; }
+.bar-chart strong { direction:ltr; font-variant-numeric:tabular-nums; }
+.chart-legend { display:flex; gap:18px; padding:0 20px 18px; color:var(--muted); font-size:.8rem; }
+.chart-legend span { display:flex; align-items:center; gap:6px; }
+.chart-legend i,.chart-legend b { width:12px; height:8px; border-radius:3px; background:#cce8dd; }
+.chart-legend b { background:#15835e; }
+.task-list a { display:flex; align-items:center; gap:12px; color:inherit; text-decoration:none; }
+
+@media (max-width: 1100px) {
+  .equipment-picker { grid-template-columns: repeat(3,minmax(0,1fr)); }
+  .lifecycle-detail { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 700px) {
+  .equipment-picker { grid-template-columns: 1fr 1fr; }
+  .signature-pad canvas { height: 150px; }
+  .lifecycle-detail { grid-template-columns: 1fr; }
+  .row-actions { flex-direction:column; }
+}
 .field-wide {
   grid-column: 1/-1;
 }

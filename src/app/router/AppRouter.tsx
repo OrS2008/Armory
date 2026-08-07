@@ -8,6 +8,8 @@ import { SoldierHomePage } from '@/features/public/SoldierHomePage';
 import { SoldierActionPage } from '@/features/public/SoldierActionPage';
 import { OperationalModulePage } from '@/features/modules/OperationalModulePage';
 import { AdminLoginPage } from '@/features/auth/AdminLoginPage';
+import { ArmoryPage, FaultsPage, LicensesPage } from '@/features/modules/LifecycleModulePage';
+import { FuelManagementPage, InventoryLoansPage } from '@/features/modules/LogisticsPage';
 
 const router = createBrowserRouter([
   {
@@ -28,6 +30,12 @@ const router = createBrowserRouter([
     children: [
       { index: true, element: <DashboardPage /> },
       { path: 'soldiers', element: <SoldiersPage /> },
+      { path: 'equipment', element: <SoldiersPage /> },
+      { path: 'armory', element: <ArmoryPage /> },
+      { path: 'faults', element: <FaultsPage /> },
+      { path: 'licenses', element: <LicensesPage /> },
+      { path: 'vehicles', element: <FuelManagementPage /> },
+      { path: 'inventory', element: <InventoryLoansPage /> },
       { path: ':moduleId', element: <OperationalModulePage /> },
       { path: '*', element: <Navigate to="/admin" replace /> },
     ],
