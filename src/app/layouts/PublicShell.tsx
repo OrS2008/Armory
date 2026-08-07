@@ -1,4 +1,4 @@
-import { LockKeyhole, ShieldCheck } from 'lucide-react';
+import { LockKeyhole } from 'lucide-react';
 import { Link, Outlet } from 'react-router-dom';
 
 export function PublicShell() {
@@ -10,7 +10,7 @@ export function PublicShell() {
       <header className="public-header">
         <Link className="public-brand" to="/">
           <span className="brand-mark">
-            <ShieldCheck />
+            <img src="/masayeet-951-logo.png" alt="מסייעת 951" />
           </span>
           <span>
             <strong>Armory</strong>

@@ -1,12 +1,28 @@
 import {
+  BadgeCheck,
   ClipboardPenLine,
   Fuel,
   HardHat,
   PackagePlus,
+  Shield,
   Warehouse,
 } from 'lucide-react';
 
 export const soldierActions = [
+  {
+    id: 'details',
+    title: 'רישום פרטים אישיים',
+    description: 'פתיחת כרטיס חייל, רישיונות ופרטי קשר.',
+    icon: BadgeCheck,
+    accent: 'green',
+  },
+  {
+    id: 'weapon',
+    title: 'רישום נשק',
+    description: 'רישום נשק, אמר״ל וכוונת כחלק מכרטיס החייל.',
+    icon: Shield,
+    accent: 'blue',
+  },
   {
     id: 'equipment',
     title: 'חתימה על ציוד',

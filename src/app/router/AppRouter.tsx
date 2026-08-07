@@ -10,6 +10,7 @@ import { OperationalModulePage } from '@/features/modules/OperationalModulePage'
 import { AdminLoginPage } from '@/features/auth/AdminLoginPage';
 import { ArmoryPage, FaultsPage, LicensesPage } from '@/features/modules/LifecycleModulePage';
 import { FuelManagementPage, InventoryLoansPage } from '@/features/modules/LogisticsPage';
+import { ReportsPage } from '@/features/modules/ReportsPage';
 
 const router = createBrowserRouter([
   {
@@ -36,6 +37,10 @@ const router = createBrowserRouter([
       { path: 'licenses', element: <LicensesPage /> },
       { path: 'vehicles', element: <FuelManagementPage /> },
       { path: 'inventory', element: <InventoryLoansPage /> },
+      { path: 'communications', element: <InventoryLoansPage module="communications" title="ציוד קשר" eyebrow="מחסן קשר" /> },
+      { path: 'ammunition', element: <InventoryLoansPage module="ammunition" title="תחמושת ואלפא" eyebrow="הקצאות והחזרות" /> },
+      { path: 'tzelem', element: <ReportsPage stocktake /> },
+      { path: 'reports', element: <ReportsPage /> },
       { path: ':moduleId', element: <OperationalModulePage /> },
       { path: '*', element: <Navigate to="/admin" replace /> },
     ],

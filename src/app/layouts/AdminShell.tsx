@@ -86,7 +86,7 @@ export function AdminShell() {
       <header className="admin-header">
         <Link className="admin-brand" to="/admin" aria-label="Armory — פאנל ניהול">
           <span className="brand-mark">
-            <ShieldCheck />
+            <img src="/masayeet-951-logo.png" alt="מסייעת 951" />
           </span>
           <span>
             <strong>Armory</strong>
