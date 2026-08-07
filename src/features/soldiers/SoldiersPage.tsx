@@ -16,7 +16,7 @@ export function SoldiersPage() {
   const [soldiers, setSoldiers] = useState(soldierFixtures);
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<FilterValue>('all');
-  const [expanded, setExpanded] = useState<string | null>('s-1');
+  const [expanded, setExpanded] = useState<string | null>(null);
   const [editing, setEditing] = useState<Soldier | null>(null);
   const [creating, setCreating] = useState(false);
   const visible = useMemo(
