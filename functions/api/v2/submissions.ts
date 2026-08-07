@@ -1,4 +1,60 @@
 import { body, fail, id, json, now, requireUser, type Env } from '../../_shared/http';
-const actions=['details','weapon','equipment','shortage','deposit','refuel','fault'];
-export const onRequestPost: PagesFunction<Env> = async ({request,env}) => { const input=await body(request); if(input instanceof Response)return input; const actionType=String(input.actionType??''); const fullName=String(input.fullName??'').trim(); const personalId=String(input.personalId??'').replace(/\D/g,''); const phone=String(input.phone??'').replace(/[^\d+]/g,''); const department=String(input.department??'').trim(); if(!actions.includes(actionType)||fullName.length<2||personalId.length<6||phone.length<9||!department)return fail(422,'VALIDATION_ERROR','חלק מהפרטים חסרים או אינם תקינים'); const timestamp=now(); const submissionId=id(); await env.DB.prepare(`INSERT INTO submissions(id,action_type,personal_id,full_name,phone,department,payload_json,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)`).bind(submissionId,actionType,personalId,fullName,phone,department,JSON.stringify(input.payload??{}),timestamp,timestamp).run(); return json({ok:true,id:submissionId,status:'pending'},201); };
-export const onRequestGet: PagesFunction<Env> = async ({request,env}) => { const user=await requireUser(request,env,'approvals'); if(user instanceof Response)return user; const url=new URL(request.url); const type=url.searchParams.get('type'); const status=url.searchParams.get('status'); let sql='SELECT id,action_type,personal_id,full_name,phone,department,payload_json,status,created_at,updated_at FROM submissions WHERE 1=1'; const values:unknown[]=[]; if(type){sql+=' AND action_type=?';values.push(type);} if(status){sql+=' AND status=?';values.push(status);} sql+=' ORDER BY created_at DESC LIMIT 250'; const result=await env.DB.prepare(sql).bind(...values).all(); return json({ok:true,items:result.results}); };
+const actions = ['details', 'weapon', 'equipment', 'shortage', 'deposit', 'refuel', 'fault'];
+export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
+  const input = await body(request);
+  if (input instanceof Response) return input;
+  const actionType = String(input.actionType ?? '');
+  const fullName = String(input.fullName ?? '').trim();
+  const personalId = String(input.personalId ?? '').replace(/\D/g, '');
+  const phone = String(input.phone ?? '').replace(/[^\d+]/g, '');
+  const department = String(input.department ?? '').trim();
+  if (
+    !actions.includes(actionType) ||
+    fullName.length < 2 ||
+    personalId.length < 6 ||
+    phone.length < 9 ||
+    !department
+  )
+    return fail(422, 'VALIDATION_ERROR', 'חלק מהפרטים חסרים או אינם תקינים');
+  const timestamp = now();
+  const submissionId = id();
+  await env.DB.prepare(
+    `INSERT INTO submissions(id,action_type,personal_id,full_name,phone,department,payload_json,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)`,
+  )
+    .bind(
+      submissionId,
+      actionType,
+      personalId,
+      fullName,
+      phone,
+      department,
+      JSON.stringify(input.payload ?? {}),
+      timestamp,
+      timestamp,
+    )
+    .run();
+  return json({ ok: true, id: submissionId, status: 'pending' }, 201);
+};
+export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
+  const user = await requireUser(request, env, 'approvals');
+  if (user instanceof Response) return user;
+  const url = new URL(request.url);
+  const type = url.searchParams.get('type');
+  const status = url.searchParams.get('status');
+  let sql =
+    'SELECT id,action_type,personal_id,full_name,phone,department,payload_json,status,created_at,updated_at FROM submissions WHERE 1=1';
+  const values: unknown[] = [];
+  if (type) {
+    sql += ' AND action_type=?';
+    values.push(type);
+  }
+  if (status) {
+    sql += ' AND status=?';
+    values.push(status);
+  }
+  sql += ' ORDER BY created_at DESC LIMIT 250';
+  const result = await env.DB.prepare(sql)
+    .bind(...values)
+    .all();
+  return json({ ok: true, items: result.results });
+};

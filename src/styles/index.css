@@ -1497,6 +1497,86 @@ tbody tr.is-expanded td {
 .submission-card a {
   text-decoration: none;
 }
+.login-page,
+.session-loading {
+  display: grid;
+  min-height: 100dvh;
+  place-items: center;
+  padding: 24px;
+  background:
+    radial-gradient(circle at 75% 12%, rgba(22, 122, 85, 0.11), transparent 30rem), var(--bg);
+}
+.login-card {
+  width: min(430px, 100%);
+  padding: 28px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 24px 70px rgba(15, 23, 20, 0.1);
+}
+.login-card > header {
+  display: flex;
+  gap: 13px;
+  margin-bottom: 24px;
+}
+.login-card header > div > span {
+  color: var(--primary);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.login-card h1 {
+  margin: 3px 0 4px;
+  font-size: 23px;
+  letter-spacing: -0.04em;
+}
+.login-card p {
+  margin: 0;
+  color: var(--secondary);
+  font-size: 11px;
+}
+.login-card form {
+  display: grid;
+  gap: 14px;
+}
+.login-card label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.login-card label span {
+  font-size: 11px;
+  font-weight: 750;
+}
+.login-card input {
+  height: 46px;
+  padding: 0 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 9px;
+  font-size: 16px;
+}
+.login-card form .button {
+  width: 100%;
+  margin-top: 4px;
+}
+.login-error {
+  padding: 10px 12px;
+  border: 1px solid #edcbc7;
+  border-radius: 9px;
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-size: 11px;
+}
+.session-loading {
+  align-content: center;
+  gap: 10px;
+  color: var(--secondary);
+  text-align: center;
+}
+.session-loading p {
+  margin: 0;
+}
 .module-stats {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

@@ -5,6 +5,11 @@ import { Button } from '@/components/ui/Button';
 import { api } from '@/services/api';
 import { soldierActions } from './actions';
 
+const formString = (data: FormData, key: string) => {
+  const value = data.get(key);
+  return typeof value === 'string' ? value : '';
+};
+
 const specificFields: Record<string, { label: string; placeholder: string; type?: string }[]> = {
   details: [{ label: 'רישיון נהיגה', placeholder: 'סוגי הרישיונות שברשותכם' }],
   weapon: [
@@ -37,14 +42,25 @@ export function SoldierActionPage() {
     const data = new FormData(event.currentTarget);
     const baseKeys = new Set(['fullName', 'personalId', 'phone', 'department']);
     const payload: Record<string, string> = {};
-    data.forEach((value, key) => { if (!baseKeys.has(key)) payload[key] = String(value); });
+    data.forEach((value, key) => {
+      if (!baseKeys.has(key) && typeof value === 'string') payload[key] = value;
+    });
     try {
-      await api.createSubmission({ actionType: actionId, fullName: String(data.get('fullName')), personalId: String(data.get('personalId')), phone: String(data.get('phone')), department: String(data.get('department')), payload });
+      await api.createSubmission({
+        actionType: actionId,
+        fullName: formString(data, 'fullName'),
+        personalId: formString(data, 'personalId'),
+        phone: formString(data, 'phone'),
+        department: formString(data, 'department'),
+        payload,
+      });
       setSubmitted(true);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (cause) {
       setSubmitError(cause instanceof Error ? cause.message : 'שליחת הטופס נכשלה');
-    } finally { setSubmitting(false); }
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -153,7 +169,11 @@ export function SoldierActionPage() {
               <strong>לפני השליחה</strong> ודאו שהפרטים נכונים. אין להזין מידע מסווג.
             </span>
           </div>
-          {submitError && <div className="login-error" role="alert">{submitError}</div>}
+          {submitError && (
+            <div className="login-error" role="alert">
+              {submitError}
+            </div>
+          )}
           <div className="public-form-actions">
             <Button variant="primary" type="submit" disabled={submitting}>
               {submitting ? 'שולח…' : 'שליחת הטופס'}

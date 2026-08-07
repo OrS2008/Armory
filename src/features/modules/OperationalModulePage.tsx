@@ -1,12 +1,39 @@
 import { Download, Filter, Plus, Search } from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams } from 'react-router-dom';
 import { Button } from '@/components/ui/Button';
+import { api } from '@/services/api';
 import { moduleConfigs } from './module.config';
+
+const submissionType: Record<string, string | undefined> = {
+  approvals: undefined,
+  shortages: 'shortage',
+  faults: 'fault',
+  armory: 'deposit',
+  vehicles: 'refuel',
+  equipment: 'equipment',
+};
 
 export function OperationalModulePage() {
   const { moduleId = '' } = useParams();
   const config = moduleConfigs[moduleId];
+  const queryClient = useQueryClient();
+  const liveModule = Object.prototype.hasOwnProperty.call(submissionType, moduleId);
+  const submissions = useQuery({
+    queryKey: ['submissions', moduleId],
+    queryFn: () => {
+      const type = submissionType[moduleId];
+      return api.submissions(type ? { type } : undefined);
+    },
+    enabled: liveModule,
+  });
+  const update = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: string }) =>
+      api.updateSubmission(id, status),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['submissions', moduleId] }),
+  });
   if (!config) return null;
+  const liveRows = submissions.data?.items ?? [];
   return (
     <section className="page module-page">
       <header className="page-title">
@@ -45,30 +72,53 @@ export function OperationalModulePage() {
           ייצוא
         </Button>
       </div>
-      {config.columns && (
+      {liveModule ? (
         <section className="section-card module-table-card">
           <header>
             <div>
               <h2>{config.title}</h2>
-              <p>המידע העדכני במערכת</p>
+              <p>דיווחים שנשלחו מאזור החיילים</p>
             </div>
           </header>
-          {config.rows?.length ? (
+          {submissions.isLoading ? (
+            <div className="module-empty">
+              <span>טוען רשומות…</span>
+            </div>
+          ) : liveRows.length ? (
             <div className="module-table-wrap">
               <table>
                 <thead>
                   <tr>
-                    {config.columns.map((c) => (
-                      <th key={c}>{c}</th>
-                    ))}
+                    <th>שם</th>
+                    <th>מ״א</th>
+                    <th>מחלקה</th>
+                    <th>סוג</th>
+                    <th>סטטוס</th>
+                    <th>פעולה</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {config.rows.map((row, i) => (
-                    <tr key={i}>
-                      {row.map((cell, j) => (
-                        <td key={j}>{cell}</td>
-                      ))}
+                  {liveRows.map((item) => (
+                    <tr key={item.id}>
+                      <td>{item.full_name}</td>
+                      <td>{item.personal_id}</td>
+                      <td>{item.department}</td>
+                      <td>{item.action_type}</td>
+                      <td>{item.status}</td>
+                      <td>
+                        <Button
+                          size="sm"
+                          disabled={update.isPending}
+                          onClick={() =>
+                            update.mutate({
+                              id: item.id,
+                              status: item.status === 'pending' ? 'in_progress' : 'resolved',
+                            })
+                          }
+                        >
+                          {item.status === 'pending' ? 'העברה לטיפול' : 'סגירת טיפול'}
+                        </Button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -81,6 +131,44 @@ export function OperationalModulePage() {
             </div>
           )}
         </section>
+      ) : (
+        config.columns && (
+          <section className="section-card module-table-card">
+            <header>
+              <div>
+                <h2>{config.title}</h2>
+                <p>המידע העדכני במערכת</p>
+              </div>
+            </header>
+            {config.rows?.length ? (
+              <div className="module-table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      {config.columns.map((column) => (
+                        <th key={column}>{column}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {config.rows.map((row, rowIndex) => (
+                      <tr key={rowIndex}>
+                        {row.map((cell, cellIndex) => (
+                          <td key={cellIndex}>{cell}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="module-empty">
+                <span>אין רשומות להצגה כרגע.</span>
+                <small>רשומות חדשות יופיעו כאן אוטומטית.</small>
+              </div>
+            )}
+          </section>
+        )
       )}
       <div className="module-sections">
         {config.sections.map((section) => (

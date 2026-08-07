@@ -56,15 +56,23 @@ export function AdminShell() {
   if (session.isLoading)
     return (
       <div className="session-loading">
-        <span className="brand-mark"><ShieldCheck /></span><p>טוען את סביבת הניהול…</p>
+        <span className="brand-mark">
+          <ShieldCheck />
+        </span>
+        <p>טוען את סביבת הניהול…</p>
       </div>
     );
   if (session.error instanceof ApiError && session.error.status === 401)
     return <Navigate to="/admin/login" replace />;
   if (session.isError)
     return (
-      <div className="fatal-state"><h1>לא ניתן לטעון את סביבת הניהול</h1><p>{session.error instanceof Error ? session.error.message : 'אירעה שגיאה'}</p><button onClick={() => void session.refetch()}>ניסיון נוסף</button></div>
+      <div className="fatal-state">
+        <h1>לא ניתן לטעון את סביבת הניהול</h1>
+        <p>{session.error instanceof Error ? session.error.message : 'אירעה שגיאה'}</p>
+        <button onClick={() => void session.refetch()}>ניסיון נוסף</button>
+      </div>
     );
+  if (!session.data) return null;
   const currentUser = session.data.user;
 
   return (
@@ -94,7 +102,13 @@ export function AdminShell() {
           <span>או</span>
           <span>
             <strong>{currentUser.displayName}</strong>
-            <small>{currentUser.role === 'admin' ? 'מנהל מערכת' : currentUser.role === 'editor' ? 'עריכה' : 'צפייה'}</small>
+            <small>
+              {currentUser.role === 'admin'
+                ? 'מנהל מערכת'
+                : currentUser.role === 'editor'
+                  ? 'עריכה'
+                  : 'צפייה'}
+            </small>
           </span>
         </button>
       </header>
