@@ -47,6 +47,18 @@ export type Submission = {
   created_at: number;
   updated_at: number;
 };
+export type Asset = {
+  id: string;
+  module: string;
+  category: string;
+  name: string;
+  serial_number: string | null;
+  owner_name: string | null;
+  quantity: number;
+  issued_quantity: number;
+  location: string;
+  status: string;
+};
 export const api = {
   me: () => request<{ ok: true; user: AdminUser }>('/auth/me'),
   login: (username: string, password: string) =>
@@ -71,4 +83,15 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify({ status }),
     }),
+  assets: (module: string) =>
+    request<{ ok: true; items: Asset[] }>(`/assets?module=${encodeURIComponent(module)}`),
+  createAsset: (input: {
+    module: string;
+    name: string;
+    category: string;
+    quantity: number;
+    serialNumber?: string;
+    ownerName?: string;
+  }) =>
+    request<{ ok: true; id: string }>('/assets', { method: 'POST', body: JSON.stringify(input) }),
 };

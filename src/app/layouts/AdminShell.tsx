@@ -15,8 +15,8 @@ import {
   Users,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { Link, Navigate, NavLink, Outlet } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { Link, Navigate, NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { IconButton } from '@/components/ui/IconButton';
 import { api, ApiError } from '@/services/api';
 
@@ -40,6 +40,9 @@ const nav = [
 
 export function AdminShell() {
   const [online, setOnline] = useState(navigator.onLine);
+  const [panel, setPanel] = useState<'notifications' | 'account' | null>(null);
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     const on = () => setOnline(true);
@@ -95,10 +98,20 @@ export function AdminShell() {
           <span className={`connection-dot ${online ? '' : 'is-offline'}`} />
           {online ? 'מחובר' : 'לא מחובר'}
         </span>
-        <IconButton label="התראות — אין התראות חדשות">
+        <IconButton
+          label="התראות — אין התראות חדשות"
+          aria-expanded={panel === 'notifications'}
+          onClick={() => setPanel((value) => (value === 'notifications' ? null : 'notifications'))}
+        >
           <Bell />
         </IconButton>
-        <button className="account-button" type="button" aria-label="תפריט משתמש">
+        <button
+          className="account-button"
+          type="button"
+          aria-label="תפריט משתמש"
+          aria-expanded={panel === 'account'}
+          onClick={() => setPanel((value) => (value === 'account' ? null : 'account'))}
+        >
           <span>או</span>
           <span>
             <strong>{currentUser.displayName}</strong>
@@ -111,6 +124,28 @@ export function AdminShell() {
             </small>
           </span>
         </button>
+        {panel === 'notifications' && (
+          <div className="header-popover" role="status">
+            <strong>אין התראות חדשות</strong>
+            <small>עדכונים על בקשות ופעולות יופיעו כאן.</small>
+          </div>
+        )}
+        {panel === 'account' && (
+          <div className="header-popover account-popover">
+            <strong>{currentUser.username}</strong>
+            <small>החיבור מאובטח ומוגבל בזמן.</small>
+            <button
+              onClick={() =>
+                void api.logout().then(() => {
+                  queryClient.clear();
+                  void navigate('/admin/login', { replace: true });
+                })
+              }
+            >
+              התנתקות
+            </button>
+          </div>
+        )}
       </header>
       <nav className="admin-tabs" aria-label="ניווט ניהול">
         <div>

@@ -1,4 +1,4 @@
-import { ExternalLink, MessageCircle, Pencil, Printer, Trash2 } from 'lucide-react';
+import { MessageCircle, Pencil, Printer, Trash2 } from 'lucide-react';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import type { Soldier } from './soldier.schema';
 
@@ -8,14 +8,30 @@ const Field = ({ label, value, dir }: { label: string; value: React.ReactNode; d
     <dd dir={dir}>{value || '—'}</dd>
   </div>
 );
-export function SoldierDetails({ soldier, onEdit }: { soldier: Soldier; onEdit: () => void }) {
+export function SoldierDetails({
+  soldier,
+  onEdit,
+  onArchive,
+}: {
+  soldier: Soldier;
+  onEdit: () => void;
+  onArchive: () => void;
+}) {
   const outside = soldier.equipment.reduce((sum, item) => sum + item.issued - item.returned, 0);
   return (
     <div className="soldier-expanded">
       <section className="detail-section actions-section">
         <h3>פעולות</h3>
         <div className="action-stack">
-          <button>
+          <button
+            onClick={() =>
+              window.open(
+                `https://wa.me/972${soldier.phone.replace(/\D/g, '').replace(/^0/, '')}?text=${encodeURIComponent(`שלום ${soldier.fullName}, הודעה ממערכת Armory`)}`,
+                '_blank',
+                'noopener,noreferrer',
+              )
+            }
+          >
             <MessageCircle />
             שליחת הודעה
           </button>
@@ -23,15 +39,11 @@ export function SoldierDetails({ soldier, onEdit }: { soldier: Soldier; onEdit: 
             <Pencil />
             עריכת פרטים
           </button>
-          <button>
-            <ExternalLink />
-            הצגת כרטיס מלא
-          </button>
-          <button>
+          <button onClick={() => window.print()}>
             <Printer />
             הדפסת דוח
           </button>
-          <button className="danger-action">
+          <button className="danger-action" onClick={onArchive}>
             <Trash2 />
             העברה לארכיון
           </button>

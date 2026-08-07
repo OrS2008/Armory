@@ -37,6 +37,23 @@ export function SoldiersPage() {
       }),
     [soldiers, query, filter],
   );
+  const exportSoldiers = () => {
+    const rows = [
+      ['שם', 'מ״א', 'מחלקה', 'טלפון'],
+      ...visible.map((s) => [s.fullName, s.personalId, s.department, s.phone]),
+    ];
+    const csv =
+      '\uFEFF' +
+      rows
+        .map((row) => row.map((value) => `"${value.replaceAll('"', '""')}"`).join(','))
+        .join('\n');
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'armory-soldiers.csv';
+    link.click();
+    URL.revokeObjectURL(url);
+  };
   const save = (values: SoldierFormValues) => {
     if (editing) {
       setSoldiers((rows) =>
@@ -70,7 +87,7 @@ export function SoldiersPage() {
           <p>{soldiers.length} חיילים רשומים במערכת</p>
         </div>
         <div className="page-actions">
-          <Button>
+          <Button onClick={exportSoldiers}>
             <Download />
             ייבוא / ייצוא
           </Button>
@@ -100,10 +117,17 @@ export function SoldiersPage() {
             </button>
           ))}
         </div>
-        <IconButton label="מסננים נוספים">
+        <IconButton label="הצגת ממתינים בלבד" onClick={() => setFilter('pending')}>
           <Filter />
         </IconButton>
-        <IconButton label="רענון">
+        <IconButton
+          label="רענון"
+          onClick={() => {
+            setQuery('');
+            setFilter('all');
+            setExpanded(null);
+          }}
+        >
           <RefreshCw />
         </IconButton>
       </div>
@@ -181,7 +205,16 @@ export function SoldiersPage() {
                   {open && (
                     <tr className="detail-row">
                       <td colSpan={8}>
-                        <SoldierDetails soldier={s} onEdit={() => setEditing(s)} />
+                        <SoldierDetails
+                          soldier={s}
+                          onEdit={() => setEditing(s)}
+                          onArchive={() => {
+                            if (window.confirm(`להעביר את ${s.fullName} לארכיון?`)) {
+                              setSoldiers((rows) => rows.filter((row) => row.id !== s.id));
+                              setExpanded(null);
+                            }
+                          }}
+                        />
                       </td>
                     </tr>
                   )}
