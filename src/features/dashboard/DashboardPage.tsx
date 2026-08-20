@@ -1,6 +1,175 @@
-import { AlertTriangle, ArrowLeft, Clock3, Fuel, PackageOpen, Shield, Users, Wrench } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { StatusBadge } from '@/components/ui/StatusBadge';
-import { api } from '@/services/api';
-export function DashboardPage(){const query=useQuery({queryKey:['dashboard'],queryFn:api.dashboard});const d=query.data;const m=d?.metrics;const max=Math.max(1,...(d?.equipment??[]).map(x=>x.issued));return <section className="page compact-page"><header className="page-title dashboard-title"><div><span className="eyebrow">{new Date().toLocaleDateString('he-IL',{weekday:'long',day:'numeric',month:'long'})}</span><h1>תמונת מצב תפעולית</h1><p>נתוני אמת מכל תהליכי המערכת, מעודכנים בעת פתיחת המסך.</p></div></header>{query.isLoading?<div className="module-empty">טוען נתונים…</div>:<><div className="metrics"><article><span><Users/></span><div><small>חיילים במערכת</small><strong>{m?.soldiers??0}</strong><p>{m?.pending??0} חתימות ממתינות</p></div></article><article><span><PackageOpen/></span><div><small>פריטים בחוץ</small><strong>{m?.outstanding??0}</strong><p>ציוד אישי אצל חיילים</p></div></article><article><span><Shield/></span><div><small>אפסון ממתין</small><strong>{m?.deposits??0}</strong><p>בקשות לקליטת נשק</p></div></article><article><span><AlertTriangle/></span><div><small>דורש טיפול</small><strong>{(m?.faults??0)+(m?.shortages??0)}</strong><p>תקלות ובקשות חוסר</p></div></article></div><div className="dashboard-grid"><section className="section-card dashboard-chart"><header><div><h2>ציוד אישי — הוחתם מול הוחזר</h2><p>לפי סוג פריט</p></div><Link to="/admin/equipment">למעקב ציוד <ArrowLeft/></Link></header><div className="bar-chart">{(d?.equipment??[]).map(item=><div key={item.name}><span>{item.name}</span><div><i style={{width:`${item.issued/max*100}%`}}/><b style={{width:`${item.returned/max*100}%`}}/></div><strong>{item.returned}/{item.issued}</strong></div>)}</div><footer className="chart-legend"><span><i/>הוחתם</span><span><b/>הוחזר</span></footer></section><section className="section-card task-card"><header><div><h2>דורש טיפול</h2><p>תורים פתוחים לפי תחום</p></div></header><div className="task-list"><Link to="/admin/soldiers"><span className="task-icon warning"><Clock3/></span><div><strong>חתימות ציוד</strong><small>ממתינות לאישור מנהל</small></div><StatusBadge tone={m?.pending?'warning':'success'}>{m?.pending??0}</StatusBadge></Link><Link to="/admin/faults"><span className="task-icon warning"><Wrench/></span><div><strong>תקלות בינוי</strong><small>פתוחות או בטיפול</small></div><StatusBadge tone={m?.faults?'warning':'success'}>{m?.faults??0}</StatusBadge></Link><Link to="/admin/vehicles"><span className="task-icon success"><Fuel/></span><div><strong>כרטיסי תדלוק</strong><small>{Math.round(m?.fuelLitres??0)} ליטרים זמינים</small></div><StatusBadge tone="neutral">{m?.fuelCards??0}</StatusBadge></Link></div></section></div></>}</section>}
+import { AlertTriangle, CalendarPlus, Users } from 'lucide-react';
+import { formatDateTime, formatDayKey, formatRange, weekdayName } from '@shared/format';
+import { severityLabels } from '@shared/messages.he';
+import { t } from '@/i18n';
+import { Badge } from '@/components/ui/Badge';
+import { severityTone } from '@/components/ui/badge-tones';
+import { Card, CardHeader, MetricCard } from '@/components/ui/Card';
+import { buttonClass } from '@/components/ui/button-styles';
+import { EmptyState, QueryState } from '@/components/ui/States';
+import { PageHeader } from '@/components/layout/PageHeader';
+import { useDashboard } from '@/hooks/queries';
+
+export function DashboardPage() {
+  const dashboard = useDashboard();
+  const data = dashboard.data;
+  const issues = data ? data.conflictSummary.blocking + data.conflictSummary.warning : 0;
+
+  return (
+    <>
+      <PageHeader
+        title={t('dashboard.title')}
+        {...(data
+          ? { description: `יום ${weekdayName(data.date)} · ${formatDayKey(data.date)}` }
+          : {})}
+        actions={
+          <>
+            <Link to="/personnel" className={buttonClass('secondary', 'sm')}>
+              <Users className="size-4" aria-hidden />
+              {t('nav.personnel')}
+            </Link>
+            <Link to="/schedule" className={buttonClass('primary', 'sm')}>
+              <CalendarPlus className="size-4" aria-hidden />
+              {t('schedule.newAssignment')}
+            </Link>
+          </>
+        }
+      />
+
+      <QueryState
+        isLoading={dashboard.isLoading}
+        error={dashboard.error}
+        onRetry={() => void dashboard.refetch()}
+      >
+        {data ? (
+          <div className="flex flex-col gap-4">
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+              <MetricCard
+                label={t('dashboard.available')}
+                value={data.stats.availableCount}
+                hint={t('dashboard.ofPersonnel', { count: data.stats.personnelCount })}
+                tone="success"
+              />
+              <MetricCard
+                label={t('dashboard.assigned')}
+                value={data.stats.assignedCount}
+                hint={t('dashboard.unavailable') + `: ${data.stats.unavailableCount}`}
+              />
+              <MetricCard
+                label={t('dashboard.issues')}
+                value={issues}
+                hint={`${t('conflicts.blocking')}: ${data.conflictSummary.blocking}`}
+                tone={
+                  data.conflictSummary.blocking > 0 ? 'danger' : issues > 0 ? 'warning' : 'neutral'
+                }
+              />
+              <MetricCard
+                label={t('dashboard.unpublished')}
+                value={data.stats.unpublishedCount}
+                hint={`${t('dashboard.understaffed')}: ${data.stats.understaffedCount}`}
+                tone={data.stats.unpublishedCount > 0 ? 'warning' : 'neutral'}
+              />
+            </div>
+
+            <div className="grid gap-4 xl:grid-cols-2">
+              <Card>
+                <CardHeader
+                  title={t('dashboard.upcoming')}
+                  action={
+                    <Link className="text-sm text-brand-700 hover:underline" to="/schedule">
+                      {t('schedule.title')}
+                    </Link>
+                  }
+                />
+                {data.upcoming.length === 0 ? (
+                  <EmptyState description={t('dashboard.noUpcoming')} />
+                ) : (
+                  <ul className="flex flex-col divide-y divide-border-subtle">
+                    {data.upcoming.map((assignment) => {
+                      const missing = assignment.requiredHeadcount - assignment.assignees.length;
+                      return (
+                        <li key={assignment.id} className="flex items-center gap-3 py-2.5">
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate font-medium">
+                              {assignment.title ?? assignment.assignmentTypeName}
+                            </p>
+                            <p className="ltr-inline text-xs text-ink-muted">
+                              {formatRange(assignment.startAt, assignment.endAt, data.timezone)}
+                            </p>
+                          </div>
+                          {missing > 0 ? (
+                            <Badge tone="warning" icon={<AlertTriangle className="size-3" />}>
+                              {missing === 1
+                                ? t('schedule.missingOne')
+                                : t('schedule.missingPerson', { count: missing })}
+                            </Badge>
+                          ) : (
+                            <Badge tone="success">
+                              {assignment.assignees.length}/{assignment.requiredHeadcount}
+                            </Badge>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </Card>
+
+              <Card>
+                <CardHeader
+                  title={t('dashboard.alerts')}
+                  action={
+                    <Link
+                      className="text-sm text-brand-700 hover:underline"
+                      to="/schedule/conflicts"
+                    >
+                      {t('conflicts.title')}
+                    </Link>
+                  }
+                />
+                {data.conflicts.length === 0 ? (
+                  <EmptyState description={t('dashboard.noIssues')} />
+                ) : (
+                  <ul className="flex flex-col gap-2">
+                    {data.conflicts.map((conflict) => (
+                      <li
+                        key={conflict.id}
+                        className="rounded-[var(--radius-control)] border border-border-subtle p-3"
+                      >
+                        <div className="mb-1 flex items-center gap-2">
+                          <Badge tone={severityTone[conflict.severity]}>
+                            {severityLabels[conflict.severity]}
+                          </Badge>
+                          <span className="text-sm font-medium">{conflict.subject}</span>
+                        </div>
+                        <p className="text-sm text-ink-muted">{conflict.message}</p>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </Card>
+            </div>
+
+            {data.recentChanges.length > 0 ? (
+              <Card>
+                <CardHeader title={t('dashboard.recentChanges')} />
+                <ul className="flex flex-col divide-y divide-border-subtle text-sm">
+                  {data.recentChanges.map((change) => (
+                    <li key={change.id} className="flex flex-wrap items-center gap-2 py-2">
+                      <span className="font-medium">{change.actorName}</span>
+                      <span className="text-ink-muted">{change.action}</span>
+                      <span className="ltr-inline ms-auto text-xs text-ink-faint">
+                        {formatDateTime(change.createdAt, data.timezone)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </Card>
+            ) : null}
+          </div>
+        ) : null}
+      </QueryState>
+    </>
+  );
+}

@@ -1,48 +1,44 @@
-import { createBrowserRouter, Navigate, RouterProvider } from 'react-router-dom';
-import { AdminShell } from '@/app/layouts/AdminShell';
-import { PublicShell } from '@/app/layouts/PublicShell';
+import { Navigate, RouterProvider, createBrowserRouter } from 'react-router-dom';
+import { AppShell } from '@/app/layouts/AppShell';
+import { RequireAuth } from '@/app/router/RequireAuth';
+import { ErrorState } from '@/components/ui/States';
+import { LoginPage } from '@/features/auth/LoginPage';
 import { DashboardPage } from '@/features/dashboard/DashboardPage';
-import { SoldiersPage } from '@/features/soldiers/SoldiersPage';
-import { EmptyModulePage } from '@/components/feedback/EmptyModulePage';
-import { SoldierHomePage } from '@/features/public/SoldierHomePage';
-import { SoldierActionPage } from '@/features/public/SoldierActionPage';
-import { OperationalModulePage } from '@/features/modules/OperationalModulePage';
-import { AdminLoginPage } from '@/features/auth/AdminLoginPage';
-import { ArmoryPage, FaultsPage, LicensesPage } from '@/features/modules/LifecycleModulePage';
-import { FuelManagementPage, InventoryLoansPage } from '@/features/modules/LogisticsPage';
-import { ReportsPage } from '@/features/modules/ReportsPage';
+import { ScheduleBoardPage } from '@/features/schedule/ScheduleBoardPage';
+import { ConflictsPage } from '@/features/schedule/ConflictsPage';
+import { PersonnelPage } from '@/features/personnel/PersonnelPage';
+import { AvailabilityPage } from '@/features/availability/AvailabilityPage';
+import { AssignmentTypesPage } from '@/features/assignments/AssignmentTypesPage';
+import { ReplacementsPage } from '@/features/replacements/ReplacementsPage';
+import { NotificationsPage } from '@/features/notifications/NotificationsPage';
+import { ReportsPage } from '@/features/reports/ReportsPage';
+import { SettingsPage } from '@/features/settings/SettingsPage';
+import { MySchedulePage } from '@/features/me/MySchedulePage';
 
 const router = createBrowserRouter([
+  { path: '/login', element: <LoginPage /> },
   {
     path: '/',
-    element: <PublicShell />,
-    children: [
-      { index: true, element: <SoldierHomePage /> },
-      { path: 'action/:actionId', element: <SoldierActionPage /> },
-    ],
-  },
-  { path: '/admin/login', element: <AdminLoginPage /> },
-  {
-    path: '/admin',
-    element: <AdminShell />,
-    errorElement: (
-      <EmptyModulePage title="העמוד אינו זמין" description="אירעה שגיאה בטעינת המסך." />
+    element: (
+      <RequireAuth>
+        <AppShell />
+      </RequireAuth>
     ),
+    errorElement: <ErrorState error={new Error('route')} />,
     children: [
-      { index: true, element: <DashboardPage /> },
-      { path: 'soldiers', element: <SoldiersPage /> },
-      { path: 'equipment', element: <SoldiersPage /> },
-      { path: 'armory', element: <ArmoryPage /> },
-      { path: 'faults', element: <FaultsPage /> },
-      { path: 'licenses', element: <LicensesPage /> },
-      { path: 'vehicles', element: <FuelManagementPage /> },
-      { path: 'inventory', element: <InventoryLoansPage /> },
-      { path: 'communications', element: <InventoryLoansPage module="communications" title="ציוד קשר" eyebrow="מחסן קשר" /> },
-      { path: 'ammunition', element: <InventoryLoansPage module="ammunition" title="תחמושת ואלפא" eyebrow="הקצאות והחזרות" /> },
-      { path: 'tzelem', element: <ReportsPage stocktake /> },
+      { index: true, element: <Navigate to="/dashboard" replace /> },
+      { path: 'dashboard', element: <DashboardPage /> },
+      { path: 'schedule', element: <ScheduleBoardPage /> },
+      { path: 'schedule/conflicts', element: <ConflictsPage /> },
+      { path: 'personnel', element: <PersonnelPage /> },
+      { path: 'availability', element: <AvailabilityPage /> },
+      { path: 'assignment-types', element: <AssignmentTypesPage /> },
+      { path: 'replacements', element: <ReplacementsPage /> },
+      { path: 'notifications', element: <NotificationsPage /> },
       { path: 'reports', element: <ReportsPage /> },
-      { path: ':moduleId', element: <OperationalModulePage /> },
-      { path: '*', element: <Navigate to="/admin" replace /> },
+      { path: 'settings', element: <SettingsPage /> },
+      { path: 'me', element: <MySchedulePage /> },
+      { path: '*', element: <Navigate to="/dashboard" replace /> },
     ],
   },
 ]);

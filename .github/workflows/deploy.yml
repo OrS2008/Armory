@@ -1,0 +1,59 @@
+name: Deploy to Cloudflare Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Cloudflare Pages environment
+        type: choice
+        options: [preview, production]
+        default: preview
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Build, migrate and deploy
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment || 'production' }}
+    permissions:
+      contents: read
+      deployments: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - run: npm clean-install
+
+      - name: Typecheck, lint and test
+        run: |
+          npm run typecheck
+          npm run lint
+          npm test
+
+      - name: Build
+        run: npm run build
+
+      # D1 migrations are additive and idempotent; wrangler applies only the
+      # ones the target database has not seen yet.
+      - name: Apply D1 migrations
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: d1 migrations apply shabatzak --remote
+
+      - name: Deploy Pages project
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy dist --project-name=shabatzak --branch=${{ github.ref_name }}

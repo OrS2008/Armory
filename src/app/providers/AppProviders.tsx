@@ -1,14 +1,34 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useState, type PropsWithChildren } from 'react';
-import { ErrorBoundary } from '@/components/feedback/ErrorBoundary';
+import { useState, type ReactNode } from 'react';
+import { ToastProvider } from '@/components/ui/ToastProvider';
+import { AuthProvider } from '@/hooks/AuthProvider';
+import { ApiError } from '@/lib/api';
 
-export function AppProviders({ children }: PropsWithChildren) {
-  const [client] = useState(
-    () => new QueryClient({ defaultOptions: { queries: { retry: 1, staleTime: 30_000 } } }),
+export function AppProviders({ children }: { children: ReactNode }) {
+  const [queryClient] = useState(
+    () =>
+      new QueryClient({
+        defaultOptions: {
+          queries: {
+            staleTime: 30_000,
+            refetchOnWindowFocus: true,
+            retry: (failureCount, error) => {
+              // Never retry an authorisation failure — it will not change.
+              if (error instanceof ApiError && error.status >= 400 && error.status < 500) {
+                return false;
+              }
+              return failureCount < 2;
+            },
+          },
+        },
+      }),
   );
+
   return (
-    <ErrorBoundary>
-      <QueryClientProvider client={client}>{children}</QueryClientProvider>
-    </ErrorBoundary>
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <ToastProvider>{children}</ToastProvider>
+      </AuthProvider>
+    </QueryClientProvider>
   );
 }

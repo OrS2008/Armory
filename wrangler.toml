@@ -1,9 +1,13 @@
-name = "armory-v2"
+name = "shabatzak"
 compatibility_date = "2026-08-01"
+compatibility_flags = ["nodejs_compat"]
 pages_build_output_dir = "./dist"
 
+# The database_id below is a placeholder. Provision a dedicated D1 database
+# ("wrangler d1 create shabatzak") and replace it before deploying.
+# See docs/12-deployment-plan.md.
 [[d1_databases]]
 binding = "DB"
-database_name = "armory-v2"
-database_id = "38a9a311-9680-46c0-ae7b-6e4b2f7841cc"
+database_name = "shabatzak"
+database_id = "00000000-0000-0000-0000-000000000000"
 migrations_dir = "migrations"

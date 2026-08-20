@@ -8,6 +8,8 @@
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
     "forceConsistentCasingInFileNames": true,
     "module": "ESNext",
     "moduleResolution": "Bundler",
@@ -19,8 +21,8 @@
     "exactOptionalPropertyTypes": true,
     "baseUrl": ".",
     "ignoreDeprecations": "6.0",
-    "paths": { "@/*": ["src/*"] },
+    "paths": { "@/*": ["src/*"], "@shared/*": ["shared/*"] },
     "types": ["vitest/globals", "@testing-library/jest-dom"]
   },
-  "include": ["src"]
+  "include": ["src", "shared"]
 }
