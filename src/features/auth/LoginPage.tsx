@@ -48,7 +48,11 @@ export function LoginPage() {
               <Input
                 id={id}
                 aria-required={required}
-                type="email"
+                type="text"
+                inputMode="text"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
                 autoComplete="username"
                 dir="ltr"
                 aria-describedby={describedBy}

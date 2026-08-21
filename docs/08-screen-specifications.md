@@ -5,7 +5,7 @@ states. Unless noted, `QueryState` supplies the first four.
 
 | Route | Screen | Who sees it |
 | --- | --- | --- |
-| `/login` | Login | Everyone |
+| `/login` | Login — username or email, plus password | Everyone |
 | `/dashboard` | Control board | Any signed-in user |
 | `/schedule` | Scheduling board — day, week, personnel | `assignments.read` |
 | `/schedule/conflicts` | Conflicts | `assignments.read` |

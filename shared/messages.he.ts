@@ -17,7 +17,7 @@ function fill(template: string, params: Params): string {
 export const errorMessages: Record<string, string> = {
   [ErrorCodes.AUTH_REQUIRED]: 'נדרשת התחברות למערכת.',
   [ErrorCodes.SESSION_EXPIRED]: 'החיבור פג. יש להתחבר מחדש.',
-  [ErrorCodes.INVALID_CREDENTIALS]: 'כתובת הדוא״ל או הסיסמה שגויים.',
+  [ErrorCodes.INVALID_CREDENTIALS]: 'שם המשתמש או הסיסמה שגויים.',
   [ErrorCodes.RATE_LIMITED]: 'בוצעו יותר מדי ניסיונות. נסו שוב בעוד מספר דקות.',
   [ErrorCodes.FORBIDDEN]: 'אין לך הרשאה לבצע פעולה זו.',
   [ErrorCodes.OUT_OF_SCOPE]: 'הפעולה חורגת מתחום האחריות שהוגדר לך.',
@@ -104,6 +104,7 @@ export const severityLabels: Record<Severity, string> = {
 /** Form and payload validation messages, shared by the API and the UI forms. */
 export const validationMessages = {
   required: 'שדה חובה',
+  identifier: 'שם משתמש או דוא״ל אינם תקינים',
   email: 'כתובת דוא״ל אינה תקינה',
   passwordTooShort: 'הסיסמה חייבת להכיל לפחות 12 תווים',
   nameTooShort: 'יש להזין שם באורך שני תווים לפחות',

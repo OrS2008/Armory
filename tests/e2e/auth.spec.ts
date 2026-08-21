@@ -11,7 +11,7 @@ test.describe('authentication', () => {
 
   test('rejects wrong credentials with a Hebrew message', async ({ page }) => {
     await page.goto('/login');
-    await page.getByRole('textbox', { name: 'דוא״ל' }).fill(ADMIN_EMAIL);
+    await page.getByRole('textbox', { name: 'שם משתמש' }).fill(ADMIN_EMAIL);
     await page.getByLabel('סיסמה').fill('definitely-not-the-password');
     await page.getByRole('button', { name: 'כניסה' }).click();
     await expect(page.getByRole('alert')).toContainText('שגוי');

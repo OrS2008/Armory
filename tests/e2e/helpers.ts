@@ -14,7 +14,7 @@ export const ADMIN_PASSWORD = credentials.password;
 
 export async function login(page: Page): Promise<void> {
   await page.goto('/login');
-  await page.getByRole('textbox', { name: 'דוא״ל' }).fill(ADMIN_EMAIL);
+  await page.getByRole('textbox', { name: 'שם משתמש' }).fill(ADMIN_EMAIL);
   await page.getByLabel('סיסמה').fill(ADMIN_PASSWORD);
   await page.getByRole('button', { name: 'כניסה' }).click();
   await expect(page.getByRole('heading', { name: 'לוח בקרה' })).toBeVisible();

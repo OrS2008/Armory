@@ -39,8 +39,8 @@ export const he = {
   'nav.conflicts': 'התנגשויות',
 
   'auth.title': 'כניסה למערכת',
-  'auth.subtitle': 'הזינו את פרטי המשתמש שקיבלתם מהמפקד.',
-  'auth.email': 'דוא״ל',
+  'auth.subtitle': 'הזינו את שם המשתמש והסיסמה שקיבלתם מהמפקד.',
+  'auth.email': 'שם משתמש',
   'auth.password': 'סיסמה',
   'auth.submit': 'כניסה',
   'auth.logout': 'התנתקות',

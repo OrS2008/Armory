@@ -76,3 +76,31 @@ describe('optional reference fields', () => {
     expect(personnelSchema.parse({ displayName: 'דניאל', unitId: 'unt_1' }).unitId).toBe('unt_1');
   });
 });
+
+describe('sign-in identifier', () => {
+  it('accepts a unit-issued username', () => {
+    expect(
+      loginSchema.safeParse({ email: 'Admin.951', password: 'a-long-password-x' }).success,
+    ).toBe(true);
+  });
+
+  it('still accepts an email address', () => {
+    expect(
+      loginSchema.safeParse({ email: 'admin@unit.example', password: 'a-long-password-x' }).success,
+    ).toBe(true);
+  });
+
+  it('rejects names too short to be distinct, and stray characters', () => {
+    expect(loginSchema.safeParse({ email: 'ab', password: 'a-long-password-x' }).success).toBe(
+      false,
+    );
+    expect(
+      loginSchema.safeParse({ email: 'admin 951', password: 'a-long-password-x' }).success,
+    ).toBe(false);
+  });
+
+  it('trims surrounding whitespace, a common copy-paste failure', () => {
+    const parsed = loginSchema.parse({ email: '  Admin.951  ', password: 'a-long-password-x' });
+    expect(parsed.email).toBe('Admin.951');
+  });
+});

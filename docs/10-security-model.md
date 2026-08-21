@@ -14,6 +14,9 @@ notes. There is no medical detail, no address, no national id.
 
 ## Authentication
 
+- The sign-in identifier is a username or an email address, stored lower-cased
+  so comparison is case-insensitive. A unit issues names like `Admin.951`, not
+  mailboxes.
 - Passwords are hashed with PBKDF2-SHA256, a 16-byte random salt per user, and a
   length-independent comparison. The iteration count is stored **per user**, so
   it can be changed later without invalidating existing accounts.

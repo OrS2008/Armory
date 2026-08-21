@@ -26,8 +26,23 @@ const optionalId = () =>
     .optional();
 export const timestampSchema = z.number().int().finite();
 
+/**
+ * Sign-in identifier. A unit issues names like `Admin.951`, not mailboxes, so a
+ * username is as valid as an email address here. Stored lower-cased, which makes
+ * the comparison case-insensitive.
+ */
+export const identifierSchema = z
+  .string()
+  .trim()
+  .min(1, v.required)
+  .max(120)
+  .refine(
+    (value) => /^[A-Za-z0-9._-]{3,64}$/.test(value) || z.string().email().safeParse(value).success,
+    v.identifier,
+  );
+
 export const loginSchema = z.object({
-  email: z.string().trim().min(1, v.required).email(v.email),
+  email: identifierSchema,
   password: z.string().min(12, v.passwordTooShort).max(200),
 });
 export type LoginInput = z.infer<typeof loginSchema>;
@@ -186,7 +201,7 @@ export const replacementDecisionSchema = z.object({
 });
 
 export const userSchema = z.object({
-  email: z.string().trim().email(v.email),
+  email: identifierSchema,
   displayName: trimmed(80).min(2, v.nameTooShort),
   password: z.string().min(12, v.passwordTooShort).max(200).optional(),
   role: z.enum(['system_admin', 'company_commander', 'unit_scheduler', 'soldier', 'viewer']),
