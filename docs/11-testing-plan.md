@@ -1,5 +1,8 @@
 # Testing plan
 
+CI (`.github/workflows/ci.yml`) runs all of this on every branch and pull
+request. It is the only GitHub workflow: deployment belongs to Cloudflare Pages.
+
 ```bash
 npm run typecheck   # tsc across app, shared and functions
 npm run lint        # eslint, type-aware, zero warnings tolerated

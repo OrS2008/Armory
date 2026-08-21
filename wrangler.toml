@@ -1,10 +1,11 @@
 name = "shabatzak"
 compatibility_date = "2026-08-01"
-compatibility_flags = ["nodejs_compat"]
 pages_build_output_dir = "./dist"
 
-# The database_id below is a placeholder. Provision a dedicated D1 database
-# ("wrangler d1 create shabatzak") and replace it before deploying.
+# Cloudflare Pages reads this file and it takes precedence over the dashboard's
+# binding settings, so `database_id` must be the real database once the project
+# is connected to Git. Until then the all-zeros placeholder keeps any stray
+# wrangler command from reaching a real database.
 # See docs/12-deployment-plan.md.
 [[d1_databases]]
 binding = "DB"

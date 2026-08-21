@@ -31,25 +31,26 @@ anything that talks to the server.
 
 ## Deploying to Cloudflare
 
-Automated. Add four repository secrets, then run one workflow — full detail in
+Cloudflare Pages connected straight to this repository — the same arrangement as
+the equipment application. Cloudflare builds and publishes on every push to
+`main`; no API token and no deployment workflow are involved. Full walkthrough in
 [`docs/12-deployment-plan.md`](docs/12-deployment-plan.md).
 
-1. Create a Cloudflare API token with *Account · Cloudflare Pages · Edit* and
-   *Account · D1 · Edit*.
-2. Add `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `BOOTSTRAP_ADMIN_EMAIL`
-   and `BOOTSTRAP_ADMIN_PASSWORD` under Settings → Secrets and variables →
-   Actions.
-3. Actions → **Provision Cloudflare** → Run workflow.
+One-time setup:
 
-It creates the D1 database and the Pages project, applies migrations, sets the
-bootstrap secrets, deploys, and then probes `/api/v1/health` until the site
-answers `"status":"ready"` — proving the database binding really works. Every
-step is safe to re-run.
+1. `npx wrangler d1 create shabatzak`, and commit the real `database_id` into
+   `wrangler.toml`. Pages reads that file and it overrides the dashboard, so the
+   placeholder must go.
+2. `npx wrangler d1 migrations apply shabatzak --remote`.
+3. Dashboard → Workers & Pages → Create → **Pages** → Connect to Git. Build
+   command `npm run build`, output directory `dist`, no deploy command.
+4. Add a D1 binding named `DB`, plus `BOOTSTRAP_ADMIN_EMAIL` and
+   `BOOTSTRAP_ADMIN_PASSWORD` as encrypted variables.
+5. `curl https://shabatzak.pages.dev/api/v1/health` — `"status":"ready"` proves
+   the database binding works, because that route runs a real query.
 
-Afterwards, pushes to `main` deploy automatically and smoke-test themselves.
-
-`wrangler.toml` keeps a placeholder database id on purpose so no stray command
-can reach a real database; the workflows resolve the real id at run time.
+Migrations are not run by the Cloudflare build; apply them with `wrangler`
+whenever a new one is added.
 
 ## Layout
 

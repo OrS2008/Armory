@@ -8,78 +8,98 @@ Browser ──▶ Cloudflare Pages
               └── functions/       /api/v1/*  ──▶  D1 (binding: DB)
 ```
 
-## Setup — the short path
+## How this is deployed
 
-Everything is automated. You add four repository secrets, then run one workflow.
+Cloudflare Pages, connected directly to the GitHub repository — the same
+arrangement as the equipment application (`armory-v2`). Cloudflare clones the
+repo on every push to `main`, runs the build itself and publishes the result.
+There is no deployment workflow in GitHub Actions, and no Cloudflare API token
+anywhere.
 
-### 1. Create a Cloudflare API token
+`.github/workflows/ci.yml` still runs typecheck, lint, formatting, unit tests,
+the build and the Playwright suite on every branch and pull request. It never
+touches Cloudflare.
 
-Cloudflare → My Profile → API Tokens → **Create Token** → *Create Custom Token*.
-Give it the least privilege that works:
+## One-time setup
 
-| Permission | Level |
-| --- | --- |
-| Account · Cloudflare Pages | Edit |
-| Account · D1 | Edit |
-
-Scope *Account Resources* to the one account. Do not use the Global API Key.
-
-### 2. Add four repository secrets
-
-GitHub → Settings → Secrets and variables → **Actions** → *New repository secret*:
-
-| Secret | Value |
-| --- | --- |
-| `CLOUDFLARE_API_TOKEN` | The token from step 1 |
-| `CLOUDFLARE_ACCOUNT_ID` | Cloudflare dashboard sidebar, or `npx wrangler whoami` |
-| `BOOTSTRAP_ADMIN_EMAIL` | The first administrator's address |
-| `BOOTSTRAP_ADMIN_PASSWORD` | A long random password |
-
-### 3. Run the provisioning workflow
-
-GitHub → **Actions** → *Provision Cloudflare* → **Run workflow**.
-
-It creates the D1 database, creates the Pages project, applies migrations, sets
-the bootstrap secrets on the project, builds, deploys, and then probes
-`/api/v1/health` until the site answers `"status":"ready"` — which only happens
-if the D1 binding is really wired up. The run summary prints the database id and
-the site URL.
-
-Every step is safe to re-run: existing resources are detected and reused.
-
-### 4. Sign in, then rotate
-
-Open `https://<project>.pages.dev/login` and sign in with the bootstrap
-credentials. The first administrator is created only while the user table is
-empty, so afterwards those values are useless — rotate them anyway, in both the
-GitHub secrets and the Pages project.
-
-## After setup
-
-Pushes to `main` run `Deploy to Cloudflare Pages`, which repeats the quality
-gate, resolves the database id, applies any new migrations, deploys and
-smoke-tests the result.
-
-## The placeholder database id
-
-`wrangler.toml` keeps `00000000-0000-0000-0000-000000000000` on purpose, so a
-stray `wrangler` command cannot touch a real database. Both workflows resolve the
-real id from the account at run time and substitute it for that run only. Nothing
-secret, and nothing environment-specific, is committed.
-
-## Doing it by hand instead
+### 1. Create the D1 database
 
 ```bash
-npx wrangler d1 create shabatzak          # note the database_id
-npx wrangler d1 migrations apply shabatzak --remote
-npm run build
-npx wrangler pages project create shabatzak --production-branch=main
-npx wrangler pages deploy dist --project-name=shabatzak
+npx wrangler d1 create shabatzak
 ```
 
-Then bind D1 as `DB` under Workers & Pages → shabatzak → Settings → Bindings, and
-add `BOOTSTRAP_ADMIN_EMAIL` and `BOOTSTRAP_ADMIN_PASSWORD` as encrypted
-environment variables. `SESSION_TTL_HOURS` is optional and defaults to 12.
+Copy the `database_id` it prints into `wrangler.toml`, replacing the all-zeros
+placeholder, and commit it.
+
+This step is not optional. Cloudflare Pages reads `wrangler.toml` from the
+repository and it **takes precedence over the bindings configured in the
+dashboard**, so a placeholder id left in the file would deploy a site whose every
+database query fails. The equipment application commits its real id for exactly
+this reason.
+
+The id is an identifier, not a credential: it is useless without an account API
+token.
+
+### 2. Apply the migrations
+
+```bash
+npx wrangler d1 migrations apply shabatzak --remote
+```
+
+Repeat this whenever a migration is added — Cloudflare's build does not run
+migrations. `wrangler` applies only the ones the database has not seen yet.
+
+### 3. Create the Pages project
+
+Cloudflare dashboard → **Workers & Pages** → **Create** → **Pages** →
+**Connect to Git**. Choose this repository, then:
+
+| Setting | Value |
+| --- | --- |
+| Production branch | `main` |
+| Framework preset | None |
+| Build command | `npm run build` |
+| Build output directory | `dist` |
+
+Do not set a deploy command. Pages publishes the output directory itself;
+`wrangler deploy` is the Workers command and will fail here with
+*"Missing entry-point to Worker script"*.
+
+If the dashboard offers to import the repository as a **Worker**, decline and
+take the Pages path. A Worker expects a script entry point and static assets
+declared in `wrangler.toml`; this application is Pages Functions plus a static
+bundle.
+
+### 4. Bind the database and set the secrets
+
+**Settings → Bindings** — add a D1 binding named `DB` pointing at the
+`shabatzak` database, for both Production and Preview.
+
+**Settings → Variables and Secrets** — add, encrypted:
+
+| Name | Value |
+| --- | --- |
+| `BOOTSTRAP_ADMIN_EMAIL` | The first administrator's address |
+| `BOOTSTRAP_ADMIN_PASSWORD` | A long random password, at least 12 characters |
+| `SESSION_TTL_HOURS` | Optional; defaults to 12 |
+
+The password minimum is enforced by the login form; a shorter one locks you out.
+
+### 5. Deploy, verify, then rotate
+
+Push to `main`, or use **Retry deployment**. When it finishes:
+
+```bash
+curl https://shabatzak.pages.dev/api/v1/health
+```
+
+`{"ok":true,"data":{"status":"ready"}}` proves the site is up **and** the D1
+binding works — `/health` runs a real query. Anything else means the binding is
+wrong; check step 4 and the `database_id` in `wrangler.toml`.
+
+Then sign in at `/login` with the bootstrap credentials. The first administrator
+is created only while the user table is empty, so afterwards those values are
+useless — rotate them anyway.
 
 ## Local development
 
