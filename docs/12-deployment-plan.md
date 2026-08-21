@@ -141,6 +141,24 @@ Then sign in at `/login` with the bootstrap credentials. The first administrator
 is created only while the user table is empty, so afterwards those values are
 useless — rotate them anyway.
 
+## Importing the roster from the equipment system
+
+The equipment application keeps the same people in its own D1 database.
+**Actions → Import personnel from the equipment system** copies them across:
+approved, non-archived soldiers with their name, service number, unit and
+phone, and an approved, unexpired military driving licence becomes the נהג
+qualification.
+
+The source database is only ever read — every statement the workflow issues
+against it is a `SELECT`. Nothing else crosses over: equipment holdings,
+documents, shortage reports and signatures stay where they are, because
+scheduling has no use for them.
+
+Defaults to a dry run that reports the counts and attaches the generated SQL as
+an artifact. Rows are keyed on the service number, so re-running imports nobody
+twice. Ranks and commander qualifications do not exist in the equipment data and
+have to be set here afterwards.
+
 ## Local development
 
 ```bash

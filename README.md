@@ -54,6 +54,17 @@ Migrations are never run by the Cloudflare build. Apply them with
 migrations** workflow in GitHub Actions, which applies them and then verifies
 the live site reports `"schema":"ready"`.
 
+## Bringing people in
+
+Three ways, in order of how much typing they save:
+
+- **Actions → Import personnel from the equipment system** — reads the
+  equipment application's D1 database (read-only) and loads the roster, mapping
+  an approved military driving licence to the נהג qualification.
+- **כוח אדם → ייבוא מקובץ** — paste or upload a CSV. Checks first, imports after.
+  `scripts/sample-roster.csv` is a 40-person example.
+- **כוח אדם → הוספת איש כוח אדם** — one at a time.
+
 ## Layout
 
 ```
