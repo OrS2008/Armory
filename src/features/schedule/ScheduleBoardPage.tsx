@@ -184,30 +184,34 @@ export function ScheduleBoardPage() {
         ) : null}
 
         <div className="mb-3 flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-1 rounded-[var(--radius-control)] border border-border-subtle bg-surface-raised p-1">
+          <div className="flex shrink-0 items-center gap-0.5 rounded-[var(--radius-control)] border border-border-subtle bg-surface-raised p-0.5">
             <IconButton
+              className="size-8"
               label={t('schedule.previousDay')}
               icon={<ChevronRight className="size-4" />}
               onClick={() => shift(-1)}
             />
-            <span className="min-w-40 text-center text-sm font-medium">
+            <button
+              type="button"
+              title={t('app.today')}
+              onClick={() => setDay(todayKey())}
+              className="whitespace-nowrap px-2 text-sm font-medium hover:underline"
+            >
               <span className="ltr-inline">{formatDayKey(day)}</span>
               <span className="text-ink-muted"> · {weekdayName(day)}</span>
-            </span>
+            </button>
             <IconButton
+              className="size-8"
               label={t('schedule.nextDay')}
               icon={<ChevronLeft className="size-4" />}
               onClick={() => shift(1)}
             />
           </div>
-          <Button variant="secondary" size="sm" onClick={() => setDay(todayKey())}>
-            {t('app.today')}
-          </Button>
 
           <div
             role="tablist"
             aria-label={t('schedule.view')}
-            className="flex items-center gap-1 rounded-[var(--radius-control)] bg-surface-sunken p-1"
+            className="flex shrink-0 items-center gap-1 rounded-[var(--radius-control)] bg-surface-sunken p-0.5"
           >
             {(['roster', 'day', 'week', 'personnel'] as const).map((option) => (
               <button
@@ -217,22 +221,33 @@ export function ScheduleBoardPage() {
                 aria-selected={view === option}
                 onClick={() => setView(option)}
                 className={cn(
-                  'rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+                  'whitespace-nowrap rounded-md px-2.5 py-1 text-sm font-medium transition-colors',
                   view === option ? 'bg-surface-raised text-ink shadow-sm' : 'text-ink-muted',
                 )}
               >
-                {option === 'roster'
-                  ? t('schedule.roster')
-                  : option === 'day'
-                    ? t('schedule.day')
-                    : option === 'week'
-                      ? t('schedule.week')
-                      : t('schedule.byPersonnel')}
+                {option === 'roster' || option === 'personnel' ? (
+                  <>
+                    {/* The long name explains the view; the short one fits the
+                        four tabs beside the date picker on a phone. */}
+                    <span className="sm:hidden">
+                      {option === 'roster'
+                        ? t('schedule.rosterShort')
+                        : t('schedule.byPersonnelShort')}
+                    </span>
+                    <span className="hidden sm:inline">
+                      {option === 'roster' ? t('schedule.roster') : t('schedule.byPersonnel')}
+                    </span>
+                  </>
+                ) : option === 'day' ? (
+                  t('schedule.day')
+                ) : (
+                  t('schedule.week')
+                )}
               </button>
             ))}
           </div>
 
-          <label className="ms-auto flex items-center gap-2 text-sm text-ink-muted">
+          <label className="flex shrink-0 items-center gap-1.5 text-sm text-ink-muted">
             {t('personnel.unit')}
             <Select
               className="w-auto"

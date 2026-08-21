@@ -62,8 +62,12 @@ export function MenuButton({ label, actions }: { label: string; actions: MenuAct
           id={menuId}
           role="menu"
           className={cn(
-            'absolute z-40 mt-1 min-w-64 end-0 rounded-[var(--radius-card)] border border-border-subtle',
-            'bg-surface-raised p-1 shadow-[var(--shadow-popover)]',
+            // Anchored at the start edge: in RTL `end-0` pinned the panel's
+            // left edge to the button and let it grow rightward, straight off
+            // the side of a phone screen. The width cap keeps it on screen
+            // whichever edge the button happens to sit near.
+            'absolute start-0 z-40 mt-1 w-64 max-w-[calc(100vw-2rem)] rounded-[var(--radius-card)]',
+            'border border-border-subtle bg-surface-raised p-1 shadow-[var(--shadow-popover)]',
           )}
         >
           {actions.map((action) => (
