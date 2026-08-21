@@ -22,6 +22,18 @@ import { now, type Env } from './http';
 
 export const DEFAULT_ORG_ID = 'org_default';
 
+/** Whether any account exists yet — the bootstrap only runs while none does. */
+export async function hasAnyUser(env: Env): Promise<boolean> {
+  try {
+    const row = await env.DB.prepare('SELECT 1 AS present FROM users LIMIT 1').first<{
+      present: number;
+    }>();
+    return row?.present === 1;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Whether the migrations have been applied. A correctly bound but empty
  * database answers `SELECT 1` happily, so the binding being healthy says

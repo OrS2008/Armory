@@ -124,7 +124,15 @@ The response separates the two things that fail separately:
 | --- | --- | --- |
 | `database: "unreachable"` | No working D1 binding | The `database_id` in `wrangler.toml`, or the binding itself |
 | `schema: "missing"` | Bound, but the migrations were never applied | `npx wrangler d1 migrations apply shabatzak --remote` |
-| `status: "ready"` | Both fine | — |
+| `bootstrap: "not_configured"` | No accounts, and no bootstrap secrets on this deployment | Add them, then **Retry deployment** |
+| `bootstrap: "pending"` | No accounts, secrets present — the first sign-in will create the administrator | If sign-in still fails, the stored values differ from what is typed |
+| `bootstrap: "complete"` | An account exists, so the bootstrap no longer runs | A failed sign-in now means a genuinely wrong password |
+| `status: "ready"` | Binding and schema both fine | — |
+
+`bootstrap` exposes no value and no identifier, only which of three states the
+deployment is in. Without it, "nobody has signed in yet" and "an account exists
+whose password does not match" are indistinguishable from the login screen, and
+they have opposite remedies.
 
 A correctly bound but empty database answers `SELECT 1` happily, which is why the
 schema is probed separately rather than inferred.
