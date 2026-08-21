@@ -31,6 +31,7 @@ export const errorMessages: Record<string, string> = {
   [ErrorCodes.SCHEDULE_NOT_PUBLISHABLE]: 'לא ניתן לפרסם את השבצ״ק כל עוד קיימות התנגשויות חוסמות.',
   [ErrorCodes.OVERRIDE_NOT_ALLOWED]: 'הכלל הזה אינו ניתן לעקיפה.',
   [ErrorCodes.NOT_CONFIGURED]: 'המערכת טרם הוגדרה. פנו למנהל המערכת.',
+  [ErrorCodes.SCHEMA_NOT_READY]: 'מסד הנתונים טרם אותחל — יש להריץ את מיגרציות מסד הנתונים.',
   [ErrorCodes.INTERNAL]: 'אירעה שגיאה בלתי צפויה. נסו שוב.',
 };
 

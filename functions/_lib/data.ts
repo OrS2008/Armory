@@ -22,6 +22,20 @@ import { now, type Env } from './http';
 
 export const DEFAULT_ORG_ID = 'org_default';
 
+/**
+ * Whether the migrations have been applied. A correctly bound but empty
+ * database answers `SELECT 1` happily, so the binding being healthy says
+ * nothing about the schema existing.
+ */
+export async function schemaReady(env: Env): Promise<boolean> {
+  try {
+    await env.DB.prepare('SELECT 1 FROM users LIMIT 1').first();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function orgTimezone(env: Env): Promise<string> {
   const row = await env.DB.prepare('SELECT timezone FROM organizations WHERE id = ?')
     .bind(DEFAULT_ORG_ID)

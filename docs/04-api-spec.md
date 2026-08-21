@@ -28,7 +28,7 @@ listed in `shared/errors.ts`, messages in `shared/messages.he.ts`.
 | 415 | `JSON_REQUIRED` |
 | 422 | `VALIDATION_FAILED` — `details.fields` maps field name to a Hebrew message |
 | 429 | `RATE_LIMITED` |
-| 503 | `NOT_CONFIGURED` |
+| 503 | `NOT_CONFIGURED`, `SCHEMA_NOT_READY` |
 
 ## Endpoints
 
@@ -39,7 +39,7 @@ listed in `shared/errors.ts`, messages in `shared/messages.he.ts`.
 | POST | `/auth/login` | — | Sets the session cookie. First-run bootstrap creates the initial administrator |
 | POST | `/auth/logout` | session | Revokes the session and clears the cookie |
 | GET | `/auth/me` | session | Current user, role, scope and permissions |
-| GET | `/health` | — | Readiness probe including a database round trip |
+| GET | `/health` | — | Readiness probe; reports `database` and `schema` separately |
 
 ### Organisation
 

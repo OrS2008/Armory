@@ -101,9 +101,20 @@ Push to `main`, or use **Retry deployment**. When it finishes:
 curl https://shabatzak.pages.dev/api/v1/health
 ```
 
-`{"ok":true,"data":{"status":"ready"}}` proves the site is up **and** the D1
-binding works — `/health` runs a real query. Anything else means the binding is
-wrong; check step 4 and the `database_id` in `wrangler.toml`.
+The response separates the two things that fail separately:
+
+```json
+{ "status": "ready", "database": "ready", "schema": "ready" }
+```
+
+| Reading | Meaning | Fix |
+| --- | --- | --- |
+| `database: "unreachable"` | No working D1 binding | The `database_id` in `wrangler.toml`, or the binding itself |
+| `schema: "missing"` | Bound, but the migrations were never applied | `npx wrangler d1 migrations apply shabatzak --remote` |
+| `status: "ready"` | Both fine | — |
+
+A correctly bound but empty database answers `SELECT 1` happily, which is why the
+schema is probed separately rather than inferred.
 
 Then sign in at `/login` with the bootstrap credentials. The first administrator
 is created only while the user table is empty, so afterwards those values are

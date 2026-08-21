@@ -14,6 +14,7 @@ import {
   sessionTtlMs,
   verifyPassword,
 } from '../../../_lib/auth';
+import { schemaReady } from '../../../_lib/data';
 import { checkOrigin, fail, newId, now, ok, readBody, type Env } from '../../../_lib/http';
 
 interface Row {
@@ -35,6 +36,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const input = await readBody(request, loginSchema);
   if (input instanceof Response) return input;
   const email = input.email.toLowerCase();
+
+  // Every query below assumes the tables exist. Without this, an un-migrated
+  // database surfaces as an unexplained 500 on the login screen.
+  if (!(await schemaReady(env))) return fail(503, ErrorCodes.SCHEMA_NOT_READY);
 
   if (await loginThrottled(env, email)) {
     return fail(429, ErrorCodes.RATE_LIMITED);
