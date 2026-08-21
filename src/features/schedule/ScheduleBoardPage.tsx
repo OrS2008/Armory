@@ -143,152 +143,161 @@ export function ScheduleBoardPage() {
 
   return (
     <>
-      <PageHeader
-        title={t('schedule.title')}
-        description={t('schedule.subtitle')}
-        actions={
-          <>
-            <MenuButton label={t('app.more')} actions={menuActions} />
+      <div className="no-print">
+        <PageHeader
+          title={t('schedule.title')}
+          description={t('schedule.subtitle')}
+          actions={
+            <>
+              <MenuButton label={t('app.more')} actions={menuActions} />
 
-            {can(Permissions.assignmentsAssign) ? (
-              <Button
-                variant="secondary"
-                size="sm"
-                icon={<Sparkles className="size-4" />}
-                disabled={assignments.length === 0}
-                title={
-                  assignments.length === 0 ? t('schedule.autofillNeedsAssignments') : undefined
-                }
-                onClick={() => setAutofilling(true)}
-              >
-                {t('schedule.autofill')}
-              </Button>
-            ) : null}
+              {can(Permissions.assignmentsAssign) ? (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  icon={<Sparkles className="size-4" />}
+                  disabled={assignments.length === 0}
+                  title={
+                    assignments.length === 0 ? t('schedule.autofillNeedsAssignments') : undefined
+                  }
+                  onClick={() => setAutofilling(true)}
+                >
+                  {t('schedule.autofill')}
+                </Button>
+              ) : null}
 
-            {can(Permissions.assignmentsWrite) ? (
-              <Button
-                size="sm"
-                icon={<CalendarPlus className="size-4" />}
-                onClick={() => setCreating(true)}
-              >
-                {t('schedule.newAssignment')}
-              </Button>
-            ) : null}
-          </>
-        }
-      />
+              {can(Permissions.assignmentsWrite) ? (
+                <Button
+                  size="sm"
+                  icon={<CalendarPlus className="size-4" />}
+                  onClick={() => setCreating(true)}
+                >
+                  {t('schedule.newAssignment')}
+                </Button>
+              ) : null}
+            </>
+          }
+        />
 
-      {assignments.length === 0 && !board.isLoading ? (
-        <StepsHint steps={[t('schedule.step1'), t('schedule.step2'), t('schedule.step3')]} />
-      ) : null}
+        {assignments.length === 0 && !board.isLoading ? (
+          <StepsHint steps={[t('schedule.step1'), t('schedule.step2'), t('schedule.step3')]} />
+        ) : null}
 
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        <div className="flex items-center gap-1 rounded-[var(--radius-control)] border border-border-subtle bg-surface-raised p-1">
-          <IconButton
-            label={t('schedule.previousDay')}
-            icon={<ChevronRight className="size-4" />}
-            onClick={() => shift(-1)}
-          />
-          <span className="min-w-40 text-center text-sm font-medium">
-            <span className="ltr-inline">{formatDayKey(day)}</span>
-            <span className="text-ink-muted"> · {weekdayName(day)}</span>
-          </span>
-          <IconButton
-            label={t('schedule.nextDay')}
-            icon={<ChevronLeft className="size-4" />}
-            onClick={() => shift(1)}
-          />
-        </div>
-        <Button variant="secondary" size="sm" onClick={() => setDay(todayKey())}>
-          {t('app.today')}
-        </Button>
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-1 rounded-[var(--radius-control)] border border-border-subtle bg-surface-raised p-1">
+            <IconButton
+              label={t('schedule.previousDay')}
+              icon={<ChevronRight className="size-4" />}
+              onClick={() => shift(-1)}
+            />
+            <span className="min-w-40 text-center text-sm font-medium">
+              <span className="ltr-inline">{formatDayKey(day)}</span>
+              <span className="text-ink-muted"> · {weekdayName(day)}</span>
+            </span>
+            <IconButton
+              label={t('schedule.nextDay')}
+              icon={<ChevronLeft className="size-4" />}
+              onClick={() => shift(1)}
+            />
+          </div>
+          <Button variant="secondary" size="sm" onClick={() => setDay(todayKey())}>
+            {t('app.today')}
+          </Button>
 
-        <div
-          role="tablist"
-          aria-label={t('schedule.view')}
-          className="flex items-center gap-1 rounded-[var(--radius-control)] bg-surface-sunken p-1"
-        >
-          {(['roster', 'day', 'week', 'personnel'] as const).map((option) => (
-            <button
-              key={option}
-              type="button"
-              role="tab"
-              aria-selected={view === option}
-              onClick={() => setView(option)}
-              className={cn(
-                'rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
-                view === option ? 'bg-surface-raised text-ink shadow-sm' : 'text-ink-muted',
-              )}
-            >
-              {option === 'roster'
-                ? t('schedule.roster')
-                : option === 'day'
-                  ? t('schedule.day')
-                  : option === 'week'
-                    ? t('schedule.week')
-                    : t('schedule.byPersonnel')}
-            </button>
-          ))}
-        </div>
-
-        <label className="ms-auto flex items-center gap-2 text-sm text-ink-muted">
-          {t('personnel.unit')}
-          <Select
-            className="w-auto"
-            value={unitId}
-            onChange={(event) => setUnitId(event.target.value)}
+          <div
+            role="tablist"
+            aria-label={t('schedule.view')}
+            className="flex items-center gap-1 rounded-[var(--radius-control)] bg-surface-sunken p-1"
           >
-            <option value="">{t('assignments.anyUnit')}</option>
-            {(units.data ?? []).map((unit) => (
-              <option key={unit.id} value={unit.id}>
-                {unit.name}
-              </option>
+            {(['roster', 'day', 'week', 'personnel'] as const).map((option) => (
+              <button
+                key={option}
+                type="button"
+                role="tab"
+                aria-selected={view === option}
+                onClick={() => setView(option)}
+                className={cn(
+                  'rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+                  view === option ? 'bg-surface-raised text-ink shadow-sm' : 'text-ink-muted',
+                )}
+              >
+                {option === 'roster'
+                  ? t('schedule.roster')
+                  : option === 'day'
+                    ? t('schedule.day')
+                    : option === 'week'
+                      ? t('schedule.week')
+                      : t('schedule.byPersonnel')}
+              </button>
             ))}
-          </Select>
-        </label>
+          </div>
+
+          <label className="ms-auto flex items-center gap-2 text-sm text-ink-muted">
+            {t('personnel.unit')}
+            <Select
+              className="w-auto"
+              value={unitId}
+              onChange={(event) => setUnitId(event.target.value)}
+            >
+              <option value="">{t('assignments.anyUnit')}</option>
+              {(units.data ?? []).map((unit) => (
+                <option key={unit.id} value={unit.id}>
+                  {unit.name}
+                </option>
+              ))}
+            </Select>
+          </label>
+        </div>
+
+        {assignments.length > 0 ? (
+          <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+            <span className="font-medium">
+              {t('schedule.summaryTasks', { count: assignments.length })}
+            </span>
+            <span aria-hidden className="text-ink-faint">
+              ·
+            </span>
+            <span className={seatsMissing > 0 ? 'text-warning' : 'text-success'}>
+              {seatsMissing > 0
+                ? t('schedule.summaryMissing', { count: seatsMissing })
+                : t('schedule.summaryFull')}
+              <span className="ltr-inline ms-1 text-ink-muted">
+                ({seatsFilled}/{seatsNeeded})
+              </span>
+            </span>
+            <span aria-hidden className="text-ink-faint">
+              ·
+            </span>
+            {conflicts.length > 0 ? (
+              <Link
+                to="/schedule/conflicts"
+                className={cn(
+                  'inline-flex items-center gap-1.5 rounded-[var(--radius-control)] px-2 py-0.5 font-medium',
+                  blockingCount > 0
+                    ? 'bg-danger-soft text-danger'
+                    : 'text-ink-muted hover:underline',
+                )}
+              >
+                <TriangleAlert className="size-4" aria-hidden />
+                {t('schedule.summaryConflicts', { count: conflicts.length })}
+              </Link>
+            ) : (
+              <span className="text-ink-muted">{t('schedule.summaryNoConflicts')}</span>
+            )}
+          </div>
+        ) : null}
       </div>
 
-      {assignments.length > 0 ? (
-        <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-          <span className="font-medium">
-            {t('schedule.summaryTasks', { count: assignments.length })}
-          </span>
-          <span aria-hidden className="text-ink-faint">
-            ·
-          </span>
-          <span className={seatsMissing > 0 ? 'text-warning' : 'text-success'}>
-            {seatsMissing > 0
-              ? t('schedule.summaryMissing', { count: seatsMissing })
-              : t('schedule.summaryFull')}
-            <span className="ltr-inline ms-1 text-ink-muted">
-              ({seatsFilled}/{seatsNeeded})
-            </span>
-          </span>
-          <span aria-hidden className="text-ink-faint">
-            ·
-          </span>
-          {conflicts.length > 0 ? (
-            <Link
-              to="/schedule/conflicts"
-              className={cn(
-                'inline-flex items-center gap-1.5 rounded-[var(--radius-control)] px-2 py-0.5 font-medium',
-                blockingCount > 0 ? 'bg-danger-soft text-danger' : 'text-ink-muted hover:underline',
-              )}
-            >
-              <TriangleAlert className="size-4" aria-hidden />
-              {t('schedule.summaryConflicts', { count: conflicts.length })}
-            </Link>
-          ) : (
-            <span className="text-ink-muted">{t('schedule.summaryNoConflicts')}</span>
-          )}
-        </div>
-      ) : null}
-
       <p className="print-title">
-        {t('app.name')} · {weekdayName(day)} {formatDayKey(day)}
+        {t('schedule.sheetTitle', { date: formatDayKey(day), weekday: weekdayName(day) })}
       </p>
 
-      <div className={cn('card p-3 sm:p-4', view === 'roster' ? '' : 'print-plain')}>
+      <div
+        className={cn(
+          view === 'roster' ? '' : 'print-plain',
+          'card p-3 sm:p-4 print:border-0 print:p-0 print:shadow-none',
+        )}
+      >
         <QueryState
           isLoading={board.isLoading}
           error={board.error}

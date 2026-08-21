@@ -87,6 +87,8 @@ export const he = {
   'schedule.subtitle': 'לוח המשמרות. כאן יוצרים משימות, משבצים אנשים ומפרסמים לחיילים.',
   'schedule.roster': 'לוח משמרות',
   'schedule.seatEmpty': 'טרם שובץ',
+  'schedule.notesColumn': 'הערות',
+  'schedule.sheetTitle': 'משימות לתאריך {date} · יום {weekday}',
   'schedule.role': 'תפקיד',
   'schedule.rolePlain': 'לוחם',
   'schedule.roleTaken': 'התפקיד תפוס במשימה',

@@ -116,81 +116,151 @@
 }
 
 /*
- * Print / PDF export (plan section 45).
+ * The duty sheet.
  *
- * "Export PDF" is the browser's own print-to-PDF: no server-side renderer, no
- * extra dependency, and it produces a real document on a phone as well as a
- * desktop. The board is stripped back to the duty sheet a commander actually
- * hands out — no navigation, no controls, no colour that costs ink and carries
- * no information the text does not.
+ * A real table with collapsed borders, on screen and on paper alike: the
+ * printed page is the point, and a page of soft rounded cards is not a duty
+ * sheet. Same markup both places, so what is checked on screen is what prints.
  */
-@media print {
-  @page {
-    size: A4 landscape;
-    margin: 12mm;
-  }
-
-  :root {
-    color-scheme: light;
-  }
-
-  body {
-    background: #fff;
-    color: #000;
-    font-size: 10pt;
-  }
-
-  /* Chrome only prints the first page of a scrolling container. */
-  .app-scrollbar,
-  main {
-    overflow: visible !important;
-  }
-
-  header,
-  nav,
-  dialog,
-  [role='tablist'],
-  .no-print {
-    display: none !important;
-  }
-
-  main {
-    padding: 0 !important;
-  }
-
-  .card {
-    border: 1px solid #999;
-    box-shadow: none;
-    break-inside: avoid;
-  }
-
-  /* Timeline blocks lose their fills but keep their outline and label. */
-  .card button {
-    background: #fff !important;
-    color: #000 !important;
-    border: 1px solid #666 !important;
-  }
-
-  a[href]::after {
-    content: '';
-  }
-
-  .print-title {
-    display: block !important;
-    margin-bottom: 6mm;
-    font-size: 14pt;
-    font-weight: 700;
-  }
+.sheet {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--color-surface-raised);
+  font-size: 0.8125rem;
+  line-height: 1.35;
 }
 
-.print-title {
-  display: none;
+.sheet th,
+.sheet td {
+  border: 1px solid var(--color-border-strong);
+  padding: 0.15rem 0.4rem;
+  text-align: start;
+  vertical-align: top;
+}
+
+.sheet-title {
+  padding: 0.3rem 0.4rem;
+  text-align: center;
+  font-weight: 700;
+  font-size: 0.875rem;
+}
+
+.sheet-title-brand {
+  background: var(--color-brand-100);
+  color: var(--color-brand-700);
+}
+.sheet-title-amber {
+  background: var(--color-warning-soft);
+  color: oklch(45% 0.12 75);
+}
+.sheet-title-info {
+  background: var(--color-info-soft);
+  color: oklch(42% 0.11 235);
+}
+.sheet-title-success {
+  background: var(--color-success-soft);
+  color: oklch(42% 0.11 155);
+}
+.sheet-title-slate {
+  background: var(--color-surface-sunken);
+  color: var(--color-ink);
+}
+
+.sheet-subtitle {
+  background: var(--color-surface-sunken);
+  text-align: center;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-ink-muted);
+}
+
+.sheet-shift th {
+  background: var(--color-surface-sunken);
+  font-weight: 700;
+}
+
+.sheet-shift-name {
+  width: 34%;
+}
+
+.sheet-time {
+  width: 33%;
+  direction: ltr;
+  unicode-bidi: isolate;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  text-align: center;
+}
+
+.sheet-note-head {
+  width: 33%;
+  text-align: center;
+  font-size: 0.75rem;
+}
+
+.sheet-role {
+  width: 34%;
+  white-space: nowrap;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-ink-muted);
+}
+
+.sheet-note {
+  width: 33%;
+  font-size: 0.7rem;
+  color: var(--color-ink-muted);
+}
+
+.sheet-short {
+  display: inline-block;
+  margin-inline-start: 0.3rem;
+  border-radius: 0.2rem;
+  background: var(--color-danger-soft);
+  padding: 0 0.25rem;
+  direction: ltr;
+  unicode-bidi: isolate;
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-danger);
+}
+
+/* Without a notes column the two remaining ones split the card evenly. */
+.sheet-shift-wide .sheet-shift-name,
+.sheet-shift-wide .sheet-time {
+  width: 50%;
+}
+
+.sheet-empty {
+  color: var(--color-danger);
+  font-weight: 500;
+}
+
+.sheet-warn {
+  display: inline-block;
+  margin-inline-start: 0.25rem;
+  color: var(--color-danger);
+  vertical-align: -0.15em;
+}
+
+/* The opener is a button for the keyboard; it should read as the cell text. */
+.sheet-open {
+  display: block;
+  width: 100%;
+  text-align: start;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.sheet-open:hover {
+  text-decoration: underline;
 }
 
 /*
- * The duty sheet flows into columns the way the printed page does: a post is
- * one unbroken card, and the columns fill top to bottom. `break-inside` is what
- * keeps a crew from being split across a column or a page boundary.
+ * Posts flow into columns the way the printed page does, and a post is one
+ * unbroken block: `break-inside` keeps a crew off a column or page boundary.
  */
 .roster-columns {
   columns: 1;
@@ -212,52 +282,123 @@
 .roster-card {
   break-inside: avoid;
   -webkit-column-break-inside: avoid;
+  margin-bottom: 0.75rem;
 }
 
+/*
+ * Print / PDF export (plan section 45).
+ *
+ * "Export PDF" is the browser's own print-to-PDF: no server-side renderer, no
+ * extra dependency, and it produces a real document on a phone as well as a
+ * desktop. What prints is the duty sheet and nothing else — every control, tab
+ * and filter is chrome for the screen.
+ */
 @media print {
-  .roster-columns {
-    columns: 3;
-    column-gap: 6mm;
+  @page {
+    size: A4 landscape;
+    margin: 10mm;
   }
 
-  /* The board's own borders carry the structure; the card shadow does not. */
-  .roster-card {
-    border: 1px solid #666;
-    box-shadow: none;
+  :root {
+    color-scheme: light;
   }
 
-  .roster-card table {
-    border-collapse: collapse;
+  body {
+    background: #fff;
+    color: #000;
+    font-size: 9pt;
   }
 
-  .roster-card td {
-    border-top: 1px solid #ccc;
+  /* Chrome only prints the first page of a scrolling container. */
+  .app-scrollbar,
+  main {
+    overflow: visible !important;
   }
 
-  /* Post headers keep a light fill so the columns stay readable in grey. */
-  .roster-card header {
-    background: #eee !important;
-    color: #000 !important;
-    border-bottom: 1px solid #666;
-  }
-}
-
-.print-only {
-  display: none;
-}
-
-@media print {
-  .print-only {
-    display: block;
+  /*
+   * Scoped to the app shell rather than every <header>: the post title bars
+   * are headers too, and a bare `header` rule silently deleted the name of
+   * every post from the printed sheet.
+   */
+  body > div > header,
+  nav,
+  dialog,
+  .no-print {
+    display: none !important;
   }
 
-  /* On a timeline view the card is only a frame around the print-only sheet. */
-  .print-plain {
-    border: 0 !important;
+  main {
     padding: 0 !important;
   }
 
-  .print-plain > *:not(.print-only) {
-    display: none !important;
+  a[href]::after {
+    content: '';
   }
+
+  .print-title {
+    display: block !important;
+    margin: 0 0 4mm;
+    border: 1px solid #000;
+    background: #dbe5f1 !important;
+    padding: 1.5mm;
+    text-align: center;
+    font-size: 12pt;
+    font-weight: 700;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .roster-columns {
+    columns: 3;
+    column-gap: 4mm;
+  }
+
+  .roster-card {
+    margin-bottom: 4mm;
+  }
+
+  .sheet {
+    font-size: 8pt;
+  }
+
+  .sheet th,
+  .sheet td {
+    border: 0.6pt solid #000;
+    padding: 0.6mm 1.2mm;
+  }
+
+  /* Fills carry the structure of the sheet, so they must survive the printer. */
+  .sheet-title,
+  .sheet-subtitle,
+  .sheet-shift th {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .sheet-title {
+    background: #dbe5f1 !important;
+    color: #000 !important;
+    font-size: 9pt;
+  }
+
+  .sheet-subtitle,
+  .sheet-shift th {
+    background: #eef1f5 !important;
+    color: #000 !important;
+  }
+
+  .sheet-empty,
+  .sheet-warn,
+  .sheet-short {
+    background: transparent !important;
+    color: #000 !important;
+  }
+
+  .sheet-open {
+    text-decoration: none !important;
+  }
+}
+
+.print-title {
+  display: none;
 }

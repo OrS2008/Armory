@@ -1,4 +1,3 @@
-import { Fragment } from 'react';
 import { TriangleAlert } from 'lucide-react';
 import type { Assignment, Qualification } from '@shared/types';
 import type { Conflict } from '@shared/conflicts';
@@ -16,24 +15,24 @@ interface Props {
   onOpen: (assignmentId: string) => void;
 }
 
-/** Tinted post headers, matching the colour stored on the assignment type. */
+/** Tinted title bars, matching the colour stored on the assignment type. */
 const postTone: Record<string, string> = {
-  brand: 'bg-brand-100 text-brand-700 border-brand-200',
-  amber: 'bg-warning-soft text-warning border-warning',
-  info: 'bg-brand-50 text-brand-700 border-brand-200',
-  success: 'bg-success-soft text-success border-success',
-  slate: 'bg-surface-sunken text-ink border-border-strong',
+  brand: 'sheet-title-brand',
+  amber: 'sheet-title-amber',
+  info: 'sheet-title-info',
+  success: 'sheet-title-success',
+  slate: 'sheet-title-slate',
 };
 
-const tone = (color: string) => postTone[color] ?? postTone.slate ?? '';
+const tone = (color: string) => postTone[color] ?? 'sheet-title-slate';
 
 /**
  * The duty sheet, grouped by post rather than laid on a time axis.
  *
  * A timeline answers "what is happening at 14:00"; the sheet a commander hands
- * out answers "who is on שער הדוקטור tonight, and in which seat". Every seat is
- * listed whether or not anyone fills it, so a hole in the crew is visible on
- * the page instead of having to be counted.
+ * out answers "who is on שער הדוקטור tonight, and in which seat". It is built
+ * as a real table with collapsed borders because that is what it is — the
+ * printed page is the point, and a page of soft cards is not a duty sheet.
  */
 export function RosterBoard({ assignments, conflicts, qualifications, timezone, onOpen }: Props) {
   const names = new Map(qualifications.map((item) => [item.id, item.name]));
@@ -60,6 +59,9 @@ export function RosterBoard({ assignments, conflicts, qualifications, timezone, 
   );
 }
 
+const span = (shift: Assignment, timezone: string) =>
+  `${formatTime(shift.startAt, timezone)} - ${formatTime(shift.endAt, timezone)}`;
+
 function PostCard({
   post,
   conflicts,
@@ -73,67 +75,72 @@ function PostCard({
   timezone: string;
   onOpen: (assignmentId: string) => void;
 }) {
-  // A post whose every shift is one unnamed seat — ש.ג, בולם, חמ״ל — prints as
-  // a plain time/name list. Giving it the full crew table would be four lines
-  // of chrome around one name.
-  const simple = post.shifts.every(
-    (shift) => shift.requiredHeadcount <= 1 && shift.requiredQualifications.length === 0,
-  );
+  // A one-seat post — ש״ג, בולם, חמ״ל — prints as a plain time/name list. Its
+  // role column would only repeat what the title bar already says.
+  const simple = post.shifts.every((shift) => shift.requiredHeadcount <= 1);
+  // An empty הערות column would take a third of a narrow card for nothing.
+  const hasNotes = post.shifts.some((shift) => Boolean(shift.notes));
+  const columns = simple || !hasNotes ? 2 : 3;
 
   return (
-    <section className="roster-card card mb-3 overflow-hidden p-0">
-      <header className={cn('border-b px-3 py-2', tone(post.color))}>
-        <h3 className="text-sm font-bold">{post.name}</h3>
+    <table className="sheet roster-card">
+      <thead>
+        <tr>
+          <th colSpan={columns} className={cn('sheet-title', tone(post.color))}>
+            {post.name}
+          </th>
+        </tr>
         {post.instructions ? (
-          <p className="mt-0.5 text-xs font-medium opacity-90">{post.instructions}</p>
+          <tr>
+            <td colSpan={columns} className="sheet-subtitle">
+              {post.instructions}
+            </td>
+          </tr>
         ) : null}
-      </header>
+      </thead>
 
-      {simple ? (
-        <ul>
-          {post.shifts.map((shift) => (
-            <li key={shift.id}>
-              <button
-                type="button"
-                onClick={() => onOpen(shift.id)}
-                className="flex w-full items-baseline gap-3 border-t border-border-subtle px-3 py-1.5 text-start text-sm hover:bg-surface-sunken"
-              >
-                <span className="ltr-inline w-[6.5rem] shrink-0 whitespace-nowrap font-semibold tabular-nums">
-                  {formatTime(shift.startAt, timezone)} - {formatTime(shift.endAt, timezone)}
-                </span>
-                {shift.assignees[0] ? (
-                  <span>{shift.assignees[0].personnelName}</span>
-                ) : (
-                  <span className="font-medium text-danger">{t('schedule.seatEmpty')}</span>
-                )}
-              </button>
-            </li>
+      {simple
+        ? post.shifts.map((shift) => (
+            <tbody key={shift.id}>
+              <tr>
+                <td className="sheet-time">
+                  <button type="button" className="sheet-open" onClick={() => onOpen(shift.id)}>
+                    {span(shift, timezone)}
+                  </button>
+                </td>
+                <td>
+                  {shift.assignees[0]?.personnelName ?? (
+                    <span className="sheet-empty">{t('schedule.seatEmpty')}</span>
+                  )}
+                </td>
+              </tr>
+            </tbody>
+          ))
+        : post.shifts.map((shift) => (
+            <ShiftRows
+              key={shift.id}
+              shift={shift}
+              hasNotes={hasNotes}
+              conflicts={conflicts}
+              qualificationName={qualificationName}
+              timezone={timezone}
+              onOpen={onOpen}
+            />
           ))}
-        </ul>
-      ) : (
-        post.shifts.map((shift) => (
-          <ShiftBlock
-            key={shift.id}
-            shift={shift}
-            conflicts={conflicts}
-            qualificationName={qualificationName}
-            timezone={timezone}
-            onOpen={onOpen}
-          />
-        ))
-      )}
-    </section>
+    </table>
   );
 }
 
-function ShiftBlock({
+function ShiftRows({
   shift,
+  hasNotes,
   conflicts,
   qualificationName,
   timezone,
   onOpen,
 }: {
   shift: Assignment;
+  hasNotes: boolean;
   conflicts: Conflict[];
   qualificationName: (id: string) => string;
   timezone: string;
@@ -143,73 +150,47 @@ function ShiftBlock({
   const blocking = conflicts.some(
     (conflict) => conflict.assignmentId === shift.id && conflict.severity === 'blocking',
   );
-  const note = shift.notes;
-  const filled = shift.assignees.length;
-  const short = filled < shift.requiredHeadcount;
+  const label =
+    shift.title ?? dayPartLabel(Number(formatTime(shift.startAt, timezone).slice(0, 2)));
+  const short = shift.assignees.length < shift.requiredHeadcount;
 
   return (
-    <div className="border-t border-border-subtle">
-      <button
-        type="button"
-        onClick={() => onOpen(shift.id)}
-        className="flex w-full items-baseline gap-2 bg-surface-sunken px-3 py-1.5 text-start hover:bg-border-subtle"
-      >
-        <span className="text-sm font-bold">
-          {shift.title ?? dayPartLabel(Number(formatTime(shift.startAt, timezone).slice(0, 2)))}
-        </span>
-        <span
-          className={cn(
-            'ltr-inline rounded px-1.5 text-xs font-semibold tabular-nums',
-            short ? 'bg-danger-soft text-danger' : 'text-ink-muted',
-          )}
-        >
-          {filled}/{shift.requiredHeadcount}
-        </span>
-        <span className="ltr-inline ms-auto whitespace-nowrap text-sm font-semibold tabular-nums">
-          {formatTime(shift.startAt, timezone)} - {formatTime(shift.endAt, timezone)}
-        </span>
-        {blocking ? (
-          <TriangleAlert
-            className="size-4 shrink-0 text-danger"
-            aria-label={t('conflicts.title')}
-          />
-        ) : null}
-      </button>
+    <tbody>
+      <tr className={cn('sheet-shift', !hasNotes && 'sheet-shift-wide')}>
+        <th className="sheet-shift-name">
+          <button type="button" className="sheet-open" onClick={() => onOpen(shift.id)}>
+            {label}
+            {short ? (
+              <span className="sheet-short">
+                {shift.assignees.length}/{shift.requiredHeadcount}
+              </span>
+            ) : null}
+            {blocking ? (
+              <TriangleAlert className="sheet-warn size-3.5" aria-label={t('conflicts.title')} />
+            ) : null}
+          </button>
+        </th>
+        <th className="sheet-time">{span(shift, timezone)}</th>
+        {hasNotes ? <th className="sheet-note-head">{t('schedule.notesColumn')}</th> : null}
+      </tr>
 
-      <table className="w-full text-sm">
-        <tbody>
-          {seats.map((seat, index) => (
-            <Fragment key={`${seat.roleQualificationId ?? 'plain'}-${index}`}>
-              <tr className="border-t border-border-subtle">
-                <td className="w-20 whitespace-nowrap py-1 pe-1 ps-3 align-top text-xs font-semibold text-ink-muted sm:w-28 sm:pe-3">
-                  {seat.label}
-                </td>
-                <td className="px-3 py-1 align-top">
-                  {seat.assignee ? (
-                    seat.assignee.personnelName
-                  ) : (
-                    <span className="font-medium text-danger">{t('schedule.seatEmpty')}</span>
-                  )}
-                </td>
-                {index === 0 && note ? (
-                  <td
-                    rowSpan={seats.length}
-                    className="hidden w-40 border-s border-border-subtle px-3 py-1 align-top text-xs text-ink-muted sm:table-cell"
-                  >
-                    {note}
-                  </td>
-                ) : null}
-              </tr>
-            </Fragment>
-          ))}
-        </tbody>
-      </table>
-
-      {note ? (
-        <p className="border-t border-border-subtle px-3 py-1 text-xs text-ink-muted sm:hidden">
-          {note}
-        </p>
-      ) : null}
-    </div>
+      {seats.map((seat, index) => (
+        <tr key={`${seat.roleQualificationId ?? 'plain'}-${index}`}>
+          <td className="sheet-role">{seat.label}</td>
+          <td className="sheet-name">
+            {seat.assignee ? (
+              seat.assignee.personnelName
+            ) : (
+              <span className="sheet-empty">{t('schedule.seatEmpty')}</span>
+            )}
+          </td>
+          {hasNotes && index === 0 ? (
+            <td rowSpan={seats.length} className="sheet-note">
+              {shift.notes ?? ''}
+            </td>
+          ) : null}
+        </tr>
+      ))}
+    </tbody>
   );
 }

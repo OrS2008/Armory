@@ -58,9 +58,9 @@ test.describe('scheduling workflow', () => {
 
     await page.getByRole('button', { name: 'יצירת משימה' }).click();
 
-    // The board opens on the duty sheet, so the new shift appears as a post
-    // card with its crew listed seat by seat.
-    await expect(page.getByRole('heading', { name: 'שמירה' })).toBeVisible();
+    // The board opens on the duty sheet, so the new shift appears under a post
+    // title bar with its crew listed seat by seat.
+    await expect(page.getByText('שמירה', { exact: true }).first()).toBeVisible();
     await expect(page.getByText('טרם שובץ').first()).toBeVisible();
 
     await page.goto('/schedule/conflicts');
@@ -69,9 +69,9 @@ test.describe('scheduling workflow', () => {
 
   test('assigns a person from the ranked candidate list', async ({ page }) => {
     await page.goto('/schedule');
-    // A shift is opened from the sheet by its hours; the card header carries
-    // the post name, so the row itself reads "בוקר 08:00 - …".
-    await page.getByRole('button', { name: /08:00/ }).first().click();
+    // The title bar carries the post name, so the shift row is named for the
+    // part of day it covers.
+    await page.getByRole('button', { name: /בוקר/ }).first().click();
     await expect(page.getByText('מועמדים מוצעים')).toBeVisible();
     await page.getByRole('button', { name: 'שיבוץ', exact: true }).first().click();
     await expect(page.getByRole('button', { name: 'הסרת שיבוץ' }).first()).toBeVisible();

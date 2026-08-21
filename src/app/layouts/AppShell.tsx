@@ -34,7 +34,7 @@ export function AppShell() {
         {t('app.skipToContent')}
       </a>
 
-      <header className="sticky top-0 z-30 border-b border-border-subtle bg-surface-raised/95 backdrop-blur">
+      <header className="no-print sticky top-0 z-30 border-b border-border-subtle bg-surface-raised/95 backdrop-blur">
         <div className="flex h-14 items-center gap-2 px-3 sm:px-5">
           <IconButton
             className="lg:hidden"
