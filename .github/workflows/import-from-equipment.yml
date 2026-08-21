@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       source_database:
-        description: D1 database of the equipment system
+        description: D1 database of the equipment system — name or UUID
         type: string
         default: armory
       dry_run:
@@ -51,6 +51,20 @@ jobs:
           cache: npm
 
       - run: npm clean-install
+
+      # "Couldn't find a D1 DB with name 'armory'" has two very different causes:
+      # the database is gone, or this token cannot see it. Only the list tells
+      # them apart, so it runs first and never fails the job by itself.
+      - name: List the databases this token can see
+        run: |
+          npx wrangler d1 list --json > databases.json 2>&1 || true
+          cat databases.json
+          {
+            echo '### D1 databases visible to this token'
+            echo '```json'
+            cat databases.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       # Read-only, and printed before the roster query so a failure below can be
       # read against the schema that actually exists rather than guessed at.
