@@ -39,6 +39,16 @@ export function errorMessage(code: string): string {
   return errorMessages[code] ?? errorMessages[ErrorCodes.INTERNAL]!;
 }
 
+/**
+ * For responses that never reached the application — a platform error page, a
+ * dropped connection. Carrying the status code turns an opaque "something went
+ * wrong" into something an operator can act on.
+ */
+export function transportErrorMessage(status: number): string {
+  if (status === 0) return 'אין תקשורת עם השרת. בדקו את החיבור ונסו שוב.';
+  return fill('השרת החזיר תשובה בלתי צפויה (שגיאה {status}). נסו שוב.', { status });
+}
+
 /** What happened, per conflict code. */
 export const conflictMessages: Record<string, string> = {
   NO_OVERLAP: 'לא ניתן לשבץ את {person} למשימה זו — קיימת חפיפה עם {other} בין {from}–{to}.',

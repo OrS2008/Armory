@@ -1,5 +1,5 @@
 /** Typed client for the Pages Functions API. */
-import { errorMessage } from '@shared/messages.he';
+import { transportErrorMessage } from '@shared/messages.he';
 
 const BASE: string = import.meta.env.VITE_API_BASE ?? '/api/v1';
 
@@ -42,7 +42,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
       },
     });
   } catch {
-    throw new ApiError(0, 'NETWORK', errorMessage('INTERNAL'), {});
+    throw new ApiError(0, 'NETWORK', transportErrorMessage(0), {});
   }
 
   let payload: Envelope<T> | null;
@@ -54,12 +54,12 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 
   if (!response.ok || !payload?.ok) {
     const error = payload?.error;
-    throw new ApiError(
-      response.status,
-      error?.code ?? 'INTERNAL',
-      error?.message ?? errorMessage(error?.code ?? 'INTERNAL'),
-      error?.details ?? {},
-    );
+    // No envelope means the response never came from the application: a
+    // platform error page, a killed worker, a proxy. Say which, with the code.
+    if (!error) {
+      throw new ApiError(response.status, 'TRANSPORT', transportErrorMessage(response.status), {});
+    }
+    throw new ApiError(response.status, error.code, error.message, error.details ?? {});
   }
 
   return payload.data as T;

@@ -14,10 +14,28 @@ notes. There is no medical detail, no address, no national id.
 
 ## Authentication
 
-- Passwords are hashed with PBKDF2-SHA256, 210,000 iterations, a 16-byte random
-  salt per user, verified with a length-independent comparison. The iteration
-  count is stored per user so it can be raised without invalidating accounts.
+- Passwords are hashed with PBKDF2-SHA256, a 16-byte random salt per user, and a
+  length-independent comparison. The iteration count is stored **per user**, so
+  it can be changed later without invalidating existing accounts.
   (Argon2id would be preferable; it needs WASM in a Worker and is not used here.)
+
+  The count defaults to 210,000 and is overridable with the `PBKDF2_ITERATIONS`
+  environment variable, with a floor of 10,000. This is not a knob for its own
+  sake: the whole login has to fit inside the plan's CPU budget for one request.
+
+  | Iterations | CPU per login |
+  | --- | --- |
+  | 210,000 | ~130 ms |
+  | 100,000 | ~49 ms |
+  | 50,000 | ~25 ms |
+  | 25,000 | ~13 ms |
+  | 10,000 | ~6 ms |
+
+  The Workers **free** plan allows 10 ms of CPU per request and kills anything
+  over it, which surfaces as a platform error page rather than an application
+  error. On the free plan only ~10,000 iterations fit; the paid plan (30 s) runs
+  the default comfortably. Prefer paying over weakening the hash: 10,000
+  iterations is well below current guidance.
 - Sessions are 32 random bytes. Only the SHA-256 hash is stored, so a database
   read does not yield usable tokens.
 - The cookie is `HttpOnly; Secure; SameSite=Strict; Path=/`, with a 12-hour

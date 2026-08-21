@@ -129,7 +129,8 @@ async function bootstrapAdmin(
   if (email !== bootstrapEmail || password !== bootstrapPassword) return null;
 
   const salt = newSalt();
-  const hash = await hashPassword(password, salt);
+  const iterations = passwordIterations(env);
+  const hash = await hashPassword(password, salt, iterations);
   const id = newId('usr');
   const timestamp = now();
   await env.DB.prepare(
@@ -137,7 +138,7 @@ async function bootstrapAdmin(
                         role, personnel_id, mfa_enabled, active, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, 'system_admin', NULL, 0, 1, ?, ?)`,
   )
-    .bind(id, bootstrapEmail, 'מנהל מערכת', hash, salt, passwordIterations, timestamp, timestamp)
+    .bind(id, bootstrapEmail, 'מנהל מערכת', hash, salt, iterations, timestamp, timestamp)
     .run();
   await writeAudit(env, null, AuditActions.USER_CREATED, 'user', id, { reason: 'bootstrap' });
 
@@ -147,7 +148,7 @@ async function bootstrapAdmin(
     display_name: 'מנהל מערכת',
     password_hash: hash,
     password_salt: salt,
-    password_iterations: passwordIterations,
+    password_iterations: iterations,
     role: 'system_admin',
     personnel_id: null,
     mfa_enabled: 0,

@@ -8,6 +8,7 @@ export interface Env {
   BOOTSTRAP_ADMIN_EMAIL?: string;
   BOOTSTRAP_ADMIN_PASSWORD?: string;
   SESSION_TTL_HOURS?: string;
+  PBKDF2_ITERATIONS?: string;
 }
 
 export const jsonResponse = (body: unknown, status = 200, headers: HeadersInit = {}) =>

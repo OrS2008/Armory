@@ -15,3 +15,17 @@ describe('operator-facing diagnostics', () => {
     expect(errorMessage(ErrorCodes.NOT_CONFIGURED)).toContain('מנהל המערכת');
   });
 });
+
+describe('transport failures', () => {
+  it('distinguishes no connection from a server that answered', async () => {
+    const { transportErrorMessage } = await import('@shared/messages.he');
+    expect(transportErrorMessage(0)).toContain('אין תקשורת');
+    expect(transportErrorMessage(500)).toContain('500');
+  });
+
+  it('carries the status code so an operator can act on it', async () => {
+    const { transportErrorMessage } = await import('@shared/messages.he');
+    expect(transportErrorMessage(502)).toContain('502');
+    expect(transportErrorMessage(502)).not.toBe(transportErrorMessage(500));
+  });
+});

@@ -5,15 +5,29 @@ import type { Role, SessionUser } from '../../shared/types';
 import { fail, hex, newId, now, randomHex, sha256, timingSafeEqual, type Env } from './http';
 
 const COOKIE_NAME = 'shabatzak_session';
-const PBKDF2_ITERATIONS = 210_000;
+/**
+ * PBKDF2 cost. Higher is better, but the whole login has to fit inside the
+ * plan's CPU budget for a single request — 210,000 iterations is roughly 130 ms
+ * of CPU, which the Workers free tier (10 ms) kills outright. The value is
+ * therefore configurable per deployment, and each user's row records the count
+ * their hash was derived with, so raising it later does not invalidate anyone.
+ */
+const DEFAULT_PBKDF2_ITERATIONS = 210_000;
+const MIN_PBKDF2_ITERATIONS = 10_000;
 const DEFAULT_TTL_HOURS = 12;
 const MAX_FAILED_ATTEMPTS = 8;
 const ATTEMPT_WINDOW_MS = 15 * 60_000;
 
+export function passwordIterations(env: Env): number {
+  const configured = Number(env.PBKDF2_ITERATIONS);
+  if (!Number.isFinite(configured) || configured <= 0) return DEFAULT_PBKDF2_ITERATIONS;
+  return Math.max(MIN_PBKDF2_ITERATIONS, Math.trunc(configured));
+}
+
 export async function hashPassword(
   password: string,
   salt: string,
-  iterations = PBKDF2_ITERATIONS,
+  iterations = DEFAULT_PBKDF2_ITERATIONS,
 ): Promise<string> {
   const key = await crypto.subtle.importKey(
     'raw',
@@ -47,8 +61,6 @@ export async function verifyPassword(
 export function newSalt(): string {
   return randomHex(16);
 }
-
-export const passwordIterations = PBKDF2_ITERATIONS;
 
 export function sessionCookie(value: string, maxAgeSeconds: number): string {
   return `${COOKIE_NAME}=${encodeURIComponent(value)}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${maxAgeSeconds}`;
