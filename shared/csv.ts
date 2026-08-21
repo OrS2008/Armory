@@ -195,4 +195,14 @@ export function parsePersonnelCsv(text: string): ParsedImport {
   };
 }
 
+/** What each recognised column is called on screen. */
+export const COLUMN_LABELS: Record<PersonnelColumn, string> = {
+  displayName: 'שם',
+  externalId: 'מספר אישי',
+  unit: 'מסגרת',
+  roleTitle: 'תפקיד',
+  phone: 'טלפון',
+  qualifications: 'הכשירים',
+};
+
 export const CSV_TEMPLATE = 'שם,מספר אישי,מסגרת,תפקיד,טלפון,הכשירים\n';

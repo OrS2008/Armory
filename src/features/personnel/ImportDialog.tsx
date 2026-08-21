@@ -1,7 +1,7 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { FileUp, Upload } from 'lucide-react';
-import { CSV_TEMPLATE, parsePersonnelCsv, type ParsedImport } from '@shared/csv';
+import { COLUMN_LABELS, CSV_TEMPLATE, parsePersonnelCsv, type ParsedImport } from '@shared/csv';
 import { t } from '@/i18n';
 import { ApiError, api } from '@/lib/api';
 import { Badge } from '@/components/ui/Badge';
@@ -70,10 +70,31 @@ export function ImportDialog({ open, onClose, onImported }: Props) {
       toast.push('error', error instanceof ApiError ? error.message : t('state.errorBody')),
   });
 
+  const checkTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  /**
+   * The dry run is what turns "66 rows parsed" into "66 rows the server will
+   * accept", and the import button depends on it. Running it automatically
+   * removes a step where the dialog showed a count and an import button reading
+   * zero at the same time, with nothing saying which to believe.
+   */
+  // Latest-ref, so the debounced check calls the current mutation rather than
+  // one captured when the timer was set.
+  const runRef = useRef<(dryRun: boolean) => void>(() => {});
+  useEffect(() => {
+    runRef.current = (dryRun: boolean) => run.mutate(dryRun);
+  });
+
   const handleText = (value: string) => {
     setText(value);
     setChecked(null);
-    setParsed(value.trim() ? parsePersonnelCsv(value) : null);
+    const result = value.trim() ? parsePersonnelCsv(value) : null;
+    setParsed(result);
+
+    if (checkTimer.current) clearTimeout(checkTimer.current);
+    if (result && result.rows.length > 0) {
+      checkTimer.current = setTimeout(() => runRef.current(true), 400);
+    }
   };
 
   const readFile = (file: File) => {
@@ -96,6 +117,13 @@ export function ImportDialog({ open, onClose, onImported }: Props) {
     link.click();
     URL.revokeObjectURL(url);
   };
+
+  useEffect(
+    () => () => {
+      if (checkTimer.current) clearTimeout(checkTimer.current);
+    },
+    [],
+  );
 
   const problems = parsed?.problems ?? [];
   const skipped = (checked?.outcomes ?? []).filter((outcome) => outcome.status !== 'create');
@@ -135,7 +163,9 @@ export function ImportDialog({ open, onClose, onImported }: Props) {
             loading={run.isPending && run.variables === false}
             onClick={() => run.mutate(false)}
           >
-            {t('personnel.importConfirm', { count: checked?.willCreate ?? 0 })}
+            {checked
+              ? t('personnel.importConfirm', { count: checked.willCreate })
+              : t('personnel.importAwaitCheck')}
           </Button>
         </>
       }
@@ -168,6 +198,7 @@ export function ImportDialog({ open, onClose, onImported }: Props) {
         <label className="flex flex-col gap-1.5 text-sm font-medium">
           {t('personnel.importPaste')}
           <Textarea
+            aria-label={t('personnel.importPaste')}
             dir="ltr"
             className="min-h-32 font-mono text-xs"
             value={text}
@@ -177,14 +208,22 @@ export function ImportDialog({ open, onClose, onImported }: Props) {
 
         {parsed ? (
           <div className="flex flex-wrap items-center gap-2 text-sm">
-            <Badge tone="brand">{t('personnel.importReady', { count: parsed.rows.length })}</Badge>
+            <Badge tone={checked ? 'success' : 'brand'}>
+              {checked
+                ? t('personnel.importReady', { count: checked.willCreate })
+                : t('personnel.importParsed', { count: parsed.rows.length })}
+            </Badge>
+            {run.isPending && run.variables === true ? (
+              <span className="text-xs text-ink-muted">{t('personnel.importChecking')}</span>
+            ) : null}
             {problems.length > 0 ? (
               <Badge tone="warning">
                 {t('personnel.importSkipped', { count: problems.length })}
               </Badge>
             ) : null}
             <span className="text-xs text-ink-muted">
-              {t('personnel.importColumns')}: {parsed.columns.join(', ') || '—'}
+              {t('personnel.importColumns')}:{' '}
+              {parsed.columns.map((column) => COLUMN_LABELS[column]).join(', ') || '—'}
             </span>
           </div>
         ) : null}

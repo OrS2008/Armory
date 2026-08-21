@@ -19,6 +19,30 @@ test.describe('scheduling workflow', () => {
     await expect(page.getByText('בדיקה אוטומטית')).toBeVisible();
   });
 
+  test('imports a roster from pasted CSV without a dead-end button', async ({ page }, testInfo) => {
+    // Both projects share one local database, and importing the same names
+    // twice is correctly refused as a duplicate — so each run brings its own.
+    const first = `רס״ר ${testInfo.project.name}`;
+    const second = `סמל ${testInfo.project.name}`;
+
+    await page.goto('/personnel');
+    await page.getByRole('button', { name: 'ייבוא מקובץ' }).click();
+
+    // A name column alone is a valid file: everything else is optional.
+    await page
+      .getByRole('textbox', { name: 'או הדביקו כאן את תוכן הקובץ' })
+      .fill(`שם\n${first}\n${second}`);
+
+    // The verification runs on its own, so the import button becomes usable
+    // without the reader having to discover a separate step first.
+    const importButton = page.getByRole('button', { name: /ייבוא 2 רשומות/ });
+    await expect(importButton).toBeEnabled({ timeout: 15_000 });
+    await importButton.click();
+
+    await expect(page.getByText(first)).toBeVisible();
+    await expect(page.getByText(second)).toBeVisible();
+  });
+
   test('creates an assignment and reports it as understaffed', async ({ page }) => {
     await page.goto('/schedule');
     await page.getByRole('button', { name: 'משימה חדשה' }).click();
