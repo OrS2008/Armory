@@ -8,74 +8,78 @@ Browser ──▶ Cloudflare Pages
               └── functions/       /api/v1/*  ──▶  D1 (binding: DB)
 ```
 
-## One-time setup
+## Setup — the short path
 
-You need a Cloudflare account with Pages and D1 enabled, and `wrangler` (already
-a dev dependency — `npx wrangler …`).
+Everything is automated. You add four repository secrets, then run one workflow.
 
-### 1. Create the database
+### 1. Create a Cloudflare API token
+
+Cloudflare → My Profile → API Tokens → **Create Token** → *Create Custom Token*.
+Give it the least privilege that works:
+
+| Permission | Level |
+| --- | --- |
+| Account · Cloudflare Pages | Edit |
+| Account · D1 | Edit |
+
+Scope *Account Resources* to the one account. Do not use the Global API Key.
+
+### 2. Add four repository secrets
+
+GitHub → Settings → Secrets and variables → **Actions** → *New repository secret*:
+
+| Secret | Value |
+| --- | --- |
+| `CLOUDFLARE_API_TOKEN` | The token from step 1 |
+| `CLOUDFLARE_ACCOUNT_ID` | Cloudflare dashboard sidebar, or `npx wrangler whoami` |
+| `BOOTSTRAP_ADMIN_EMAIL` | The first administrator's address |
+| `BOOTSTRAP_ADMIN_PASSWORD` | A long random password |
+
+### 3. Run the provisioning workflow
+
+GitHub → **Actions** → *Provision Cloudflare* → **Run workflow**.
+
+It creates the D1 database, creates the Pages project, applies migrations, sets
+the bootstrap secrets on the project, builds, deploys, and then probes
+`/api/v1/health` until the site answers `"status":"ready"` — which only happens
+if the D1 binding is really wired up. The run summary prints the database id and
+the site URL.
+
+Every step is safe to re-run: existing resources are detected and reused.
+
+### 4. Sign in, then rotate
+
+Open `https://<project>.pages.dev/login` and sign in with the bootstrap
+credentials. The first administrator is created only while the user table is
+empty, so afterwards those values are useless — rotate them anyway, in both the
+GitHub secrets and the Pages project.
+
+## After setup
+
+Pushes to `main` run `Deploy to Cloudflare Pages`, which repeats the quality
+gate, resolves the database id, applies any new migrations, deploys and
+smoke-tests the result.
+
+## The placeholder database id
+
+`wrangler.toml` keeps `00000000-0000-0000-0000-000000000000` on purpose, so a
+stray `wrangler` command cannot touch a real database. Both workflows resolve the
+real id from the account at run time and substitute it for that run only. Nothing
+secret, and nothing environment-specific, is committed.
+
+## Doing it by hand instead
 
 ```bash
-npx wrangler d1 create shabatzak
-```
-
-Copy the returned `database_id` into `wrangler.toml`, replacing the
-all-zeros placeholder. This is deliberate: the placeholder makes an accidental
-deploy against someone else's database impossible.
-
-### 2. Apply migrations
-
-```bash
+npx wrangler d1 create shabatzak          # note the database_id
 npx wrangler d1 migrations apply shabatzak --remote
-```
-
-### 3. Create the Pages project
-
-```bash
 npm run build
 npx wrangler pages project create shabatzak --production-branch=main
 npx wrangler pages deploy dist --project-name=shabatzak
 ```
 
-### 4. Bind the database
-
-In the Cloudflare dashboard: **Workers & Pages → shabatzak → Settings →
-Functions → D1 database bindings**, add binding name `DB` → database `shabatzak`,
-for both Production and Preview.
-
-### 5. Set the bootstrap secrets
-
-**Settings → Environment variables → Add (encrypted)**:
-
-| Name | Value |
-| --- | --- |
-| `BOOTSTRAP_ADMIN_EMAIL` | The first administrator's address |
-| `BOOTSTRAP_ADMIN_PASSWORD` | A long random password |
-| `SESSION_TTL_HOURS` | Optional; defaults to 12 |
-
-Log in once to create the administrator, then rotate both values — the bootstrap
-path only runs while the user table is empty, so they are useless afterwards and
-should not linger.
-
-## Continuous deployment
-
-`.github/workflows/deploy.yml` builds, runs the quality gate, applies migrations
-and deploys. It runs on pushes to `main` and on manual dispatch.
-
-Add two repository secrets under **Settings → Secrets and variables → Actions**:
-
-| Secret | Where it comes from |
-| --- | --- |
-| `CLOUDFLARE_API_TOKEN` | Cloudflare → My Profile → API Tokens → Create Token. Permissions: *Account · Cloudflare Pages · Edit* and *Account · D1 · Edit* |
-| `CLOUDFLARE_ACCOUNT_ID` | Cloudflare dashboard sidebar, or `npx wrangler whoami` |
-
-The alternative is Cloudflare's own Git integration (Pages → Connect to Git),
-with build command `npm run build` and output directory `dist`. Use one or the
-other, not both.
-
-`.github/workflows/ci.yml` runs typecheck, lint, formatting, unit tests, the
-build and the Playwright suite on every branch and pull request. It needs no
-secrets.
+Then bind D1 as `DB` under Workers & Pages → shabatzak → Settings → Bindings, and
+add `BOOTSTRAP_ADMIN_EMAIL` and `BOOTSTRAP_ADMIN_PASSWORD` as encrypted
+environment variables. `SESSION_TTL_HOURS` is optional and defaults to 12.
 
 ## Local development
 

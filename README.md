@@ -31,20 +31,25 @@ anything that talks to the server.
 
 ## Deploying to Cloudflare
 
-Full walkthrough in [`docs/12-deployment-plan.md`](docs/12-deployment-plan.md).
-Short version:
+Automated. Add four repository secrets, then run one workflow — full detail in
+[`docs/12-deployment-plan.md`](docs/12-deployment-plan.md).
 
-```bash
-npx wrangler d1 create shabatzak          # put the id in wrangler.toml
-npx wrangler d1 migrations apply shabatzak --remote
-npm run build
-npx wrangler pages deploy dist --project-name=shabatzak
-```
+1. Create a Cloudflare API token with *Account · Cloudflare Pages · Edit* and
+   *Account · D1 · Edit*.
+2. Add `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `BOOTSTRAP_ADMIN_EMAIL`
+   and `BOOTSTRAP_ADMIN_PASSWORD` under Settings → Secrets and variables →
+   Actions.
+3. Actions → **Provision Cloudflare** → Run workflow.
 
-Then bind D1 as `DB` and set `BOOTSTRAP_ADMIN_EMAIL` / `BOOTSTRAP_ADMIN_PASSWORD`
-as encrypted Pages variables. For continuous deployment, add
-`CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` as GitHub secrets — 
-`.github/workflows/deploy.yml` builds, migrates and deploys on pushes to `main`.
+It creates the D1 database and the Pages project, applies migrations, sets the
+bootstrap secrets, deploys, and then probes `/api/v1/health` until the site
+answers `"status":"ready"` — proving the database binding really works. Every
+step is safe to re-run.
+
+Afterwards, pushes to `main` deploy automatically and smoke-test themselves.
+
+`wrangler.toml` keeps a placeholder database id on purpose so no stray command
+can reach a real database; the workflows resolve the real id at run time.
 
 ## Layout
 
