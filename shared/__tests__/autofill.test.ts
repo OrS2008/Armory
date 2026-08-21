@@ -150,3 +150,56 @@ describe('auto-fill', () => {
     expect(proposal.gaps).toEqual([]);
   });
 });
+
+describe('when the day asks more of the roster than it has', () => {
+  const eightHours = DEFAULT_RULES.map((rule) =>
+    rule.code === 'MAX_CONTINUOUS' ? { ...rule, config: { minutes: 480 } } : rule,
+  );
+
+  const shift = (id: string, from: number, to: number): EngineAssignment => ({
+    id,
+    title: 'סיור',
+    startAt: Date.UTC(2026, 7, 21, from),
+    endAt: Date.UTC(2026, 7, 21, to),
+    requiredHeadcount: 2,
+    requiredQualifications: [],
+    assigneeIds: [],
+    publicationState: 'draft',
+  });
+
+  const two: EnginePerson[] = [
+    { id: 'p1', displayName: 'א', qualificationIds: [] },
+    { id: 'p2', displayName: 'ב', qualificationIds: [] },
+  ];
+
+  it('leaves the seats empty rather than working two people around the clock', () => {
+    // Three back-to-back eight-hour shifts, two seats each, two people.
+    const proposal = buildAutofillProposal({
+      assignments: [shift('a', 0, 8), shift('b', 8, 16), shift('c', 16, 24)],
+      personnel: two,
+      absences: [],
+      rules: eightHours,
+    });
+
+    // The two shifts that are not adjacent are staffed — eight hours on, eight
+    // off, eight on. The middle one would make a sixteen-hour run either side
+    // of it, so it is left empty instead.
+    expect(proposal.proposed).toHaveLength(4);
+    expect(proposal.gaps.reduce((total, gap) => total + gap.missing, 0)).toBe(2);
+    expect(proposal.gaps[0]?.assignmentId).toBe('b');
+  });
+
+  it('reports the arithmetic behind the gaps', () => {
+    const proposal = buildAutofillProposal({
+      assignments: [shift('a', 0, 8), shift('b', 8, 16), shift('c', 16, 24)],
+      personnel: two,
+      absences: [],
+      rules: eightHours,
+    });
+
+    // Six seats of eight hours across two people: twenty-four hours each.
+    expect(proposal.demand.seatHours).toBe(48);
+    expect(proposal.demand.people).toBe(2);
+    expect(proposal.demand.hoursPerPerson).toBe(24);
+  });
+});

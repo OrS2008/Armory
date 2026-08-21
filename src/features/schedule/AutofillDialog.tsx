@@ -5,7 +5,7 @@ import { buildAutofillProposal, type ProposedAssignment } from '@shared/autofill
 import type { EngineAbsence, EngineAssignment, EnginePerson } from '@shared/conflicts';
 import type { Assignment, Availability, Personnel, Qualification } from '@shared/types';
 import type { SchedulingRule } from '@shared/conflicts';
-import { formatRange } from '@shared/format';
+import { formatHours, formatRange } from '@shared/format';
 import { t } from '@/i18n';
 import { ApiError, api } from '@/lib/api';
 import { Badge } from '@/components/ui/Badge';
@@ -95,6 +95,10 @@ export function AutofillDialog({
       timezone,
     });
   }, [open, assignments, personnel, availability, qualifications, rules, timezone]);
+
+  // The limit the demand is measured against, in hours.
+  const continuousLimitHours =
+    (rules.find((rule) => rule.code === 'MAX_CONTINUOUS')?.config.minutes ?? 0) / 60 || Infinity;
 
   const key = (item: ProposedAssignment) => `${item.assignmentId}:${item.personnelId}`;
   const accepted = (proposal?.proposed ?? []).filter((item) => !dropped.has(key(item)));
@@ -214,6 +218,21 @@ export function AutofillDialog({
                   count: proposal.gaps.reduce((total, gap) => total + gap.missing, 0),
                 })}
               </h3>
+
+              {/* When the seats outnumber the roster, the gap list is a symptom
+                  and the arithmetic is the answer. */}
+              <p className="mb-2 rounded-[var(--radius-control)] bg-surface-sunken p-2 text-xs text-ink-muted">
+                {t('schedule.demand', {
+                  hours: formatHours(proposal.demand.seatHours),
+                  people: proposal.demand.people,
+                  perPerson: formatHours(proposal.demand.hoursPerPerson),
+                })}
+                {proposal.demand.hoursPerPerson > continuousLimitHours ? (
+                  <span className="mt-1 block font-medium text-warning">
+                    {t('schedule.demandOverLimit')}
+                  </span>
+                ) : null}
+              </p>
               <ul className="flex flex-col gap-1 text-sm text-ink-muted">
                 {proposal.gaps.map((gap) => (
                   <li key={gap.assignmentId}>

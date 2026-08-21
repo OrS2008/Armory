@@ -158,7 +158,11 @@ export const DEFAULT_RULES: SchedulingRule[] = [
     code: 'MAX_CONTINUOUS',
     name: 'משך שיבוץ רצוף מרבי',
     enabled: true,
-    severity: 'warning',
+    // Blocking, not advisory. A warning is a note that nothing acts on, and
+    // the schedule went on handing people sixteen continuous hours while
+    // dutifully reporting that it had. Overridable, so a commander can still
+    // say yes for a reason that gets recorded.
+    severity: 'blocking',
     overridable: true,
     config: { minutes: 720 },
   },

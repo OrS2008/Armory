@@ -15,7 +15,7 @@ import { openSeatRoles } from './crew';
 import { DEFAULT_CREW_ROLE } from './messages.he';
 import type { EngineAbsence, EngineAssignment, EnginePerson, SchedulingRule } from './conflicts';
 import type { FairnessWeights } from './fairness';
-import { DEFAULT_TIMEZONE } from './time';
+import { DEFAULT_TIMEZONE, HOUR } from './time';
 
 export interface AutofillInput {
   /** Every assignment in the window, including ones already staffed. */
@@ -56,6 +56,14 @@ export interface AutofillProposal {
   gaps: AutofillGap[];
   /** Seats that were already filled before the run, for the summary. */
   alreadyStaffed: number;
+  /**
+   * What the day asks of the roster, in numbers.
+   *
+   * When seats outnumber the people who can stand them, no scheduler can fill
+   * the day without somebody working past the limit — and the honest answer is
+   * arithmetic, not a better search. Reported so the gap list can say why.
+   */
+  demand: { seatHours: number; people: number; hoursPerPerson: number };
 }
 
 export function buildAutofillProposal(input: AutofillInput): AutofillProposal {
@@ -158,7 +166,23 @@ export function buildAutofillProposal(input: AutofillInput): AutofillProposal {
     0,
   );
 
-  return { proposed, gaps, alreadyStaffed };
+  const seatHours = input.assignments.reduce(
+    (total, assignment) =>
+      total + (assignment.requiredHeadcount * (assignment.endAt - assignment.startAt)) / HOUR,
+    0,
+  );
+  const people = roster.length;
+
+  return {
+    proposed,
+    gaps,
+    alreadyStaffed,
+    demand: {
+      seatHours,
+      people,
+      hoursPerPerson: people > 0 ? seatHours / people : 0,
+    },
+  };
 }
 
 /** Which assignments a proposal touches, for invalidation and summaries. */
