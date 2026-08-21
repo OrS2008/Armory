@@ -1,2 +1,0 @@
-# Pages Functions handle /api/* before this rule; everything else is the SPA.
-/*  /index.html  200

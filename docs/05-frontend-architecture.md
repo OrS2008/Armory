@@ -94,6 +94,14 @@ ScheduleBoardPage
 Wide content (timelines, tables) scrolls inside its own container; the page body
 never scrolls sideways.
 
+## SPA routing
+
+There is deliberately no `public/_redirects`. Cloudflare Pages already serves
+`index.html` for any path that matches no asset, which is what a client-routed
+app needs, and it rejects an explicit `/* /index.html 200` rule as an infinite
+loop. Pages Functions are matched before static assets either way, so `/api/*`
+is never affected.
+
 ## Screen states
 
 `QueryState` renders loading, error, permission-denied and empty consistently.
