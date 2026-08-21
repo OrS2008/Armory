@@ -1,7 +1,8 @@
 # Testing plan
 
 CI (`.github/workflows/ci.yml`) runs all of this on every branch and pull
-request. It is the only GitHub workflow: deployment belongs to Cloudflare Pages.
+request. Deployment belongs to Cloudflare Pages; the only other workflow is
+`migrate.yml`, which applies D1 migrations on manual dispatch.
 
 ```bash
 npm run typecheck   # tsc across app, shared and functions

@@ -49,8 +49,10 @@ One-time setup:
 5. `curl https://shabatzak.pages.dev/api/v1/health` — `"status":"ready"` proves
    the database binding works, because that route runs a real query.
 
-Migrations are not run by the Cloudflare build; apply them with `wrangler`
-whenever a new one is added.
+Migrations are never run by the Cloudflare build. Apply them with
+`npx wrangler d1 migrations apply shabatzak --remote`, or run the **Apply D1
+migrations** workflow in GitHub Actions, which applies them and then verifies
+the live site reports `"schema":"ready"`.
 
 ## Layout
 

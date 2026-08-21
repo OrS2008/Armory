@@ -50,12 +50,25 @@ token, which is why the equipment application also keeps its own in the repo.
 
 ### 2. Apply the migrations
 
+Cloudflare's build never runs migrations, so this is a separate, deliberate step
+every time one is added. `wrangler` applies only the migrations the database has
+not seen yet.
+
+From a machine with a terminal:
+
 ```bash
 npx wrangler d1 migrations apply shabatzak --remote
 ```
 
-Repeat this whenever a migration is added — Cloudflare's build does not run
-migrations. `wrangler` applies only the ones the database has not seen yet.
+Or, with no terminal to hand: GitHub → **Actions** → **Apply D1 migrations** →
+*Run workflow*. It lists what is pending, applies it, and then polls
+`/api/v1/health` until the live site reports `"schema":"ready"` — so a green run
+means the deployed site can serve requests, not merely that a command exited
+zero. Tick **dry run** to see the pending list without applying anything.
+
+That workflow needs `CLOUDFLARE_API_TOKEN` (Account · D1 · Edit is enough) and
+`CLOUDFLARE_ACCOUNT_ID` as repository secrets. It is the only workflow that
+talks to Cloudflare; deployment remains Cloudflare's own Git integration.
 
 ### 3. Create the Pages project
 
