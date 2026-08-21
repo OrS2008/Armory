@@ -9,7 +9,7 @@ on:
       source_database:
         description: D1 database of the equipment system — name or UUID
         type: string
-        default: armory
+        default: tzayad
       dry_run:
         description: Report what would be imported, write nothing
         type: boolean
@@ -72,9 +72,12 @@ jobs:
         run: |
           set -euo pipefail
           npx wrangler d1 execute "$SOURCE" --remote --json --command \
-            "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name" | tee tables.json
+            "SELECT name, sql FROM sqlite_master
+              WHERE type = 'table'
+                AND name NOT IN ('_cf_KV', 'sqlite_sequence', 'schema_migrations', 'sessions', 'throttle', 'audit')
+              ORDER BY name" | tee tables.json
           {
-            echo '### Tables in the source database'
+            echo '### Source schema'
             echo '```json'
             cat tables.json
             echo '```'
@@ -88,7 +91,7 @@ jobs:
       # shows nothing but "exit code 1".
       - name: Read the equipment roster
         run: |
-          set -uo pipefail
+          set +e
           npx wrangler d1 execute "$SOURCE" --remote --json --command "
             SELECT s.full_name,
                    s.personal_id,
