@@ -43,6 +43,7 @@ export function QualificationsPanel() {
 
   return (
     <>
+      <p className="mb-3 text-sm text-ink-muted">{t('settings.qualificationsHint')}</p>
       {can(Permissions.qualificationsWrite) ? (
         <Button
           className="mb-3"

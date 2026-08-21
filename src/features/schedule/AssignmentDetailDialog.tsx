@@ -93,7 +93,7 @@ export function AssignmentDetailDialog({ assignment, conflicts, timezone, onClos
             </Badge>
           </h3>
           {assignment.assignees.length === 0 ? (
-            <p className="text-sm text-ink-muted">{t('assignments.empty')}</p>
+            <p className="text-sm text-ink-muted">{t('assignments.noAssignees')}</p>
           ) : (
             <ul className="flex flex-col gap-1.5">
               {assignment.assignees.map((assignee) => (
@@ -143,6 +143,9 @@ export function AssignmentDetailDialog({ assignment, conflicts, timezone, onClos
             <h3 className="text-sm font-semibold">{t('assignments.candidates')}</h3>
             <p className="mb-2 text-xs text-ink-muted">{t('assignments.candidatesHint')}</p>
             {candidates.isLoading ? <LoadingState /> : null}
+            {!candidates.isLoading && (candidates.data ?? []).length === 0 ? (
+              <p className="text-sm text-ink-muted">{t('assignments.noCandidates')}</p>
+            ) : null}
             <ul className="flex flex-col gap-2">
               {(candidates.data ?? []).slice(0, 12).map((candidate) => (
                 <li
@@ -154,7 +157,9 @@ export function AssignmentDetailDialog({ assignment, conflicts, timezone, onClos
                     <Badge tone={candidate.eligible ? 'success' : 'danger'}>
                       {candidate.eligible ? t('assignments.eligible') : t('assignments.ineligible')}
                     </Badge>
-                    <span className="ltr-inline text-xs text-ink-faint">{candidate.score}</span>
+                    <span className="text-xs text-ink-faint">
+                      {t('assignments.score', { score: candidate.score })}
+                    </span>
                     <Button
                       className="ms-auto"
                       size="sm"

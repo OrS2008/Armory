@@ -101,6 +101,7 @@ export function AvailabilityPage() {
     <>
       <PageHeader
         title={t('availability.title')}
+        description={t('availability.subtitle')}
         actions={
           <>
             <Select

@@ -23,6 +23,7 @@ export function NotificationsPage() {
     <>
       <PageHeader
         title={t('notifications.title')}
+        description={t('notifications.subtitle')}
         {...(unread > 0 ? { description: t('notifications.unread', { count: unread }) } : {})}
         actions={
           unread > 0 ? (

@@ -26,4 +26,43 @@ test.describe('navigation and screen states', () => {
     await page.goto('/settings');
     await expect(page.getByText('מנוחה מזערית בין שיבוצים')).toBeVisible();
   });
+
+  test('names the rule knobs in Hebrew instead of their JSON keys', async ({ page }) => {
+    await login(page);
+    await page.goto('/settings');
+    await expect(page.getByText('בתוך כמה ימים')).toBeVisible();
+    await expect(page.getByText('windowDays')).toHaveCount(0);
+  });
+
+  // A title alone ("זמינות", "דוחות") does not tell a first-time reader what the
+  // screen is for. Every main screen answers that in its own words.
+  const screens = [
+    { path: '/schedule', text: 'לוח המשמרות' },
+    { path: '/personnel', text: 'מאגר האנשים שאפשר לשבץ' },
+    { path: '/availability', text: 'מי לא נמצא ומתי' },
+    { path: '/assignment-types', text: 'התבניות שמהן בונים את השבצ״ק' },
+    { path: '/reports', text: 'כמה שעות עשה כל אחד' },
+    { path: '/settings', text: 'הבסיס שהשבצ״ק נשען עליו' },
+  ];
+
+  for (const screen of screens) {
+    test(`explains what ${screen.path} is for`, async ({ page }) => {
+      await login(page);
+      await page.goto(screen.path);
+      await expect(page.getByText(screen.text, { exact: false })).toBeVisible();
+    });
+  }
+
+  test('asks which schedule to publish instead of a bare confirm box', async ({ page }) => {
+    await login(page);
+    await page.goto('/schedule');
+
+    // Publishing is rare, so it lives behind the overflow menu rather than
+    // competing with the two buttons used every day.
+    await page.getByRole('button', { name: 'עוד' }).click();
+    await page.getByRole('menuitem', { name: /פרסום שבצ״ק/ }).click();
+
+    await expect(page.getByRole('heading', { name: 'פרסום שבצ״ק' })).toBeVisible();
+    await expect(page.getByText('הפרסום הופך את השבצ״ק לרשמי')).toBeVisible();
+  });
 });

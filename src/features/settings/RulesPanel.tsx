@@ -10,6 +10,20 @@ import { useRules } from '@/hooks/queries';
 import { useAuth } from '@/hooks/auth-context';
 
 /** Scheduling policy is configuration, not hardcoded logic (plan section 48). */
+/**
+ * The rule config arrives as raw JSON keys. Showing "windowDays" next to a
+ * number box asks the reader to speak the schema; these are the same knobs in
+ * their own language.
+ */
+const configLabels: Record<string, string> = {
+  minutes: t('settings.configMinutes'),
+  count: t('settings.configCount'),
+  hours: t('settings.configHours'),
+  windowDays: t('settings.configWindowDays'),
+};
+
+const configLabel = (key: string) => configLabels[key] ?? key;
+
 export function RulesPanel() {
   const { can } = useAuth();
   const toast = useToast();
@@ -44,7 +58,7 @@ export function RulesPanel() {
 
             {Object.entries(rule.config).map(([key, value]) => (
               <label key={key} className="flex items-center gap-1.5 text-sm">
-                <span className="text-ink-muted">{key}</span>
+                <span className="text-ink-muted">{configLabel(key)}</span>
                 <input
                   type="number"
                   dir="ltr"

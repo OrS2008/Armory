@@ -65,6 +65,7 @@ export function UnitsPanel() {
 
   return (
     <>
+      <p className="mb-3 text-sm text-ink-muted">{t('settings.unitsHint')}</p>
       {can(Permissions.unitsWrite) ? (
         <Button
           className="mb-3"

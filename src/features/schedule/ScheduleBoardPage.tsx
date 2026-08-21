@@ -17,12 +17,15 @@ import { t } from '@/i18n';
 import { ApiError, api } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { todayKey } from '@/lib/datetime';
-import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
+import { Dialog } from '@/components/ui/Dialog';
+import { Field } from '@/components/ui/Field';
 import { IconButton } from '@/components/ui/IconButton';
 import { Select } from '@/components/ui/Input';
+import { MenuButton, type MenuAction } from '@/components/ui/MenuButton';
 import { QueryState } from '@/components/ui/States';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { StepsHint } from '@/components/layout/StepsHint';
 import { DayTimeline } from '@/components/scheduling/DayTimeline';
 import { PersonnelTimeline } from '@/components/scheduling/PersonnelTimeline';
 import { WeekGrid } from '@/components/scheduling/WeekGrid';
@@ -56,6 +59,7 @@ export function ScheduleBoardPage() {
   const [creating, setCreating] = useState(false);
   const [openAssignmentId, setOpenAssignmentId] = useState<string | null>(null);
   const [autofilling, setAutofilling] = useState(false);
+  const [publishing, setPublishing] = useState(false);
 
   const units = useUnits();
   const schedules = useSchedules();
@@ -86,11 +90,21 @@ export function ScheduleBoardPage() {
   const blockingCount = conflicts.filter((conflict) => conflict.severity === 'blocking').length;
   const openAssignment = assignments.find((item) => item.id === openAssignmentId) ?? null;
 
+  const seatsNeeded = assignments.reduce((total, item) => total + item.requiredHeadcount, 0);
+  const seatsFilled = assignments.reduce(
+    // A crew can be over-filled by hand; counting the extras as "staffed" would
+    // let one full post hide an empty one in the totals.
+    (total, item) => total + Math.min(item.assignees.length, item.requiredHeadcount),
+    0,
+  );
+  const seatsMissing = seatsNeeded - seatsFilled;
+
   const publish = useMutation({
     mutationFn: (id: string) =>
       api.post<{ version: number; notified: number }>(`/schedules/${id}/publish`, {}),
     onSuccess: (result) => {
       invalidate();
+      setPublishing(false);
       toast.push('success', `${t('schedule.published')} (${result.notified})`);
     },
     onError: (error) => {
@@ -101,51 +115,37 @@ export function ScheduleBoardPage() {
   const shift = (direction: -1 | 1) =>
     setDay((current) => addDays(current, view === 'week' ? 7 * direction : direction));
 
+  // Everything that is not "create" or "auto-fill" lives behind one menu, so the
+  // toolbar shows the two buttons a manager actually presses on a normal day.
+  const menuActions: MenuAction[] = [
+    {
+      key: 'print',
+      label: t('schedule.print'),
+      hint: t('schedule.printHint'),
+      icon: <Printer className="size-4" />,
+      onSelect: () => window.print(),
+    },
+    ...(can(Permissions.schedulesPublish)
+      ? [
+          {
+            key: 'publish',
+            label: t('schedule.publish'),
+            hint: t('schedule.publishExplain'),
+            icon: <Send className="size-4" />,
+            onSelect: () => setPublishing(true),
+          },
+        ]
+      : []),
+  ];
+
   return (
     <>
       <PageHeader
         title={t('schedule.title')}
+        description={t('schedule.subtitle')}
         actions={
           <>
-            <Link
-              to="/schedule/conflicts"
-              className={cn(
-                'inline-flex items-center gap-1.5 rounded-[var(--radius-control)] px-3 py-1.5 text-sm font-medium',
-                blockingCount > 0
-                  ? 'bg-danger-soft text-danger'
-                  : 'text-ink-muted hover:bg-surface-sunken',
-              )}
-            >
-              <TriangleAlert className="size-4" aria-hidden />
-              {t('conflicts.title')}
-              {conflicts.length > 0 ? <Badge tone="neutral">{conflicts.length}</Badge> : null}
-            </Link>
-
-            {can(Permissions.schedulesPublish) ? (
-              <Button
-                variant="secondary"
-                size="sm"
-                icon={<Send className="size-4" />}
-                disabled={!scheduleId || publish.isPending}
-                loading={publish.isPending}
-                onClick={() => {
-                  if (scheduleId && window.confirm(t('schedule.publishConfirm'))) {
-                    publish.mutate(scheduleId);
-                  }
-                }}
-              >
-                {t('schedule.publish')}
-              </Button>
-            ) : null}
-
-            <Button
-              variant="ghost"
-              size="sm"
-              icon={<Printer className="size-4" />}
-              onClick={() => window.print()}
-            >
-              {t('schedule.print')}
-            </Button>
+            <MenuButton label={t('app.more')} actions={menuActions} />
 
             {can(Permissions.assignmentsAssign) ? (
               <Button
@@ -153,6 +153,9 @@ export function ScheduleBoardPage() {
                 size="sm"
                 icon={<Sparkles className="size-4" />}
                 disabled={assignments.length === 0}
+                title={
+                  assignments.length === 0 ? t('schedule.autofillNeedsAssignments') : undefined
+                }
                 onClick={() => setAutofilling(true)}
               >
                 {t('schedule.autofill')}
@@ -172,15 +175,20 @@ export function ScheduleBoardPage() {
         }
       />
 
-      <div className="mb-4 flex flex-wrap items-center gap-2">
+      {assignments.length === 0 && !board.isLoading ? (
+        <StepsHint steps={[t('schedule.step1'), t('schedule.step2'), t('schedule.step3')]} />
+      ) : null}
+
+      <div className="mb-3 flex flex-wrap items-center gap-2">
         <div className="flex items-center gap-1 rounded-[var(--radius-control)] border border-border-subtle bg-surface-raised p-1">
           <IconButton
             label={t('schedule.previousDay')}
             icon={<ChevronRight className="size-4" />}
             onClick={() => shift(-1)}
           />
-          <span className="ltr-inline min-w-32 text-center text-sm font-medium">
-            {formatDayKey(day)}
+          <span className="min-w-40 text-center text-sm font-medium">
+            <span className="ltr-inline">{formatDayKey(day)}</span>
+            <span className="text-ink-muted"> · {weekdayName(day)}</span>
           </span>
           <IconButton
             label={t('schedule.nextDay')}
@@ -191,11 +199,10 @@ export function ScheduleBoardPage() {
         <Button variant="secondary" size="sm" onClick={() => setDay(todayKey())}>
           {t('app.today')}
         </Button>
-        <span className="text-sm text-ink-muted">{weekdayName(day)}</span>
 
         <div
           role="tablist"
-          aria-label={t('schedule.title')}
+          aria-label={t('schedule.view')}
           className="flex items-center gap-1 rounded-[var(--radius-control)] bg-surface-sunken p-1"
         >
           {(['day', 'week', 'personnel'] as const).map((option) => (
@@ -219,36 +226,58 @@ export function ScheduleBoardPage() {
           ))}
         </div>
 
-        <Select
-          className="w-auto"
-          aria-label={t('personnel.unit')}
-          value={unitId}
-          onChange={(event) => setUnitId(event.target.value)}
-        >
-          <option value="">{t('app.all')}</option>
-          {(units.data ?? []).map((unit) => (
-            <option key={unit.id} value={unit.id}>
-              {unit.name}
-            </option>
-          ))}
-        </Select>
-
-        {can(Permissions.schedulesPublish) ? (
+        <label className="ms-auto flex items-center gap-2 text-sm text-ink-muted">
+          {t('personnel.unit')}
           <Select
             className="w-auto"
-            aria-label={t('schedule.selectSchedule')}
-            value={scheduleId}
-            onChange={(event) => setScheduleId(event.target.value)}
+            value={unitId}
+            onChange={(event) => setUnitId(event.target.value)}
           >
-            <option value="">{t('schedule.selectSchedule')}</option>
-            {(schedules.data ?? []).map((schedule) => (
-              <option key={schedule.id} value={schedule.id}>
-                {schedule.name}
+            <option value="">{t('assignments.anyUnit')}</option>
+            {(units.data ?? []).map((unit) => (
+              <option key={unit.id} value={unit.id}>
+                {unit.name}
               </option>
             ))}
           </Select>
-        ) : null}
+        </label>
       </div>
+
+      {assignments.length > 0 ? (
+        <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+          <span className="font-medium">
+            {t('schedule.summaryTasks', { count: assignments.length })}
+          </span>
+          <span aria-hidden className="text-ink-faint">
+            ·
+          </span>
+          <span className={seatsMissing > 0 ? 'text-warning' : 'text-success'}>
+            {seatsMissing > 0
+              ? t('schedule.summaryMissing', { count: seatsMissing })
+              : t('schedule.summaryFull')}
+            <span className="ltr-inline ms-1 text-ink-muted">
+              ({seatsFilled}/{seatsNeeded})
+            </span>
+          </span>
+          <span aria-hidden className="text-ink-faint">
+            ·
+          </span>
+          {conflicts.length > 0 ? (
+            <Link
+              to="/schedule/conflicts"
+              className={cn(
+                'inline-flex items-center gap-1.5 rounded-[var(--radius-control)] px-2 py-0.5 font-medium',
+                blockingCount > 0 ? 'bg-danger-soft text-danger' : 'text-ink-muted hover:underline',
+              )}
+            >
+              <TriangleAlert className="size-4" aria-hidden />
+              {t('schedule.summaryConflicts', { count: conflicts.length })}
+            </Link>
+          ) : (
+            <span className="text-ink-muted">{t('schedule.summaryNoConflicts')}</span>
+          )}
+        </div>
+      ) : null}
 
       <p className="print-title">
         {t('app.name')} · {weekdayName(day)} {formatDayKey(day)}
@@ -294,6 +323,49 @@ export function ScheduleBoardPage() {
           ) : null}
         </QueryState>
       </div>
+
+      <Dialog
+        open={publishing}
+        title={t('schedule.publishTitle')}
+        description={t('schedule.publishExplain')}
+        onClose={() => setPublishing(false)}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setPublishing(false)}>
+              {t('app.cancel')}
+            </Button>
+            <Button
+              icon={<Send className="size-4" />}
+              disabled={!scheduleId}
+              loading={publish.isPending}
+              onClick={() => scheduleId && publish.mutate(scheduleId)}
+            >
+              {t('schedule.publish')}
+            </Button>
+          </>
+        }
+      >
+        {(schedules.data ?? []).length === 0 ? (
+          <p className="text-sm text-ink-muted">{t('schedule.publishNoSchedules')}</p>
+        ) : (
+          <Field label={t('schedule.publishChoose')}>
+            {({ id }) => (
+              <Select
+                id={id}
+                value={scheduleId}
+                onChange={(event) => setScheduleId(event.target.value)}
+              >
+                <option value="">{t('schedule.selectSchedule')}</option>
+                {(schedules.data ?? []).map((schedule) => (
+                  <option key={schedule.id} value={schedule.id}>
+                    {schedule.name}
+                  </option>
+                ))}
+              </Select>
+            )}
+          </Field>
+        )}
+      </Dialog>
 
       <AutofillDialog
         open={autofilling}

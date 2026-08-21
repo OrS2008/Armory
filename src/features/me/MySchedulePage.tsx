@@ -45,7 +45,7 @@ export function MySchedulePage() {
 
   return (
     <>
-      <PageHeader title={t('me.title')} />
+      <PageHeader title={t('me.title')} description={t('me.subtitle')} />
 
       <QueryState
         isLoading={schedule.isLoading}

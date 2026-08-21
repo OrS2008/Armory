@@ -10,6 +10,7 @@ import { buttonClass } from '@/components/ui/button-styles';
 import { EmptyState, QueryState } from '@/components/ui/States';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { useDashboard } from '@/hooks/queries';
+import { SetupChecklist } from './SetupChecklist';
 
 export function DashboardPage() {
   const dashboard = useDashboard();
@@ -20,9 +21,16 @@ export function DashboardPage() {
     <>
       <PageHeader
         title={t('dashboard.title')}
-        {...(data
-          ? { description: `יום ${weekdayName(data.date)} · ${formatDayKey(data.date)}` }
-          : {})}
+        description={
+          <>
+            {data ? (
+              <span className="ltr-inline block font-medium text-ink">
+                יום {weekdayName(data.date)} · {formatDayKey(data.date)}
+              </span>
+            ) : null}
+            {t('dashboard.subtitle')}
+          </>
+        }
         actions={
           <>
             <Link to="/personnel" className={buttonClass('secondary', 'sm')}>
@@ -44,6 +52,8 @@ export function DashboardPage() {
       >
         {data ? (
           <div className="flex flex-col gap-4">
+            <SetupChecklist />
+
             <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
               <MetricCard
                 label={t('dashboard.available')}
@@ -54,7 +64,7 @@ export function DashboardPage() {
               <MetricCard
                 label={t('dashboard.assigned')}
                 value={data.stats.assignedCount}
-                hint={t('dashboard.unavailable') + `: ${data.stats.unavailableCount}`}
+                hint={`${t('dashboard.unavailable')}: ${data.stats.unavailableCount}`}
               />
               <MetricCard
                 label={t('dashboard.issues')}

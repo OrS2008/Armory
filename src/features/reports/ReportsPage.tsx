@@ -58,6 +58,7 @@ export function ReportsPage() {
     <>
       <PageHeader
         title={t('reports.title')}
+        description={t('reports.subtitle')}
         actions={
           <>
             <Select

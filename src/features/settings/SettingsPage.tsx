@@ -28,7 +28,7 @@ export function SettingsPage() {
 
   return (
     <>
-      <PageHeader title={t('settings.title')} />
+      <PageHeader title={t('settings.title')} description={t('settings.subtitle')} />
 
       <div role="tablist" className="mb-4 flex flex-wrap gap-2">
         {tabs

@@ -26,7 +26,7 @@ export function ConflictsPage() {
 
   return (
     <>
-      <PageHeader title={t('conflicts.title')} />
+      <PageHeader title={t('conflicts.title')} description={t('conflicts.subtitle')} />
 
       <div role="tablist" className="mb-4 flex flex-wrap gap-2">
         {(['all', 'blocking', 'warning', 'info'] as const).map((option) => (

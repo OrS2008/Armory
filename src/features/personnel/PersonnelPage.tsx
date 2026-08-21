@@ -41,6 +41,7 @@ export function PersonnelPage() {
     ...(qualificationId ? { qualificationId } : {}),
   };
   const personnel = usePersonnel(filters);
+  const filtered = Boolean(search || unitId || qualificationId);
 
   const archive = useMutation({
     mutationFn: (id: string) => api.delete(`/personnel/${id}`),
@@ -59,6 +60,7 @@ export function PersonnelPage() {
     <>
       <PageHeader
         title={t('personnel.title')}
+        description={t('personnel.subtitle')}
         actions={
           can(Permissions.personnelWrite) ? (
             <>
@@ -129,7 +131,7 @@ export function PersonnelPage() {
           isLoading={personnel.isLoading}
           error={personnel.error}
           isEmpty={(personnel.data ?? []).length === 0}
-          emptyDescription={t('personnel.empty')}
+          emptyDescription={filtered ? t('personnel.empty') : t('personnel.emptyAll')}
           onRetry={() => void personnel.refetch()}
         >
           <TableWrapper>

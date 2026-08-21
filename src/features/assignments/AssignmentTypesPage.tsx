@@ -87,6 +87,7 @@ export function AssignmentTypesPage() {
     <>
       <PageHeader
         title={t('assignments.types')}
+        description={t('assignments.typesSubtitle')}
         actions={
           can(Permissions.assignmentTypesWrite) ? (
             <Button size="sm" icon={<Plus className="size-4" />} onClick={() => openDialog(null)}>
@@ -101,6 +102,7 @@ export function AssignmentTypesPage() {
           isLoading={types.isLoading}
           error={types.error}
           isEmpty={(types.data ?? []).length === 0}
+          emptyDescription={t('assignments.typesEmpty')}
           onRetry={() => void types.refetch()}
         >
           <TableWrapper>
@@ -189,6 +191,7 @@ export function AssignmentTypesPage() {
           </Field>
           <Field
             label={t('assignments.duration')}
+            hint={t('assignments.durationHint')}
             error={form.formState.errors.defaultDurationMinutes?.message}
             required
           >
@@ -203,6 +206,7 @@ export function AssignmentTypesPage() {
           </Field>
           <Field
             label={t('assignments.headcount')}
+            hint={t('assignments.headcountHint')}
             error={form.formState.errors.requiredHeadcount?.message}
             required
           >

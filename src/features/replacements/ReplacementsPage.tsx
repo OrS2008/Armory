@@ -53,7 +53,7 @@ export function ReplacementsPage() {
 
   return (
     <>
-      <PageHeader title={t('replacements.title')} />
+      <PageHeader title={t('replacements.title')} description={t('replacements.subtitle')} />
 
       <div className="card p-0">
         <QueryState

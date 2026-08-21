@@ -21,7 +21,9 @@ export function DayTimeline({ dayKey, timezone, assignments, conflicts, onOpen }
     blockGeometry(window, assignment.startAt, assignment.endAt),
   );
 
-  if (visible.length === 0) return <EmptyState description={t('schedule.emptyDay')} />;
+  if (visible.length === 0) {
+    return <EmptyState title={t('schedule.emptyDay')} description={t('schedule.emptyDayHint')} />;
+  }
 
   return (
     <div className="app-scrollbar overflow-x-auto">
