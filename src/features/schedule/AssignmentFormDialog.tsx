@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { useMutation } from '@tanstack/react-query';
 import { validationMessages } from '@shared/messages.he';
 import { hebrewWeekdays } from '@shared/format';
+import { SHIFT_HOUR_OPTIONS } from '@shared/recurrence';
 import { dayKeySchema, timeSchema } from '@shared/schemas';
 import { t } from '@/i18n';
 import { ApiError, api } from '@/lib/api';
@@ -28,6 +29,8 @@ const formSchema = z.object({
   unitId: z.string().optional(),
   notes: z.string().max(1000).optional(),
   frequency: z.enum(['none', 'daily', 'weekdays']),
+  /** 0 = a single occurrence per day; otherwise a round-the-clock rotation. */
+  shiftHours: z.coerce.number().int().min(0).max(12),
   weekdays: z.array(z.coerce.number().int().min(0).max(6)).optional(),
   untilDate: z.string().optional(),
 });
@@ -58,6 +61,7 @@ export function AssignmentFormDialog({ open, dayKey, timezone, scheduleId, onClo
       endsNextDay: false,
       requiredHeadcount: 1,
       frequency: 'none',
+      shiftHours: 0,
       weekdays: [],
     },
   });
@@ -104,6 +108,7 @@ export function AssignmentFormDialog({ open, dayKey, timezone, scheduleId, onClo
                 frequency: parsed.frequency,
                 weekdays: parsed.weekdays ?? [],
                 untilDate: parsed.untilDate,
+                ...(parsed.shiftHours > 0 ? { shiftHours: parsed.shiftHours } : {}),
               },
       });
     },
@@ -119,6 +124,7 @@ export function AssignmentFormDialog({ open, dayKey, timezone, scheduleId, onClo
   });
 
   const frequency = useWatch({ control: form.control, name: 'frequency' });
+  const shiftHours = Number(useWatch({ control: form.control, name: 'shiftHours' }) ?? 0);
 
   return (
     <Dialog
@@ -256,6 +262,26 @@ export function AssignmentFormDialog({ open, dayKey, timezone, scheduleId, onClo
 
         {frequency !== 'none' ? (
           <>
+            <Field
+              label={t('assignments.shiftRotation')}
+              hint={
+                shiftHours > 0
+                  ? t('assignments.shiftRotationHint', { count: 24 / shiftHours })
+                  : t('assignments.shiftRotationOffHint')
+              }
+            >
+              {({ id, describedBy }) => (
+                <Select id={id} aria-describedby={describedBy} {...form.register('shiftHours')}>
+                  <option value={0}>{t('assignments.shiftRotationOff')}</option>
+                  {SHIFT_HOUR_OPTIONS.map((hours) => (
+                    <option key={hours} value={hours}>
+                      {t('assignments.shiftEvery', { hours })}
+                    </option>
+                  ))}
+                </Select>
+              )}
+            </Field>
+
             <Field label={t('assignments.recurrenceUntil')}>
               {({ id }) => <Input id={id} type="date" dir="ltr" {...form.register('untilDate')} />}
             </Field>

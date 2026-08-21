@@ -119,6 +119,8 @@ export const recurrenceSchema = z
     /** 0 = Sunday. Used by `weekdays` and `custom`. */
     weekdays: z.array(z.number().int().min(0).max(6)).max(7).optional(),
     untilDate: dayKeySchema.optional(),
+    /** Round-the-clock rotation: one occurrence per handover, not per day. */
+    shiftHours: z.number().int().min(1).max(12).optional(),
   })
   .optional();
 export type RecurrenceInput = z.infer<typeof recurrenceSchema>;
@@ -199,6 +201,25 @@ export const replacementDecisionSchema = z.object({
   status: z.enum(['proposed', 'approved', 'rejected', 'cancelled']),
   replacementPersonnelId: optionalId(),
 });
+
+export const importRowSchema = z.object({
+  line: z.number().int().min(0),
+  displayName: trimmed(80).min(2, v.nameTooShort),
+  externalId: trimmed(32).nullable(),
+  unit: trimmed(80).nullable(),
+  roleTitle: trimmed(60).nullable(),
+  phone: trimmed(20).nullable(),
+  qualifications: z.array(trimmed(80).min(1)).max(20),
+});
+
+export const personnelImportSchema = z.object({
+  rows: z.array(importRowSchema).min(1).max(2000),
+  /** Validate and report without writing anything. */
+  dryRun: z.boolean().default(true),
+  createMissingUnits: z.boolean().default(true),
+  createMissingQualifications: z.boolean().default(true),
+});
+export type PersonnelImportInput = z.infer<typeof personnelImportSchema>;
 
 export const userSchema = z.object({
   email: identifierSchema,

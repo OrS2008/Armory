@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Pencil, Plus, Search, UserMinus } from 'lucide-react';
+import { FileUp, Pencil, Plus, Search, UserMinus } from 'lucide-react';
 import { useMutation } from '@tanstack/react-query';
 import type { Personnel } from '@shared/types';
 import { Permissions } from '@shared/rbac';
@@ -14,6 +14,7 @@ import { useToast } from '@/components/ui/toast-context';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { usePersonnel, useQualifications, useUnits } from '@/hooks/queries';
 import { useAuth } from '@/hooks/auth-context';
+import { ImportDialog } from './ImportDialog';
 import { PersonnelFormDialog } from './PersonnelFormDialog';
 
 const statusLabels: Record<Personnel['status'], string> = {
@@ -30,6 +31,7 @@ export function PersonnelPage() {
   const [qualificationId, setQualificationId] = useState('');
   const [editing, setEditing] = useState<Personnel | null>(null);
   const [creating, setCreating] = useState(false);
+  const [importing, setImporting] = useState(false);
 
   const units = useUnits();
   const qualifications = useQualifications();
@@ -59,9 +61,23 @@ export function PersonnelPage() {
         title={t('personnel.title')}
         actions={
           can(Permissions.personnelWrite) ? (
-            <Button size="sm" icon={<Plus className="size-4" />} onClick={() => setCreating(true)}>
-              {t('personnel.add')}
-            </Button>
+            <>
+              <Button
+                variant="secondary"
+                size="sm"
+                icon={<FileUp className="size-4" />}
+                onClick={() => setImporting(true)}
+              >
+                {t('personnel.import')}
+              </Button>
+              <Button
+                size="sm"
+                icon={<Plus className="size-4" />}
+                onClick={() => setCreating(true)}
+              >
+                {t('personnel.add')}
+              </Button>
+            </>
           ) : null
         }
       />
@@ -195,6 +211,12 @@ export function PersonnelPage() {
           </TableWrapper>
         </QueryState>
       </div>
+
+      <ImportDialog
+        open={importing}
+        onClose={() => setImporting(false)}
+        onImported={() => void personnel.refetch()}
+      />
 
       <PersonnelFormDialog
         open={creating || editing !== null}

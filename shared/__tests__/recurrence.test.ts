@@ -65,3 +65,61 @@ describe('recurrence expansion', () => {
     }
   });
 });
+
+describe('round-the-clock shift rotation', () => {
+  it('covers each day with back-to-back shifts', () => {
+    const occurrences = expandRecurrence(
+      at('2026-08-21', '00:00'),
+      at('2026-08-21', '08:00'),
+      { frequency: 'daily', untilDate: '2026-08-21', shiftHours: 8 },
+      TZ,
+    );
+    expect(occurrences).toHaveLength(3);
+    expect(occurrences.map((o) => formatTime(o.startAt, TZ))).toEqual(['00:00', '08:00', '16:00']);
+    expect(occurrences.map((o) => formatTime(o.endAt, TZ))).toEqual(['08:00', '16:00', '00:00']);
+  });
+
+  it('leaves no gap and no overlap between consecutive shifts', () => {
+    const occurrences = expandRecurrence(
+      at('2026-08-21', '00:00'),
+      at('2026-08-21', '06:00'),
+      { frequency: 'daily', untilDate: '2026-08-22', shiftHours: 6 },
+      TZ,
+    );
+    expect(occurrences).toHaveLength(8);
+    for (let index = 1; index < occurrences.length; index += 1) {
+      expect(occurrences[index]!.startAt).toBe(occurrences[index - 1]!.endAt);
+    }
+  });
+
+  it('starts the rotation at the given hour, not at midnight', () => {
+    const occurrences = expandRecurrence(
+      at('2026-08-21', '07:00'),
+      at('2026-08-21', '19:00'),
+      { frequency: 'daily', untilDate: '2026-08-21', shiftHours: 12 },
+      TZ,
+    );
+    expect(occurrences.map((o) => formatTime(o.startAt, TZ))).toEqual(['07:00', '19:00']);
+  });
+
+  it('keeps handover times on the clock across a DST change', () => {
+    const occurrences = expandRecurrence(
+      at('2026-03-26', '00:00'),
+      at('2026-03-26', '08:00'),
+      { frequency: 'daily', untilDate: '2026-03-28', shiftHours: 8 },
+      TZ,
+    );
+    const starts = new Set(occurrences.map((o) => formatTime(o.startAt, TZ)));
+    expect([...starts].sort()).toEqual(['00:00', '08:00', '16:00']);
+  });
+
+  it('ignores a shift length that does not divide the day', () => {
+    const occurrences = expandRecurrence(
+      at('2026-08-21', '08:00'),
+      at('2026-08-21', '13:00'),
+      { frequency: 'daily', untilDate: '2026-08-21', shiftHours: 5 },
+      TZ,
+    );
+    expect(occurrences).toHaveLength(1);
+  });
+});

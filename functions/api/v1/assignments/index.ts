@@ -77,6 +77,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
           frequency: input.recurrence.frequency,
           weekdays: input.recurrence.weekdays,
           untilDate: input.recurrence.untilDate,
+          shiftHours: input.recurrence.shiftHours,
         }
       : undefined,
     timezone,
@@ -127,6 +128,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     count: ids.length,
     assignmentTypeId: input.assignmentTypeId,
     recurring: occurrences.length > 1,
+    shiftHours: input.recurrence?.shiftHours ?? null,
   });
 
   // Report — but do not silently undo — any conflict the new assignments create.
