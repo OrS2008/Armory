@@ -16,7 +16,6 @@ const launchOptions = executablePath ? { launchOptions: { executablePath } } : {
  */
 export default defineConfig({
   testDir: './tests/e2e',
-  globalSetup: './tests/e2e/global-setup.ts',
   timeout: 60_000,
   expect: { timeout: 10_000 },
   fullyParallel: false,
@@ -30,7 +29,9 @@ export default defineConfig({
     trace: 'retain-on-failure',
   },
   webServer: {
-    command: `npm run build && npx wrangler pages dev --port ${PORT} --ip 127.0.0.1`,
+    // start-server.mjs applies migrations, reloads demo data and injects the
+    // bootstrap credentials before wrangler binds the port.
+    command: 'npm run build && node tests/e2e/start-server.mjs',
     url: `${baseURL}/api/v1/health`,
     reuseExistingServer: !process.env.CI,
     timeout: 180_000,

@@ -32,6 +32,16 @@ export default tseslint.config(
     },
   },
   {
+    // Plain Node scripts sit outside the TypeScript projects, so they are
+    // linted without the type-aware rules.
+    files: ['**/*.mjs'],
+    ...tseslint.configs.disableTypeChecked,
+    languageOptions: {
+      parserOptions: { projectService: false, project: false },
+      globals: { process: 'readonly', console: 'readonly', URL: 'readonly' },
+    },
+  },
+  {
     files: ['src/**/*.{ts,tsx}'],
     plugins: { 'react-hooks': reactHooks, 'react-refresh': reactRefresh },
     rules: {

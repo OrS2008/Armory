@@ -33,9 +33,15 @@ npm run test:e2e    # playwright — full stack
 
 ### End-to-end — `tests/e2e`
 
-Playwright starts a real server: `npm run build` plus `wrangler pages dev`,
-backed by local D1. `global-setup.ts` re-applies migrations, reloads demo data
-and clears users so the bootstrap path runs each time.
+Playwright starts a real server through `tests/e2e/start-server.mjs`: it applies
+migrations, reloads demo data, clears users so the first-run bootstrap path is
+exercised every time, and only then launches `wrangler pages dev` with the
+bootstrap credentials injected as explicit bindings.
+
+That ordering matters. Playwright starts `webServer` **before** `globalSetup`, so
+preparing the environment from a global setup is too late — wrangler has already
+read its configuration. Doing the work inside the server command is what makes
+the suite reproducible on a clean machine.
 
 | Spec | Scenario |
 | --- | --- |
@@ -46,7 +52,7 @@ and clears users so the bootstrap path runs each time.
 Both projects (`desktop` 1440×900 and `mobile` Pixel 7) run the whole suite. In
 a sandbox with a preinstalled browser, set `PLAYWRIGHT_CHROMIUM_PATH`.
 
-## Two bugs the suite has already caught
+## Four bugs the suite has already caught
 
 Worth recording, because they are the reason the tests exist:
 
@@ -57,7 +63,12 @@ Worth recording, because they are the reason the tests exist:
    a person without a unit failed with a validation error. Fixed in
    `shared/schemas.ts` and covered by a regression test.
 
-A third came from the schema itself: the append-only trigger refused to delete a
+A third came from CI rather than a local run: the suite passed locally but every
+login test failed on a clean runner, because the bootstrap credentials were
+written to `.dev.vars` by a global setup that ran after the server had started.
+The server startup was made self-contained in response.
+
+A fourth came from the schema itself: the append-only trigger refused to delete a
 user, because the audit table's foreign key would have cascaded an UPDATE. The
 fix was to drop that foreign key so audit rows outlive accounts.
 
