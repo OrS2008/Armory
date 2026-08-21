@@ -98,18 +98,19 @@ const shift = (over: Partial<Assignment>): Assignment => ({
 });
 
 describe('grouping into posts', () => {
-  it('collects a post’s shifts in time order, longest post first', () => {
+  it('collects a post’s shifts in time order, tallest post first', () => {
     const posts = groupByPost([
       shift({ id: 'b', assignmentTypeId: 'shag', assignmentTypeName: 'ש״ג', startAt: 3600_000 }),
       shift({ id: 'a', assignmentTypeId: 'shag', assignmentTypeName: 'ש״ג', startAt: 0 }),
       shift({
         id: 'c',
-        assignmentTypeId: 'duty',
-        assignmentTypeName: 'קצין מוצב',
-        endAt: 24 * 3600_000,
+        assignmentTypeId: 'siur',
+        assignmentTypeName: 'סיור',
+        requiredHeadcount: 4,
       }),
     ]);
-    expect(posts.map((post) => post.name)).toEqual(['קצין מוצב', 'ש״ג']);
+    // סיור prints a header plus four seats; ש״ג prints two single lines.
+    expect(posts.map((post) => post.name)).toEqual(['סיור', 'ש״ג']);
     expect(posts[1]?.shifts.map((item) => item.id)).toEqual(['a', 'b']);
   });
 

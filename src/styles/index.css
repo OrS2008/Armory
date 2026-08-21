@@ -259,30 +259,32 @@
 }
 
 /*
- * Posts flow into columns the way the printed page does, and a post is one
- * unbroken block: `break-inside` keeps a crew off a column or page boundary.
+ * Posts sit side by side in a grid — deliberately not CSS multi-column.
+ * Multicol with tables and merged cells overlaps and interleaves them when it
+ * runs out of height, which on a portrait page turned the printed sheet into
+ * collided text. A grid item is never split, so each post stays whole.
  */
 .roster-columns {
-  columns: 1;
-  column-gap: 0.75rem;
+  display: grid;
+  grid-template-columns: 1fr;
+  align-items: start;
+  gap: 0.75rem;
 }
 
 @media (min-width: 48rem) {
   .roster-columns {
-    columns: 2;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
 @media (min-width: 80rem) {
   .roster-columns {
-    columns: 3;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
 .roster-card {
   break-inside: avoid;
-  -webkit-column-break-inside: avoid;
-  margin-bottom: 0.75rem;
 }
 
 /*
@@ -348,13 +350,15 @@
     print-color-adjust: exact;
   }
 
+  /*
+   * Column count follows the paper rather than being assumed: a landscape A4
+   * fits three, a portrait one fits two, and a phone that ignores @page still
+   * gets a sheet that is readable instead of crushed.
+   */
   .roster-columns {
-    columns: 3;
-    column-gap: 4mm;
-  }
-
-  .roster-card {
-    margin-bottom: 4mm;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(78mm, 1fr));
+    gap: 3mm;
   }
 
   .sheet {
@@ -375,15 +379,34 @@
     print-color-adjust: exact;
   }
 
+  /*
+   * Each post keeps its own colour on paper. Flattening them all to one blue
+   * threw away the fastest way to find a post on a dense page.
+   */
   .sheet-title {
-    background: #dbe5f1 !important;
     color: #000 !important;
     font-size: 9pt;
   }
 
+  .sheet-title-brand {
+    background: #dbe5f1 !important;
+  }
+  .sheet-title-amber {
+    background: #fde9d9 !important;
+  }
+  .sheet-title-info {
+    background: #daeef3 !important;
+  }
+  .sheet-title-success {
+    background: #e5efdc !important;
+  }
+  .sheet-title-slate {
+    background: #ededed !important;
+  }
+
   .sheet-subtitle,
   .sheet-shift th {
-    background: #eef1f5 !important;
+    background: #f2f4f7 !important;
     color: #000 !important;
   }
 

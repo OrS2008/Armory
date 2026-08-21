@@ -161,11 +161,20 @@ export function groupByPost(assignments: Assignment[]): PostGroup[] {
     group.shifts.sort((left, right) => left.startAt - right.startAt);
   }
 
-  // Longest posts first, so a 24-hour duty heads its column and the short
-  // rotations stack underneath — the reading order of the printed sheet.
-  return [...groups.values()].sort((left, right) => {
-    const span = (group: PostGroup) =>
-      Math.max(...group.shifts.map((shift) => shift.endAt - shift.startAt));
-    return span(right) - span(left) || left.name.localeCompare(right.name, 'he');
-  });
+  // Tallest cards first. The sheet lays posts out in a grid, which aligns the
+  // top of every card in a row, so a short post placed early leaves a hole
+  // beneath it for the whole row. Leading with the tall ones packs the page.
+  return [...groups.values()].sort(
+    (left, right) =>
+      printedRows(right) - printedRows(left) || left.name.localeCompare(right.name, 'he'),
+  );
+}
+
+/** Roughly how many rows a post takes on the sheet, for packing the columns. */
+function printedRows(post: PostGroup): number {
+  return post.shifts.reduce((total, shift) => {
+    const seats = Math.max(shift.requiredHeadcount, shift.assignees.length);
+    // A one-seat post prints as a single time/name line, with no header row.
+    return total + (seats <= 1 ? 1 : 1 + seats);
+  }, 0);
 }
