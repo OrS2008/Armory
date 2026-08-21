@@ -55,10 +55,12 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 
   // First-run bootstrap: the very first administrator is created from the
   // deployment secrets, and only while the user table is still empty.
+  let bootstrapped = false;
   if (!row) {
     const created = await bootstrapAdmin(env, email, input.password);
     if (created === 'not_configured') return fail(503, ErrorCodes.NOT_CONFIGURED);
     row = created;
+    bootstrapped = created !== null;
   }
 
   if (!row) {
@@ -67,12 +69,17 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     return fail(401, ErrorCodes.INVALID_CREDENTIALS);
   }
 
-  const valid = await verifyPassword(
-    input.password,
-    row.password_salt,
-    row.password_iterations,
-    row.password_hash,
-  );
+  // The bootstrap path compared the supplied password against the deployment
+  // secret before inserting the row, so deriving the hash a second time here
+  // would only double the cost of the one request that can least afford it.
+  const valid =
+    bootstrapped ||
+    (await verifyPassword(
+      input.password,
+      row.password_salt,
+      row.password_iterations,
+      row.password_hash,
+    ));
   if (!valid) {
     await recordLoginAttempt(env, email, false);
     await writeAudit(env, null, AuditActions.LOGIN_FAILED, 'user', row.id, {

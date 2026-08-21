@@ -51,6 +51,15 @@ notes. There is no medical detail, no address, no national id.
   `BOOTSTRAP_ADMIN_EMAIL` / `BOOTSTRAP_ADMIN_PASSWORD`, and **only while the
   user table is empty**. Rotate the secret after first login.
 
+  Because the bootstrap path compares the supplied password against the secret
+  before inserting the row, it does not derive the hash a second time to
+  "verify" what it just wrote. Doing so doubled the cost of that one request and
+  left a window in which the row existed but the login had failed — and since
+  any row disables bootstrap permanently, that state locked everyone out.
+
+  Recovery, if it ever happens again: `DELETE FROM users;` in the D1 console
+  clears the half-created administrator so the bootstrap can run once more.
+
 ## Authorisation
 
 Every handler names the permission it needs; see `docs/02-permissions-matrix.md`.
