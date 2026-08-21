@@ -12,7 +12,8 @@ INSERT OR REPLACE INTO assignment_types
   ('atp_shag','org_default','ש״ג','תורנויות קבועות',480,1,1,'brand',NULL,1,0,0),
   ('atp_siur','org_default','סיור','תורנויות קבועות',480,4,1,'amber',NULL,1,0,0),
   ('atp_carmel','org_default','כרמל','תורנויות קבועות',480,4,1,'info',NULL,1,0,0),
-  ('atp_bathefer','org_default','בת חפר','תורנויות קבועות',480,2,2,'slate',NULL,1,0,0);
+  ('atp_nahalshechem','org_default','נחל שכם','תורנויות קבועות',480,2,2,'slate',NULL,1,0,0),
+  ('atp_yezuma','org_default','יזומה','פעילות יזומה',240,2,3,'success','משימה חד־פעמית שנקבעת מעבר לתורנויות הקבועות.',1,0,0);
 
 -- סיור and כרמל each need one driver and one commander *among* their four —
 -- min_count 1, not 0, which would demand that all four hold both.

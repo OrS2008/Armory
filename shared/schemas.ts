@@ -173,6 +173,13 @@ export const assignPersonnelSchema = z.object({
   overrideReason: optionalText(300),
 });
 
+export const bulkAssignSchema = z.object({
+  assignments: z
+    .array(z.object({ assignmentId: idSchema, personnelId: idSchema }))
+    .min(1)
+    .max(1000),
+});
+
 export const scheduleSchema = z
   .object({
     name: trimmed(80).min(2, v.nameTooShort),

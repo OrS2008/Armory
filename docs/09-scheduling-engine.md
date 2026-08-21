@@ -131,8 +131,36 @@ Every candidate carries `reasons`, `warnings` and `blockers` as Hebrew strings,
 and the UI shows them next to the number. The scheduler always chooses; the
 engine never assigns anyone.
 
+## Assisted auto-fill
+
+`shared/autofill.ts` builds a **proposal**, never a schedule. It walks the
+understaffed assignments in chronological order — filling the hardest crew
+first within any given hour, so a post needing a commander does not lose the
+last one to a post that needs nobody — and picks the top-ranked eligible
+candidate for each seat, making each choice visible to the next so nobody is
+booked twice.
+
+Every pick comes from `rankCandidates`, so an auto-filled seat is explainable in
+exactly the same terms as a hand-picked one, and the same blocking rules apply.
+Where no eligible person exists the seat is reported as a gap rather than filled
+with someone who breaks a rule.
+
+It runs **in the browser**, over data already on screen. A week of ranking is
+far more CPU than a single request may spend on Cloudflare, and the work does
+not need to be trusted: `POST /assignments/bulk-assign` re-runs the engine over
+the whole window with every proposed placement applied, drops any pairing that
+would create a blocking conflict, and writes the rest in one batch. The client
+is a convenience; the server remains the authority.
+
+The commander reviews the proposal and can strike any line before approving —
+automation assists the scheduler, it does not decide who stands at a gate.
+
+Measured on a real company: 40 people, four standing posts on 8-hour rotation,
+33 seats in a day. Filled in 492 ms with no gaps, using 33 distinct people at
+one shift each.
+
 ## Not implemented
 
-Phase 2 assisted auto-fill and phase 3 CP-SAT optimisation are not built. The
-plan makes them conditional on the unit's scheduling policy being agreed first
-(plan section 48), and the rule table is where that policy will live.
+Phase 3 CP-SAT optimisation is not built. The plan makes it conditional on the
+unit's scheduling policy being agreed first (plan section 48), and the rule
+table is where that policy lives.

@@ -1,6 +1,14 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { CalendarPlus, ChevronLeft, ChevronRight, Send, TriangleAlert } from 'lucide-react';
+import {
+  CalendarPlus,
+  ChevronLeft,
+  ChevronRight,
+  Printer,
+  Send,
+  Sparkles,
+  TriangleAlert,
+} from 'lucide-react';
 import { useMutation } from '@tanstack/react-query';
 import { formatDayKey, weekdayName } from '@shared/format';
 import { Permissions } from '@shared/rbac';
@@ -21,7 +29,10 @@ import { WeekGrid } from '@/components/scheduling/WeekGrid';
 import { useToast } from '@/components/ui/toast-context';
 import {
   useAssignments,
+  useAvailability,
   usePersonnel,
+  useQualifications,
+  useRules,
   useScheduleInvalidation,
   useSchedules,
   useUnits,
@@ -29,6 +40,7 @@ import {
 import { useAuth } from '@/hooks/auth-context';
 import { AssignmentDetailDialog } from './AssignmentDetailDialog';
 import { AssignmentFormDialog } from './AssignmentFormDialog';
+import { AutofillDialog } from './AutofillDialog';
 
 type View = 'day' | 'week' | 'personnel';
 
@@ -43,10 +55,13 @@ export function ScheduleBoardPage() {
   const [scheduleId, setScheduleId] = useState('');
   const [creating, setCreating] = useState(false);
   const [openAssignmentId, setOpenAssignmentId] = useState<string | null>(null);
+  const [autofilling, setAutofilling] = useState(false);
 
   const units = useUnits();
   const schedules = useSchedules();
   const personnel = usePersonnel(unitId ? { unitId } : {});
+  const qualifications = useQualifications();
+  const rules = useRules();
 
   const days = useMemo(() => weekDays(day), [day]);
   const boardWindow = useMemo(() => {
@@ -60,6 +75,11 @@ export function ScheduleBoardPage() {
   }, [view, days, day, unitId]);
 
   const board = useAssignments(boardWindow);
+  const availability = useAvailability({
+    from: boardWindow.from,
+    to: boardWindow.to,
+    status: 'approved',
+  });
   const timezone = board.data?.timezone ?? 'Asia/Jerusalem';
   const assignments = board.data?.assignments ?? [];
   const conflicts = board.data?.conflicts ?? [];
@@ -115,6 +135,27 @@ export function ScheduleBoardPage() {
                 }}
               >
                 {t('schedule.publish')}
+              </Button>
+            ) : null}
+
+            <Button
+              variant="ghost"
+              size="sm"
+              icon={<Printer className="size-4" />}
+              onClick={() => window.print()}
+            >
+              {t('schedule.print')}
+            </Button>
+
+            {can(Permissions.assignmentsAssign) ? (
+              <Button
+                variant="secondary"
+                size="sm"
+                icon={<Sparkles className="size-4" />}
+                disabled={assignments.length === 0}
+                onClick={() => setAutofilling(true)}
+              >
+                {t('schedule.autofill')}
               </Button>
             ) : null}
 
@@ -209,6 +250,10 @@ export function ScheduleBoardPage() {
         ) : null}
       </div>
 
+      <p className="print-title">
+        {t('app.name')} · {weekdayName(day)} {formatDayKey(day)}
+      </p>
+
       <div className="card p-3 sm:p-4">
         <QueryState
           isLoading={board.isLoading}
@@ -249,6 +294,17 @@ export function ScheduleBoardPage() {
           ) : null}
         </QueryState>
       </div>
+
+      <AutofillDialog
+        open={autofilling}
+        onClose={() => setAutofilling(false)}
+        assignments={assignments}
+        personnel={personnel.data ?? []}
+        availability={availability.data ?? []}
+        qualifications={qualifications.data ?? []}
+        rules={rules.data ?? []}
+        timezone={timezone}
+      />
 
       <AssignmentFormDialog
         open={creating}
