@@ -27,6 +27,7 @@ import { QueryState } from '@/components/ui/States';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { StepsHint } from '@/components/layout/StepsHint';
 import { DayTimeline } from '@/components/scheduling/DayTimeline';
+import { RosterBoard } from '@/components/scheduling/RosterBoard';
 import { PersonnelTimeline } from '@/components/scheduling/PersonnelTimeline';
 import { WeekGrid } from '@/components/scheduling/WeekGrid';
 import { useToast } from '@/components/ui/toast-context';
@@ -45,14 +46,16 @@ import { AssignmentDetailDialog } from './AssignmentDetailDialog';
 import { AssignmentFormDialog } from './AssignmentFormDialog';
 import { AutofillDialog } from './AutofillDialog';
 
-type View = 'day' | 'week' | 'personnel';
+type View = 'roster' | 'day' | 'week' | 'personnel';
 
 export function ScheduleBoardPage() {
   const { can } = useAuth();
   const toast = useToast();
   const invalidate = useScheduleInvalidation();
 
-  const [view, setView] = useState<View>('day');
+  // The roster is the sheet people actually read, so it opens first; the
+  // timeline stays a click away for the 'what is happening at 14:00' question.
+  const [view, setView] = useState<View>('roster');
   const [day, setDay] = useState(() => todayKey());
   const [unitId, setUnitId] = useState('');
   const [scheduleId, setScheduleId] = useState('');
@@ -205,7 +208,7 @@ export function ScheduleBoardPage() {
           aria-label={t('schedule.view')}
           className="flex items-center gap-1 rounded-[var(--radius-control)] bg-surface-sunken p-1"
         >
-          {(['day', 'week', 'personnel'] as const).map((option) => (
+          {(['roster', 'day', 'week', 'personnel'] as const).map((option) => (
             <button
               key={option}
               type="button"
@@ -217,11 +220,13 @@ export function ScheduleBoardPage() {
                 view === option ? 'bg-surface-raised text-ink shadow-sm' : 'text-ink-muted',
               )}
             >
-              {option === 'day'
-                ? t('schedule.day')
-                : option === 'week'
-                  ? t('schedule.week')
-                  : t('schedule.byPersonnel')}
+              {option === 'roster'
+                ? t('schedule.roster')
+                : option === 'day'
+                  ? t('schedule.day')
+                  : option === 'week'
+                    ? t('schedule.week')
+                    : t('schedule.byPersonnel')}
             </button>
           ))}
         </div>
@@ -283,12 +288,33 @@ export function ScheduleBoardPage() {
         {t('app.name')} · {weekdayName(day)} {formatDayKey(day)}
       </p>
 
-      <div className="card p-3 sm:p-4">
+      <div className={cn('card p-3 sm:p-4', view === 'roster' ? '' : 'print-plain')}>
         <QueryState
           isLoading={board.isLoading}
           error={board.error}
           onRetry={() => void board.refetch()}
         >
+          {view === 'roster' ? (
+            <RosterBoard
+              assignments={assignments}
+              conflicts={conflicts}
+              qualifications={qualifications.data ?? []}
+              timezone={timezone}
+              onOpen={setOpenAssignmentId}
+            />
+          ) : null}
+          {/* Whatever is on screen, the PDF is the duty sheet. */}
+          {view === 'roster' ? null : (
+            <div className="print-only">
+              <RosterBoard
+                assignments={assignments}
+                conflicts={conflicts}
+                qualifications={qualifications.data ?? []}
+                timezone={timezone}
+                onOpen={setOpenAssignmentId}
+              />
+            </div>
+          )}
           {view === 'day' ? (
             <DayTimeline
               dayKey={day}

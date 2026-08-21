@@ -74,7 +74,14 @@ export function QualificationsPanel() {
               {(qualifications.data ?? []).map((qualification) => (
                 <tr key={qualification.id}>
                   <Td className="ltr-inline">{qualification.code}</Td>
-                  <Td>{qualification.name}</Td>
+                  <Td>
+                    {qualification.name}
+                    {qualification.exclusive ? (
+                      <Badge className="ms-2" tone="warning">
+                        {t('settings.exclusiveBadge')}
+                      </Badge>
+                    ) : null}
+                  </Td>
                   <Td>
                     <Badge tone={qualification.active ? 'success' : 'neutral'}>
                       {qualification.active
@@ -121,6 +128,13 @@ export function QualificationsPanel() {
           <Field label={t('audit.details')}>
             {({ id }) => <Textarea id={id} {...form.register('description')} />}
           </Field>
+          <label className="flex items-start gap-2 rounded-[var(--radius-control)] border border-border-subtle p-3 text-sm">
+            <input type="checkbox" className="mt-1" {...form.register('exclusive')} />
+            <span>
+              <span className="block font-medium">{t('settings.exclusive')}</span>
+              <span className="block text-xs text-ink-muted">{t('settings.exclusiveHint')}</span>
+            </span>
+          </label>
         </div>
       </Dialog>
     </>

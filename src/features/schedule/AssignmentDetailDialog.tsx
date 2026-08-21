@@ -5,6 +5,7 @@ import type { Assignment } from '@shared/types';
 import type { Conflict } from '@shared/conflicts';
 import type { Candidate } from '@shared/candidates';
 import { formatRange } from '@shared/format';
+import { buildCrew, openSeatRoles } from '@shared/crew';
 import { Permissions } from '@shared/rbac';
 import { t } from '@/i18n';
 import { ApiError, api } from '@/lib/api';
@@ -15,7 +16,13 @@ import { Input } from '@/components/ui/Input';
 import { LoadingState } from '@/components/ui/States';
 import { ConflictList } from '@/components/scheduling/ConflictList';
 import { useToast } from '@/components/ui/toast-context';
-import { queryKeys, useAssignPersonnel, useUnassignPersonnel } from '@/hooks/queries';
+import { Select } from '@/components/ui/Input';
+import {
+  queryKeys,
+  useAssignPersonnel,
+  useQualifications,
+  useUnassignPersonnel,
+} from '@/hooks/queries';
 import { useAuth } from '@/hooks/auth-context';
 
 interface Props {
@@ -32,6 +39,10 @@ export function AssignmentDetailDialog({ assignment, conflicts, timezone, onClos
   const unassign = useUnassignPersonnel();
   const [overrideFor, setOverrideFor] = useState<string | null>(null);
   const [overrideReason, setOverrideReason] = useState('');
+  // Which seat the next assignment fills. Empty string is the plain לוחם seat,
+  // which is also what the API reads as "no named role".
+  const [seat, setSeat] = useState('');
+  const qualifications = useQualifications();
 
   const candidates = useQuery({
     queryKey: queryKeys.candidates(assignment?.id ?? ''),
@@ -44,10 +55,27 @@ export function AssignmentDetailDialog({ assignment, conflicts, timezone, onClos
   if (!assignment) return null;
 
   const missing = assignment.requiredHeadcount - assignment.assignees.length;
+  const qualificationName = (id: string) =>
+    qualifications.data?.find((item) => item.id === id)?.name ?? id;
+  const seats = buildCrew(assignment, qualificationName);
+  const openSeats = openSeatRoles({
+    requiredHeadcount: assignment.requiredHeadcount,
+    requiredQualifications: assignment.requiredQualifications,
+    assigneeIds: assignment.assignees.map((assignee) => assignee.personnelId),
+    assigneeRoles: Object.fromEntries(
+      assignment.assignees.map((assignee) => [assignee.personnelId, assignee.role]),
+    ),
+  });
+  const namedOpenSeats = [...new Set(openSeats.filter((role): role is string => Boolean(role)))];
 
   const handleAssign = (personnelId: string, reason?: string) => {
     assign.mutate(
-      { assignmentId: assignment.id, personnelId, ...(reason ? { overrideReason: reason } : {}) },
+      {
+        assignmentId: assignment.id,
+        personnelId,
+        role: seat || null,
+        ...(reason ? { overrideReason: reason } : {}),
+      },
       {
         onSuccess: () => {
           toast.push('success', t('state.savedTitle'));
@@ -92,41 +120,60 @@ export function AssignmentDetailDialog({ assignment, conflicts, timezone, onClos
                   : t('schedule.draft')}
             </Badge>
           </h3>
-          {assignment.assignees.length === 0 ? (
+          {assignment.assignees.length === 0 && seats.length === 0 ? (
             <p className="text-sm text-ink-muted">{t('assignments.noAssignees')}</p>
           ) : (
             <ul className="flex flex-col gap-1.5">
-              {assignment.assignees.map((assignee) => (
-                <li
-                  key={assignee.personnelId}
-                  className="flex items-center gap-2 rounded-[var(--radius-control)] border border-border-subtle px-3 py-2"
-                >
-                  <span className="text-sm font-medium">{assignee.personnelName}</span>
-                  {assignee.overrideReason ? (
-                    <Badge tone="warning">{t('conflicts.override')}</Badge>
-                  ) : null}
-                  {assignee.acknowledgedAt ? (
-                    <Badge tone="success">{t('assignments.acknowledged')}</Badge>
-                  ) : null}
-                  {can(Permissions.assignmentsAssign) ? (
-                    <Button
-                      className="ms-auto"
-                      variant="ghost"
-                      size="sm"
-                      icon={<UserMinus className="size-4" />}
-                      loading={unassign.isPending}
-                      onClick={() =>
-                        unassign.mutate({
-                          assignmentId: assignment.id,
-                          personnelId: assignee.personnelId,
-                        })
-                      }
+              {seats.map((crewSeat, index) => {
+                const assignee = crewSeat.assignee;
+                if (!assignee) {
+                  return (
+                    <li
+                      key={`empty-${index}`}
+                      className="flex items-center gap-2 rounded-[var(--radius-control)] border border-dashed border-border-strong px-3 py-2"
                     >
-                      {t('schedule.unassign')}
-                    </Button>
-                  ) : null}
-                </li>
-              ))}
+                      <span className="w-20 text-xs font-semibold text-ink-muted">
+                        {crewSeat.label}
+                      </span>
+                      <span className="text-sm text-danger">{t('schedule.seatEmpty')}</span>
+                    </li>
+                  );
+                }
+                return (
+                  <li
+                    key={assignee.personnelId}
+                    className="flex items-center gap-2 rounded-[var(--radius-control)] border border-border-subtle px-3 py-2"
+                  >
+                    <span className="w-20 text-xs font-semibold text-ink-muted">
+                      {crewSeat.label}
+                    </span>
+                    <span className="text-sm font-medium">{assignee.personnelName}</span>
+                    {assignee.overrideReason ? (
+                      <Badge tone="warning">{t('conflicts.override')}</Badge>
+                    ) : null}
+                    {assignee.acknowledgedAt ? (
+                      <Badge tone="success">{t('assignments.acknowledged')}</Badge>
+                    ) : null}
+                    {can(Permissions.assignmentsAssign) ? (
+                      <Button
+                        className="ms-auto"
+                        variant="ghost"
+                        size="sm"
+                        icon={<UserMinus className="size-4" />}
+                        loading={unassign.isPending}
+                        onClick={() =>
+                          unassign.mutate({
+                            assignmentId: assignment.id,
+                            personnelId: assignee.personnelId,
+                          })
+                        }
+                      >
+                        {t('schedule.unassign')}
+                      </Button>
+                    ) : null}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </section>
@@ -142,6 +189,23 @@ export function AssignmentDetailDialog({ assignment, conflicts, timezone, onClos
           <section>
             <h3 className="text-sm font-semibold">{t('assignments.candidates')}</h3>
             <p className="mb-2 text-xs text-ink-muted">{t('assignments.candidatesHint')}</p>
+            {namedOpenSeats.length > 0 ? (
+              <label className="mb-3 flex flex-wrap items-center gap-2 text-sm">
+                {t('schedule.assignToSeat')}
+                <Select
+                  className="w-auto"
+                  value={seat}
+                  onChange={(event) => setSeat(event.target.value)}
+                >
+                  <option value="">{t('schedule.rolePlain')}</option>
+                  {namedOpenSeats.map((role) => (
+                    <option key={role} value={role}>
+                      {qualificationName(role)}
+                    </option>
+                  ))}
+                </Select>
+              </label>
+            ) : null}
             {candidates.isLoading ? <LoadingState /> : null}
             {!candidates.isLoading && (candidates.data ?? []).length === 0 ? (
               <p className="text-sm text-ink-muted">{t('assignments.noCandidates')}</p>

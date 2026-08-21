@@ -186,3 +186,78 @@
 .print-title {
   display: none;
 }
+
+/*
+ * The duty sheet flows into columns the way the printed page does: a post is
+ * one unbroken card, and the columns fill top to bottom. `break-inside` is what
+ * keeps a crew from being split across a column or a page boundary.
+ */
+.roster-columns {
+  columns: 1;
+  column-gap: 0.75rem;
+}
+
+@media (min-width: 48rem) {
+  .roster-columns {
+    columns: 2;
+  }
+}
+
+@media (min-width: 80rem) {
+  .roster-columns {
+    columns: 3;
+  }
+}
+
+.roster-card {
+  break-inside: avoid;
+  -webkit-column-break-inside: avoid;
+}
+
+@media print {
+  .roster-columns {
+    columns: 3;
+    column-gap: 6mm;
+  }
+
+  /* The board's own borders carry the structure; the card shadow does not. */
+  .roster-card {
+    border: 1px solid #666;
+    box-shadow: none;
+  }
+
+  .roster-card table {
+    border-collapse: collapse;
+  }
+
+  .roster-card td {
+    border-top: 1px solid #ccc;
+  }
+
+  /* Post headers keep a light fill so the columns stay readable in grey. */
+  .roster-card header {
+    background: #eee !important;
+    color: #000 !important;
+    border-bottom: 1px solid #666;
+  }
+}
+
+.print-only {
+  display: none;
+}
+
+@media print {
+  .print-only {
+    display: block;
+  }
+
+  /* On a timeline view the card is only a frame around the print-only sheet. */
+  .print-plain {
+    border: 0 !important;
+    padding: 0 !important;
+  }
+
+  .print-plain > *:not(.print-only) {
+    display: none !important;
+  }
+}

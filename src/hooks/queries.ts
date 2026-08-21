@@ -245,11 +245,18 @@ export function useScheduleInvalidation() {
 export function useAssignPersonnel() {
   const invalidate = useScheduleInvalidation();
   return useMutation({
-    mutationFn: (input: { assignmentId: string; personnelId: string; overrideReason?: string }) =>
+    mutationFn: (input: {
+      assignmentId: string;
+      personnelId: string;
+      /** Named seat to fill, or null for a plain לוחם seat. */
+      role?: string | null;
+      overrideReason?: string;
+    }) =>
       api.post<{ conflicts: Conflict[]; overridden: boolean }>(
         `/assignments/${input.assignmentId}/assign`,
         {
           personnelId: input.personnelId,
+          role: input.role ?? null,
           ...(input.overrideReason ? { overrideReason: input.overrideReason } : {}),
         },
       ),

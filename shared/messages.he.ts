@@ -28,6 +28,7 @@ export const errorMessages: Record<string, string> = {
   [ErrorCodes.CONFLICT]: 'הפעולה מתנגשת עם נתון קיים במערכת.',
   [ErrorCodes.SCHEDULING_CONFLICT]: 'קיימת התנגשות שיבוץ החוסמת את הפעולה.',
   [ErrorCodes.ALREADY_ASSIGNED]: 'האדם כבר משובץ למשימה זו.',
+  [ErrorCodes.ROLE_TAKEN]: 'התפקיד הזה כבר תפוס במשימה. שבצו כלוחם, או פנו קודם את התפקיד.',
   [ErrorCodes.SCHEDULE_NOT_PUBLISHABLE]: 'לא ניתן לפרסם את השבצ״ק כל עוד קיימות התנגשויות חוסמות.',
   [ErrorCodes.OVERRIDE_NOT_ALLOWED]: 'הכלל הזה אינו ניתן לעקיפה.',
   [ErrorCodes.NOT_CONFIGURED]: 'המערכת טרם הוגדרה. פנו למנהל המערכת.',
@@ -64,6 +65,12 @@ export const conflictMessages: Record<string, string> = {
   UNDERSTAFFED: 'המשימה {assignment} מאוישת ב־{actual} מתוך {required} אנשים.',
   OVERSTAFFED: 'המשימה {assignment} מאוישת ב־{actual} אנשים במקום {required}.',
   UNPUBLISHED_CHANGES: 'במשימה {assignment} קיימים שינויים שטרם פורסמו.',
+  EXCLUSIVE_QUALIFICATION:
+    '{person} מוגדר {qualification} ומשובץ אך ורק למשימות {qualification}. {assignment} אינה כזו.',
+  ROLE_QUALIFICATION: '{person} משובץ בתפקיד {qualification} אך אינו מחזיק בהכשיר הזה.',
+  ROLE_TAKEN: 'תפקיד {qualification} כבר תפוס במשימה {assignment} — {other} ממלא אותו.',
+  PRE_DEPARTURE_REST:
+    '{person} יוצא ב־{from}. המשימה מסתיימת {actual} שעות לפני היציאה בלבד, במקום {required}.',
 };
 
 /** How to resolve it, per conflict code. */
@@ -79,6 +86,10 @@ export const conflictResolutions: Record<string, string> = {
   UNDERSTAFFED: 'הוסיפו אנשים למשימה או הקטינו את דרישת האיוש.',
   OVERSTAFFED: 'הסירו שיבוץ עודף או עדכנו את דרישת האיוש.',
   UNPUBLISHED_CHANGES: 'פרסמו את השבצ״ק כדי שהשינויים יגיעו למשובצים.',
+  EXCLUSIVE_QUALIFICATION: 'שבצו אותו למשימת {qualification}, או הסירו ממנו את ההכשיר הייעודי.',
+  ROLE_QUALIFICATION: 'בחרו אדם המחזיק בהכשיר, או שבצו אותו כלוחם.',
+  ROLE_TAKEN: 'הסירו קודם את {other} מהתפקיד, או שבצו את האדם כלוחם.',
+  PRE_DEPARTURE_REST: 'הקדימו את המשימה, או שבצו אדם שאינו יוצא בסמוך לה.',
 };
 
 export function conflictMessage(code: string, params: Params): string {
@@ -97,6 +108,9 @@ export const availabilityKindLabels: Record<AvailabilityKind, string> = {
   home: 'בבית',
   other: 'היעדרות מאושרת',
 };
+
+/** The seat a person fills in a crew when no qualification names it. */
+export const DEFAULT_CREW_ROLE = 'לוחם';
 
 export const severityLabels: Record<Severity, string> = {
   info: 'מידע',

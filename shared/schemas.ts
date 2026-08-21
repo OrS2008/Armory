@@ -61,6 +61,11 @@ export const qualificationSchema = z.object({
   name: trimmed(80).min(2, v.nameTooShort),
   description: optionalText(400),
   active: z.boolean().optional(),
+  /**
+   * Restricts its holder instead of merely permitting them — whoever holds it
+   * is scheduled for the assignments that require it and for nothing else.
+   */
+  exclusive: z.boolean().optional(),
 });
 export type QualificationInput = z.infer<typeof qualificationSchema>;
 
@@ -170,12 +175,14 @@ export const assignmentPatchSchema = z
 
 export const assignPersonnelSchema = z.object({
   personnelId: idSchema,
+  /** The named seat they fill; omitted or empty means a plain לוחם seat. */
+  role: optionalId(),
   overrideReason: optionalText(300),
 });
 
 export const bulkAssignSchema = z.object({
   assignments: z
-    .array(z.object({ assignmentId: idSchema, personnelId: idSchema }))
+    .array(z.object({ assignmentId: idSchema, personnelId: idSchema, role: optionalId() }))
     .min(1)
     .max(1000),
 });

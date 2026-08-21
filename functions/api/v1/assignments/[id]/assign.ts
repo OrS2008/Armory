@@ -51,6 +51,18 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }
     .first<{ id: string }>();
   if (already) return fail(409, ErrorCodes.ALREADY_ASSIGNED);
 
+  // A named seat is taken once. The partial unique index guarantees it, but a
+  // constraint violation surfaces as a 500; checking first turns the same fact
+  // into an answer the board can show.
+  if (input.role) {
+    const seatTaken = await env.DB.prepare(
+      'SELECT id FROM assignment_personnel WHERE assignment_id = ? AND role_qualification_id = ?',
+    )
+      .bind(assignmentId, input.role)
+      .first<{ id: string }>();
+    if (seatTaken) return fail(409, ErrorCodes.ROLE_TAKEN);
+  }
+
   const evaluation = await evaluateWindow(env, {
     from: row.start_at - 8 * DAY,
     to: row.end_at + 8 * DAY,
@@ -68,7 +80,12 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }
   const engineAssignments = evaluation.assignments.map((assignment) => {
     const engine = toEngineAssignment(assignment);
     return assignment.id === assignmentId
-      ? { ...engine, assigneeIds: [...engine.assigneeIds, input.personnelId], overriddenBy: [] }
+      ? {
+          ...engine,
+          assigneeIds: [...engine.assigneeIds, input.personnelId],
+          assigneeRoles: { ...engine.assigneeRoles, [input.personnelId]: input.role ?? null },
+          overriddenBy: [],
+        }
       : engine;
   });
   const conflicts = detectConflicts({
@@ -81,6 +98,9 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }
     qualificationNames: Object.fromEntries(
       qualifications.map((qualification) => [qualification.id, qualification.name]),
     ),
+    exclusiveQualificationIds: qualifications
+      .filter((qualification) => qualification.exclusive)
+      .map((qualification) => qualification.id),
     timezone: evaluation.timezone,
   }).filter(
     (conflict) =>
@@ -105,8 +125,9 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }
     row.publication_state === 'published' ? 'modified' : row.publication_state;
   const statements = [
     env.DB.prepare(
-      `INSERT INTO assignment_personnel (id, assignment_id, personnel_id, assigned_by, assigned_at, override_reason)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO assignment_personnel
+         (id, assignment_id, personnel_id, assigned_by, assigned_at, override_reason, role_qualification_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
     ).bind(
       newId('apr'),
       assignmentId,
@@ -114,6 +135,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }
       user.id,
       timestamp,
       blocking.length > 0 ? (input.overrideReason ?? null) : null,
+      input.role ?? null,
     ),
     env.DB.prepare(
       'UPDATE assignment_instances SET publication_state = ?, updated_by = ?, updated_at = ? WHERE id = ?',

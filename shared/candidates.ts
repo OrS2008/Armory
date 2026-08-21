@@ -28,6 +28,8 @@ export interface CandidateInput {
   absences: EngineAbsence[];
   rules: SchedulingRule[];
   qualificationNames?: Record<string, string>;
+  /** Qualifications that restrict their holder rather than permitting them. */
+  exclusiveQualificationIds?: string[];
   weights?: FairnessWeights;
   timezone?: string;
   /** Workload look-back window; defaults to 14 days before the assignment. */
@@ -78,6 +80,9 @@ export function rankCandidates(input: CandidateInput): Candidate[] {
       absences: input.absences.filter((absence) => absence.personnelId === person.id),
       rules: input.rules,
       ...(input.qualificationNames ? { qualificationNames: input.qualificationNames } : {}),
+      ...(input.exclusiveQualificationIds
+        ? { exclusiveQualificationIds: input.exclusiveQualificationIds }
+        : {}),
       timezone,
     }).filter((conflict) => conflict.personnelId === person.id);
 

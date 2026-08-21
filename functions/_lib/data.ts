@@ -104,7 +104,8 @@ export async function loadUnits(env: Env): Promise<Unit[]> {
 
 export async function loadQualifications(env: Env): Promise<Qualification[]> {
   const rows = await env.DB.prepare(
-    'SELECT id, code, name, description, active FROM qualifications WHERE org_id = ? ORDER BY name',
+    `SELECT id, code, name, description, active, exclusive
+       FROM qualifications WHERE org_id = ? ORDER BY name`,
   )
     .bind(DEFAULT_ORG_ID)
     .all<{
@@ -113,6 +114,7 @@ export async function loadQualifications(env: Env): Promise<Qualification[]> {
       name: string;
       description: string | null;
       active: number;
+      exclusive: number;
     }>();
   return (rows.results ?? []).map((row) => ({
     id: row.id,
@@ -120,6 +122,7 @@ export async function loadQualifications(env: Env): Promise<Qualification[]> {
     name: row.name,
     description: row.description,
     active: row.active === 1,
+    exclusive: row.exclusive === 1,
   }));
 }
 
@@ -280,8 +283,8 @@ export async function loadAssignments(
 
   const rows = await env.DB.prepare(
     `SELECT a.id, a.schedule_id, a.assignment_type_id, t.name AS type_name, t.color, a.unit_id,
-            a.title, a.start_at, a.end_at, a.required_headcount, a.status, a.publication_state,
-            a.notes, a.updated_at
+            t.instructions, a.title, a.start_at, a.end_at, a.required_headcount, a.status,
+            a.publication_state, a.notes, a.updated_at
        FROM assignment_instances a
        JOIN assignment_types t ON t.id = a.assignment_type_id
       WHERE ${filters.join(' AND ')}
@@ -295,6 +298,7 @@ export async function loadAssignments(
       type_name: string;
       color: string;
       unit_id: string | null;
+      instructions: string | null;
       title: string | null;
       start_at: number;
       end_at: number;
@@ -311,7 +315,7 @@ export async function loadAssignments(
   const ids = assignments.map((row) => row.id);
   const assigneeRows = await env.DB.prepare(
     `SELECT ap.assignment_id, ap.personnel_id, p.display_name, p.unit_id, ap.assigned_at,
-            ap.acknowledged_at, ap.override_reason
+            ap.acknowledged_at, ap.override_reason, ap.role_qualification_id
        FROM assignment_personnel ap
        JOIN personnel p ON p.id = ap.personnel_id
       WHERE ap.assignment_id IN (${ids.map(() => '?').join(',')})
@@ -326,6 +330,7 @@ export async function loadAssignments(
       assigned_at: number;
       acknowledged_at: number | null;
       override_reason: string | null;
+      role_qualification_id: string | null;
     }>();
 
   const byAssignment = new Map<string, Assignment['assignees']>();
@@ -335,6 +340,7 @@ export async function loadAssignments(
       personnelId: row.personnel_id,
       personnelName: row.display_name,
       unitId: row.unit_id,
+      role: row.role_qualification_id,
       assignedAt: row.assigned_at,
       acknowledgedAt: row.acknowledged_at,
       overrideReason: row.override_reason,
@@ -359,6 +365,7 @@ export async function loadAssignments(
     notes: row.notes,
     assignees: byAssignment.get(row.id) ?? [],
     requiredQualifications: typeQualifications.get(row.assignment_type_id) ?? [],
+    instructions: row.instructions,
     updatedAt: row.updated_at,
   }));
 }
@@ -428,6 +435,9 @@ export function toEngineAssignment(assignment: Assignment): EngineAssignment {
     requiredHeadcount: assignment.requiredHeadcount,
     requiredQualifications: assignment.requiredQualifications,
     assigneeIds: assignment.assignees.map((assignee) => assignee.personnelId),
+    assigneeRoles: Object.fromEntries(
+      assignment.assignees.map((assignee) => [assignee.personnelId, assignee.role]),
+    ),
     publicationState: assignment.publicationState,
     cancelled: assignment.status === 'cancelled',
     overriddenBy: assignment.assignees
@@ -502,6 +512,9 @@ export async function evaluateWindow(
     qualificationNames: Object.fromEntries(
       qualifications.map((qualification) => [qualification.id, qualification.name]),
     ),
+    exclusiveQualificationIds: qualifications
+      .filter((qualification) => qualification.exclusive)
+      .map((qualification) => qualification.id),
     timezone,
   });
 

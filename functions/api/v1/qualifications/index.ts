@@ -30,8 +30,9 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const id = newId('qlf');
   const timestamp = now();
   await env.DB.prepare(
-    `INSERT INTO qualifications (id, org_id, code, name, description, active, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO qualifications
+       (id, org_id, code, name, description, active, exclusive, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
     .bind(
       id,
@@ -40,6 +41,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       input.name,
       input.description ?? null,
       boolToInt(input.active, 1),
+      boolToInt(input.exclusive, 0),
       timestamp,
       timestamp,
     )

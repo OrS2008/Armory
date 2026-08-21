@@ -11,6 +11,8 @@
  * away, nobody without the qualification the crew still needs.
  */
 import { rankCandidates } from './candidates';
+import { openSeatRoles } from './crew';
+import { DEFAULT_CREW_ROLE } from './messages.he';
 import type { EngineAbsence, EngineAssignment, EnginePerson, SchedulingRule } from './conflicts';
 import type { FairnessWeights } from './fairness';
 import { DEFAULT_TIMEZONE } from './time';
@@ -22,6 +24,7 @@ export interface AutofillInput {
   absences: EngineAbsence[];
   rules: SchedulingRule[];
   qualificationNames?: Record<string, string> | undefined;
+  exclusiveQualificationIds?: string[] | undefined;
   weights?: FairnessWeights | undefined;
   timezone?: string | undefined;
   /** Restrict filling to these assignments; defaults to every understaffed one. */
@@ -33,6 +36,9 @@ export interface ProposedAssignment {
   assignmentTitle: string;
   personnelId: string;
   displayName: string;
+  /** The seat this person was picked for, and its Hebrew label. */
+  role: string | null;
+  roleLabel: string;
   score: number;
   reasons: string[];
   warnings: string[];
@@ -62,7 +68,15 @@ export function buildAutofillProposal(input: AutofillInput): AutofillProposal {
   const working = input.assignments.map((assignment) => ({
     ...assignment,
     assigneeIds: [...assignment.assigneeIds],
+    assigneeRoles: { ...(assignment.assigneeRoles ?? {}) },
   }));
+
+  const roleLabel = (role: string | null) =>
+    role ? (input.qualificationNames?.[role] ?? role) : DEFAULT_CREW_ROLE;
+  const holds = (personnelId: string, qualificationId: string) =>
+    (roster.find((person) => person.id === personnelId)?.qualificationIds ?? []).includes(
+      qualificationId,
+    );
 
   const wanted = (assignment: EngineAssignment) =>
     Math.max(0, assignment.requiredHeadcount - assignment.assigneeIds.length);
@@ -84,10 +98,16 @@ export function buildAutofillProposal(input: AutofillInput): AutofillProposal {
   const gaps: AutofillGap[] = [];
 
   for (const target of targets) {
-    let remaining = wanted(target);
+    // Fill seat by seat rather than head by head: a crew that needs a driver
+    // and a commander is not satisfied by any four available people, and the
+    // named seats go first because they are the hardest to fill.
+    const seats = openSeatRoles(target).slice(0, wanted(target));
+    let remaining = seats.length;
 
-    while (remaining > 0) {
-      const pool = roster.filter((person) => !target.assigneeIds.includes(person.id));
+    for (const seat of seats) {
+      const pool = roster.filter(
+        (person) => !target.assigneeIds.includes(person.id) && (!seat || holds(person.id, seat)),
+      );
       if (pool.length === 0) break;
 
       const [best] = rankCandidates({
@@ -98,6 +118,9 @@ export function buildAutofillProposal(input: AutofillInput): AutofillProposal {
         absences: input.absences,
         rules: input.rules,
         ...(input.qualificationNames ? { qualificationNames: input.qualificationNames } : {}),
+        ...(input.exclusiveQualificationIds
+          ? { exclusiveQualificationIds: input.exclusiveQualificationIds }
+          : {}),
         ...(input.weights ? { weights: input.weights } : {}),
         timezone,
       });
@@ -105,11 +128,14 @@ export function buildAutofillProposal(input: AutofillInput): AutofillProposal {
       if (!best || !best.eligible) break;
 
       target.assigneeIds.push(best.personnelId);
+      target.assigneeRoles[best.personnelId] = seat;
       proposed.push({
         assignmentId: target.id,
         assignmentTitle: target.title,
         personnelId: best.personnelId,
         displayName: best.displayName,
+        role: seat,
+        roleLabel: roleLabel(seat),
         score: best.score,
         reasons: best.reasons,
         warnings: best.warnings,

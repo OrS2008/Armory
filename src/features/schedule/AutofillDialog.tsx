@@ -35,6 +35,9 @@ const toEngineAssignment = (assignment: Assignment): EngineAssignment => ({
   requiredHeadcount: assignment.requiredHeadcount,
   requiredQualifications: assignment.requiredQualifications,
   assigneeIds: assignment.assignees.map((assignee) => assignee.personnelId),
+  assigneeRoles: Object.fromEntries(
+    assignment.assignees.map((assignee) => [assignee.personnelId, assignee.role]),
+  ),
   publicationState: assignment.publicationState,
   cancelled: assignment.status === 'cancelled',
 });
@@ -85,6 +88,9 @@ export function AutofillDialog({
       qualificationNames: Object.fromEntries(
         qualifications.map((qualification) => [qualification.id, qualification.name]),
       ),
+      exclusiveQualificationIds: qualifications
+        .filter((qualification) => qualification.exclusive)
+        .map((qualification) => qualification.id),
       timezone,
     });
   }, [open, assignments, personnel, availability, qualifications, rules, timezone]);
@@ -98,6 +104,7 @@ export function AutofillDialog({
         assignments: accepted.map((item) => ({
           assignmentId: item.assignmentId,
           personnelId: item.personnelId,
+          role: item.role,
         })),
       }),
     onSuccess: (result) => {
@@ -175,6 +182,9 @@ export function AutofillDialog({
                   <ul className="mt-2 flex flex-col gap-1.5">
                     {items.map((item) => (
                       <li key={key(item)} className="flex flex-wrap items-center gap-2 text-sm">
+                        <span className="w-16 text-xs font-semibold text-ink-muted">
+                          {item.roleLabel}
+                        </span>
                         <span className="font-medium">{item.displayName}</span>
                         <span className="text-xs text-ink-muted">{item.reasons.join(' · ')}</span>
                         {item.warnings.map((warning) => (

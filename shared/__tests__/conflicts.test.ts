@@ -326,3 +326,127 @@ describe('crew-level qualifications', () => {
     expect(missing[0]?.personnelId).toBe('x1');
   });
 });
+
+describe('crew roles', () => {
+  it('refuses a second person in a role that is already taken', () => {
+    const conflicts = run([
+      assignment({
+        requiredHeadcount: 2,
+        assigneeIds: ['p1', 'p2'],
+        assigneeRoles: { p1: 'q_driver', p2: 'q_driver' },
+      }),
+    ]);
+    const taken = conflicts.filter((conflict) => conflict.code === 'ROLE_TAKEN');
+    expect(taken).toHaveLength(1);
+    // Blamed on the second arrival, not on whoever already holds the seat.
+    expect(taken[0]?.personnelId).toBe('p2');
+    expect(taken[0]?.severity).toBe('blocking');
+  });
+
+  it('accepts several people in the plain seat', () => {
+    const conflicts = run([
+      assignment({
+        requiredHeadcount: 2,
+        assigneeIds: ['p1', 'p2'],
+        assigneeRoles: { p1: null, p2: null },
+      }),
+    ]);
+    expect(conflicts.filter((conflict) => conflict.code === 'ROLE_TAKEN')).toHaveLength(0);
+  });
+
+  it('refuses someone in a role whose qualification they lack', () => {
+    const conflicts = run([assignment({ assigneeIds: ['p2'], assigneeRoles: { p2: 'q_driver' } })]);
+    expect(conflicts.some((conflict) => conflict.code === 'ROLE_QUALIFICATION')).toBe(true);
+  });
+
+  it('says nothing when the person holds the role they fill', () => {
+    const conflicts = run([assignment({ assigneeIds: ['p1'], assigneeRoles: { p1: 'q_driver' } })]);
+    expect(conflicts.some((conflict) => conflict.code === 'ROLE_QUALIFICATION')).toBe(false);
+  });
+});
+
+describe('an exclusive qualification', () => {
+  const hamal: EnginePerson = { id: 'p3', displayName: 'תהילה', qualificationIds: ['q_hamal'] };
+
+  const runWithHamal = (assignments: EngineAssignment[]) =>
+    detectConflicts({
+      assignments,
+      personnel: [dan, noa, hamal],
+      absences: [],
+      rules: DEFAULT_RULES,
+      exclusiveQualificationIds: ['q_hamal'],
+      qualificationNames: { q_hamal: 'חמ״ל' },
+      timezone: TZ,
+    });
+
+  it('keeps its holder off an assignment that does not ask for it', () => {
+    const conflicts = runWithHamal([assignment({ assigneeIds: ['p3'] })]);
+    const blocked = conflicts.filter((conflict) => conflict.code === 'EXCLUSIVE_QUALIFICATION');
+    expect(blocked).toHaveLength(1);
+    expect(blocked[0]?.personnelId).toBe('p3');
+  });
+
+  it('allows the assignment that requires it', () => {
+    const conflicts = runWithHamal([
+      assignment({
+        assigneeIds: ['p3'],
+        requiredQualifications: [{ qualificationId: 'q_hamal', minCount: 0 }],
+      }),
+    ]);
+    expect(conflicts.some((conflict) => conflict.code === 'EXCLUSIVE_QUALIFICATION')).toBe(false);
+  });
+
+  it('leaves everyone else alone', () => {
+    const conflicts = runWithHamal([assignment({ assigneeIds: ['p1'] })]);
+    expect(conflicts.some((conflict) => conflict.code === 'EXCLUSIVE_QUALIFICATION')).toBe(false);
+  });
+});
+
+describe('the hours before a soldier leaves', () => {
+  // Departure at 18:00 with an eight-hour buffer: nothing may run past 10:00.
+  const departure = {
+    personnelId: 'p1',
+    kind: 'home' as const,
+    startAt: at('2026-08-21', '18:00'),
+    endAt: at('2026-08-23', '18:00'),
+  };
+
+  const runWithDeparture = (assignments: EngineAssignment[]) =>
+    detectConflicts({
+      assignments,
+      personnel: [dan, noa],
+      absences: [departure],
+      rules: DEFAULT_RULES,
+      timezone: TZ,
+    });
+
+  it('blocks a shift that runs into the buffer', () => {
+    const conflicts = runWithDeparture([
+      assignment({
+        startAt: at('2026-08-21', '08:00'),
+        endAt: at('2026-08-21', '14:00'),
+      }),
+    ]);
+    expect(conflicts.some((conflict) => conflict.code === 'PRE_DEPARTURE_REST')).toBe(true);
+  });
+
+  it('allows a shift that ends before the buffer opens', () => {
+    const conflicts = runWithDeparture([
+      assignment({
+        startAt: at('2026-08-21', '04:00'),
+        endAt: at('2026-08-21', '10:00'),
+      }),
+    ]);
+    expect(conflicts.some((conflict) => conflict.code === 'PRE_DEPARTURE_REST')).toBe(false);
+  });
+
+  it('leaves a shift after the return alone', () => {
+    const conflicts = runWithDeparture([
+      assignment({
+        startAt: at('2026-08-24', '08:00'),
+        endAt: at('2026-08-24', '12:00'),
+      }),
+    ]);
+    expect(conflicts.some((conflict) => conflict.code === 'PRE_DEPARTURE_REST')).toBe(false);
+  });
+});

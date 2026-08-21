@@ -30,6 +30,9 @@ export function AssignmentTypesPage() {
   const [requirements, setRequirements] = useState<{ qualificationId: string; minCount: number }[]>(
     [],
   );
+  // Shifts are spoken about in hours — "רביעייה", "משמרת שמונה". Minutes stay
+  // the stored unit because they divide cleanly; nobody has to read them.
+  const [hours, setHours] = useState(8);
 
   const form = useForm<AssignmentTypeInput>({
     resolver: zodResolver(assignmentTypeSchema),
@@ -43,7 +46,11 @@ export function AssignmentTypesPage() {
 
   const save = useMutation({
     mutationFn: (values: AssignmentTypeInput) => {
-      const payload = { ...values, requiredQualifications: requirements };
+      const payload = {
+        ...values,
+        defaultDurationMinutes: Math.round(hours * 60),
+        requiredQualifications: requirements,
+      };
       return editing
         ? api.patch(`/assignment-types/${editing.id}`, payload)
         : api.post('/assignment-types', payload);
@@ -61,6 +68,7 @@ export function AssignmentTypesPage() {
   const openDialog = (type: AssignmentType | null) => {
     setEditing(type);
     setRequirements(type ? type.requiredQualifications : []);
+    setHours(type ? type.defaultDurationMinutes / 60 : 8);
     form.reset(
       type
         ? {
@@ -126,7 +134,7 @@ export function AssignmentTypesPage() {
                     ) : null}
                   </Td>
                   <Td>{type.category ?? '—'}</Td>
-                  <Td className="ltr-inline">{type.defaultDurationMinutes}</Td>
+                  <Td className="ltr-inline">{type.defaultDurationMinutes / 60}</Td>
                   <Td className="ltr-inline">{type.requiredHeadcount}</Td>
                   <Td>
                     <div className="flex flex-wrap gap-1">
@@ -200,7 +208,10 @@ export function AssignmentTypesPage() {
                 id={id}
                 type="number"
                 dir="ltr"
-                {...form.register('defaultDurationMinutes', { valueAsNumber: true })}
+                min={0.25}
+                step={0.25}
+                value={hours}
+                onChange={(event) => setHours(Number(event.target.value))}
               />
             )}
           </Field>

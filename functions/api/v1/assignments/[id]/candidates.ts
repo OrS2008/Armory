@@ -51,6 +51,9 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env, params })
     qualificationNames: Object.fromEntries(
       qualifications.map((qualification) => [qualification.id, qualification.name]),
     ),
+    exclusiveQualificationIds: qualifications
+      .filter((qualification) => qualification.exclusive)
+      .map((qualification) => qualification.id),
     timezone: evaluation.timezone,
   });
 

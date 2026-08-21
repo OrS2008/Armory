@@ -31,6 +31,10 @@ export const RULE_CODES = [
   'UNDERSTAFFED',
   'OVERSTAFFED',
   'UNPUBLISHED_CHANGES',
+  'EXCLUSIVE_QUALIFICATION',
+  'ROLE_QUALIFICATION',
+  'ROLE_TAKEN',
+  'PRE_DEPARTURE_REST',
 ] as const;
 
 export type RuleCode = (typeof RULE_CODES)[number];
@@ -68,6 +72,13 @@ export interface EngineAssignment {
   requiredHeadcount: number;
   requiredQualifications: RequiredQualification[];
   assigneeIds: string[];
+  /**
+   * Which seat each assignee fills, keyed by personnel id: the qualification
+   * that names the role, or null for the plain seat the printed sheet calls
+   * לוחם. A named role is taken by at most one person — that is what makes
+   * "one driver and one commander" true rather than merely intended.
+   */
+  assigneeRoles?: Record<string, string | null>;
   publicationState: 'draft' | 'published' | 'modified';
   cancelled?: boolean;
   /** Assignees the scheduler explicitly overrode, keyed by personnel id. */
@@ -87,6 +98,11 @@ export interface EngineInput {
   absences: EngineAbsence[];
   rules: SchedulingRule[];
   qualificationNames?: Record<string, string>;
+  /**
+   * Qualifications that restrict their holder instead of merely permitting
+   * them: whoever is marked חמ״ל does חמ״ל and nothing else.
+   */
+  exclusiveQualificationIds?: string[];
   timezone?: string;
 }
 
@@ -174,6 +190,38 @@ export const DEFAULT_RULES: SchedulingRule[] = [
     severity: 'info',
     overridable: true,
     config: {},
+  },
+  {
+    code: 'EXCLUSIVE_QUALIFICATION',
+    name: 'הכשיר ייעודי — מחזיקו משובץ רק למשימות שלו',
+    enabled: true,
+    severity: 'blocking',
+    overridable: true,
+    config: {},
+  },
+  {
+    code: 'ROLE_QUALIFICATION',
+    name: 'ממלא תפקיד מחזיק בהכשיר של אותו תפקיד',
+    enabled: true,
+    severity: 'blocking',
+    overridable: true,
+    config: {},
+  },
+  {
+    code: 'ROLE_TAKEN',
+    name: 'תפקיד אחד לכל אדם במשימה',
+    enabled: true,
+    severity: 'blocking',
+    overridable: false,
+    config: {},
+  },
+  {
+    code: 'PRE_DEPARTURE_REST',
+    name: 'אין שיבוץ בשעות שלפני יציאה',
+    enabled: true,
+    severity: 'blocking',
+    overridable: true,
+    config: { hours: 8 },
   },
   {
     code: 'UNPUBLISHED_CHANGES',
@@ -295,6 +343,101 @@ export function detectConflicts(input: EngineInput): Conflict[] {
             message: conflictMessage('QUALIFICATION_MISSING_ROLE', params),
             resolution: conflictResolution('QUALIFICATION_MISSING_ROLE', params),
           });
+        }
+      }
+    }
+
+    // Roles inside the crew.
+    const roles = assignment.assigneeRoles ?? {};
+    const qualificationLabel = (id: string) => input.qualificationNames?.[id] ?? id;
+    const holdsQualification = (personnelId: string, qualificationId: string) =>
+      (people.get(personnelId)?.qualificationIds ?? []).includes(qualificationId);
+
+    const roleQualificationRule = rule('ROLE_QUALIFICATION');
+    if (roleQualificationRule) {
+      for (const personnelId of assignment.assigneeIds) {
+        if (isOverridden(assignment, personnelId)) continue;
+        const role = roles[personnelId];
+        if (role && !holdsQualification(personnelId, role)) {
+          add('ROLE_QUALIFICATION', roleQualificationRule, assignment, personnelId, {
+            person: personName(personnelId),
+            qualification: qualificationLabel(role),
+          });
+        }
+      }
+    }
+
+    // One driver, one commander. The database enforces this with a partial
+    // unique index; the engine reports it so the board can warn before the
+    // server refuses.
+    const roleTakenRule = rule('ROLE_TAKEN');
+    if (roleTakenRule) {
+      const firstHolder = new Map<string, string>();
+      for (const personnelId of assignment.assigneeIds) {
+        const role = roles[personnelId];
+        if (!role) continue;
+        const held = firstHolder.get(role);
+        if (held === undefined) {
+          firstHolder.set(role, personnelId);
+        } else {
+          add('ROLE_TAKEN', roleTakenRule, assignment, personnelId, {
+            assignment: assignment.title,
+            qualification: qualificationLabel(role),
+            other: personName(held),
+          });
+        }
+      }
+    }
+
+    // An exclusive qualification narrows its holder to the assignments that
+    // ask for it, which is the opposite direction from every other rule here.
+    const exclusiveRule = rule('EXCLUSIVE_QUALIFICATION');
+    const exclusiveIds = input.exclusiveQualificationIds ?? [];
+    if (exclusiveRule && exclusiveIds.length > 0) {
+      const required = new Set(
+        assignment.requiredQualifications.map((item) => item.qualificationId),
+      );
+      for (const personnelId of assignment.assigneeIds) {
+        if (isOverridden(assignment, personnelId)) continue;
+        const blockingQualification = (people.get(personnelId)?.qualificationIds ?? []).find(
+          (id) => exclusiveIds.includes(id) && !required.has(id),
+        );
+        if (blockingQualification) {
+          add('EXCLUSIVE_QUALIFICATION', exclusiveRule, assignment, personnelId, {
+            person: personName(personnelId),
+            qualification: qualificationLabel(blockingQualification),
+            assignment: assignment.title,
+          });
+        }
+      }
+    }
+
+    // Nobody goes on shift right before they leave. AVAILABILITY_REQUIRED
+    // already covers the absence itself; this covers the run-up to it.
+    const departureRule = rule('PRE_DEPARTURE_REST');
+    if (departureRule) {
+      const buffer = (departureRule.config.hours ?? 0) * HOUR;
+      if (buffer > 0) {
+        for (const personnelId of assignment.assigneeIds) {
+          if (isOverridden(assignment, personnelId)) continue;
+          const departure = input.absences.find(
+            (absence) =>
+              absence.personnelId === personnelId &&
+              absence.kind !== 'available' &&
+              // The window is the buffer that ends when they leave. An
+              // assignment that runs past the departure is the absence rule's
+              // problem, not this one's.
+              absence.startAt > assignment.startAt &&
+              assignment.endAt > absence.startAt - buffer,
+          );
+          if (departure) {
+            add('PRE_DEPARTURE_REST', departureRule, assignment, personnelId, {
+              person: personName(personnelId),
+              from: formatTime(departure.startAt, timezone),
+              actual: formatHours(Math.max(0, departure.startAt - assignment.endAt) / HOUR),
+              required: formatHours(departureRule.config.hours ?? 0),
+            });
+          }
         }
       }
     }

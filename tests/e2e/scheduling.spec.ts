@@ -58,7 +58,11 @@ test.describe('scheduling workflow', () => {
 
     await page.getByRole('button', { name: 'יצירת משימה' }).click();
 
-    await expect(page.getByRole('button', { name: /שמירה/ }).first()).toBeVisible();
+    // The board opens on the duty sheet, so the new shift appears as a post
+    // card with its crew listed seat by seat.
+    await expect(page.getByRole('heading', { name: 'שמירה' })).toBeVisible();
+    await expect(page.getByText('טרם שובץ').first()).toBeVisible();
+
     await page.goto('/schedule/conflicts');
     await expect(page.getByText(/מאוישת ב־0 מתוך/).first()).toBeVisible();
   });

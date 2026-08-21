@@ -54,6 +54,8 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
 
   // Build the world as it would be once the proposal is applied, then judge it.
   const additions = new Map<string, string[]>();
+  /** Proposed seat per `assignmentId:personnelId`, so the engine can judge it. */
+  const proposedRoles = new Map<string, string | null>();
   const rejected: { assignmentId: string; personnelId: string; reason: string }[] = [];
 
   for (const pair of input.assignments) {
@@ -77,13 +79,27 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       ...(additions.get(pair.assignmentId) ?? []),
       pair.personnelId,
     ]);
+    proposedRoles.set(`${pair.assignmentId}:${pair.personnelId}`, pair.role ?? null);
   }
 
   const engineAssignments = evaluation.assignments.map((assignment) => {
     const engine = toEngineAssignment(assignment);
     const extra = additions.get(assignment.id) ?? [];
     return extra.length > 0
-      ? { ...engine, assigneeIds: [...engine.assigneeIds, ...extra], overriddenBy: [] }
+      ? {
+          ...engine,
+          assigneeIds: [...engine.assigneeIds, ...extra],
+          assigneeRoles: {
+            ...engine.assigneeRoles,
+            ...Object.fromEntries(
+              extra.map((personnelId) => [
+                personnelId,
+                proposedRoles.get(`${assignment.id}:${personnelId}`) ?? null,
+              ]),
+            ),
+          },
+          overriddenBy: [],
+        }
       : engine;
   });
 
@@ -95,6 +111,9 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     qualificationNames: Object.fromEntries(
       qualifications.map((qualification) => [qualification.id, qualification.name]),
     ),
+    exclusiveQualificationIds: qualifications
+      .filter((qualification) => qualification.exclusive)
+      .map((qualification) => qualification.id),
     timezone: evaluation.timezone,
   });
 
@@ -128,9 +147,17 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     for (const personnelId of accepted) {
       statements.push(
         env.DB.prepare(
-          `INSERT OR IGNORE INTO assignment_personnel (id, assignment_id, personnel_id, assigned_by, assigned_at)
-           VALUES (?, ?, ?, ?, ?)`,
-        ).bind(newId('apr'), assignmentId, personnelId, user.id, timestamp),
+          `INSERT OR IGNORE INTO assignment_personnel
+             (id, assignment_id, personnel_id, assigned_by, assigned_at, role_qualification_id)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+        ).bind(
+          newId('apr'),
+          assignmentId,
+          personnelId,
+          user.id,
+          timestamp,
+          proposedRoles.get(`${assignmentId}:${personnelId}`) ?? null,
+        ),
       );
       applied += 1;
     }

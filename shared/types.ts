@@ -38,6 +38,11 @@ export interface Qualification {
   name: string;
   description: string | null;
   active: boolean;
+  /**
+   * Restricts its holder rather than merely permitting them: whoever is marked
+   * חמ״ל is scheduled for חמ״ל and nothing else.
+   */
+  exclusive: boolean;
 }
 
 export interface Personnel {
@@ -82,6 +87,8 @@ export interface AssignmentAssignee {
   personnelId: string;
   personnelName: string;
   unitId: string | null;
+  /** Qualification naming the seat they fill, or null for a plain לוחם seat. */
+  role: string | null;
   assignedAt: number;
   acknowledgedAt: number | null;
   overrideReason: string | null;
@@ -103,6 +110,8 @@ export interface Assignment {
   notes: string | null;
   assignees: AssignmentAssignee[];
   requiredQualifications: { qualificationId: string; minCount: number }[];
+  /** Standing orders from the assignment type — the sheet's הערות column. */
+  instructions: string | null;
   updatedAt: number;
 }
 
