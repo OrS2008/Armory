@@ -69,7 +69,9 @@ test.describe('scheduling workflow', () => {
 
   test('assigns a person from the ranked candidate list', async ({ page }) => {
     await page.goto('/schedule');
-    await page.getByRole('button', { name: /שמירה/ }).first().click();
+    // A shift is opened from the sheet by its hours; the card header carries
+    // the post name, so the row itself reads "בוקר 08:00 - …".
+    await page.getByRole('button', { name: /08:00/ }).first().click();
     await expect(page.getByText('מועמדים מוצעים')).toBeVisible();
     await page.getByRole('button', { name: 'שיבוץ', exact: true }).first().click();
     await expect(page.getByRole('button', { name: 'הסרת שיבוץ' }).first()).toBeVisible();
