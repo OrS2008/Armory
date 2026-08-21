@@ -52,11 +52,29 @@ jobs:
 
       - run: npm clean-install
 
-      # Read-only. Approved, non-archived soldiers, and only the columns
-      # scheduling needs; a current military licence becomes the driver flag.
-      - name: Read the equipment roster
+      # Read-only, and printed before the roster query so a failure below can be
+      # read against the schema that actually exists rather than guessed at.
+      - name: Describe the source database
         run: |
           set -euo pipefail
+          npx wrangler d1 execute "$SOURCE" --remote --json --command \
+            "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name" | tee tables.json
+          {
+            echo '### Tables in the source database'
+            echo '```json'
+            cat tables.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Read-only. Approved, non-archived soldiers, and only the columns
+      # scheduling needs; a current military licence becomes the driver flag.
+      #
+      # wrangler --json writes its errors to stdout, which the redirect below
+      # captures — so a failure has to be re-printed by hand or the run log
+      # shows nothing but "exit code 1".
+      - name: Read the equipment roster
+        run: |
+          set -uo pipefail
           npx wrangler d1 execute "$SOURCE" --remote --json --command "
             SELECT s.full_name,
                    s.personal_id,
@@ -74,6 +92,12 @@ jobs:
              WHERE s.approval_status = 'approved'
              ORDER BY s.full_name
           " > roster.json
+          status=$?
+          if [ "$status" -ne 0 ]; then
+            echo '::error::Could not read the equipment roster. wrangler said:'
+            cat roster.json
+            exit "$status"
+          fi
 
       - name: Build the import
         run: |
