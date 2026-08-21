@@ -480,3 +480,48 @@ describe('a post scheduled twice for the same hours', () => {
     expect(conflicts.some((conflict) => conflict.code === 'DUPLICATE_ASSIGNMENT')).toBe(false);
   });
 });
+
+describe('continuous duty across back-to-back shifts', () => {
+  const eightHourLimit = DEFAULT_RULES.map((item) =>
+    item.code === 'MAX_CONTINUOUS' ? { ...item, config: { minutes: 480 } } : item,
+  );
+
+  const shift = (id: string, from: string, to: string) =>
+    assignment({ id, startAt: at('2026-08-21', from), endAt: at('2026-08-21', to) });
+
+  it('adds up two shifts that touch', () => {
+    // Off ש״ג at 14:00 and straight onto סיור: sixteen hours, not two eights.
+    const conflicts = run(
+      [shift('a1', '06:00', '14:00'), shift('a2', '14:00', '22:00')],
+      eightHourLimit,
+    ).filter((conflict) => conflict.code === 'MAX_CONTINUOUS');
+
+    expect(conflicts).toHaveLength(1);
+    expect(conflicts[0]?.message).toContain('16');
+    // Reported against the shift that ends the run — the one to hand over.
+    expect(conflicts[0]?.assignmentId).toBe('a2');
+  });
+
+  it('leaves a single shift at the limit alone', () => {
+    const conflicts = run([shift('a1', '06:00', '14:00')], eightHourLimit);
+    expect(conflicts.some((conflict) => conflict.code === 'MAX_CONTINUOUS')).toBe(false);
+  });
+
+  it('treats a gap between shifts as the end of the run', () => {
+    const conflicts = run(
+      [shift('a1', '06:00', '14:00'), shift('a2', '16:00', '23:00')],
+      eightHourLimit,
+    );
+    expect(conflicts.some((conflict) => conflict.code === 'MAX_CONTINUOUS')).toBe(false);
+  });
+
+  it('reports one conflict for a run, not one per shift', () => {
+    const conflicts = run(
+      [shift('a1', '00:00', '06:00'), shift('a2', '06:00', '12:00'), shift('a3', '12:00', '18:00')],
+      eightHourLimit,
+    ).filter((conflict) => conflict.code === 'MAX_CONTINUOUS');
+
+    expect(conflicts).toHaveLength(1);
+    expect(conflicts[0]?.message).toContain('18');
+  });
+});

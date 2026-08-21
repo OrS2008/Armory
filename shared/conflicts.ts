@@ -472,21 +472,61 @@ export function detectConflicts(input: EngineInput): Conflict[] {
         }
       }
     }
+  }
 
-    // Continuous duration of this single assignment.
-    const continuousRule = rule('MAX_CONTINUOUS');
-    if (continuousRule) {
-      const limit = continuousRule.config.minutes ?? 0;
-      const duration = minutesBetween(assignment.startAt, assignment.endAt);
-      if (limit > 0 && duration > limit) {
+  /*
+   * Continuous duty.
+   *
+   * The rule is named משך שיבוץ רצוף and it used to measure a single row, so a
+   * soldier who came off ש״ג at 14:00 and straight onto סיור until 22:00 had
+   * worked sixteen hours without the schedule noticing: two eight-hour shifts,
+   * each of them fine on its own. A run is what has to be measured, so
+   * touching and overlapping shifts are merged before the limit is applied.
+   */
+  const continuousRule = rule('MAX_CONTINUOUS');
+  if (continuousRule) {
+    const limit = continuousRule.config.minutes ?? 0;
+    if (limit > 0) {
+      const byPerson = new Map<string, EngineAssignment[]>();
+      for (const assignment of active) {
         for (const personnelId of assignment.assigneeIds) {
           if (isOverridden(assignment, personnelId)) continue;
-          add('MAX_CONTINUOUS', continuousRule, assignment, personnelId, {
-            person: personName(personnelId),
-            actual: formatHours(duration / 60),
-            required: formatHours(limit / 60),
-          });
+          byPerson.set(personnelId, [...(byPerson.get(personnelId) ?? []), assignment]);
         }
+      }
+
+      for (const [personnelId, list] of byPerson) {
+        const sorted = [...list].sort((left, right) => left.startAt - right.startAt);
+        let runStart = 0;
+        let runEnd = 0;
+        // The run is reported against its last shift: that is the one to
+        // shorten or hand to somebody else.
+        let last: EngineAssignment | null = null;
+
+        const report = () => {
+          if (!last) return;
+          const minutes = minutesBetween(runStart, runEnd);
+          if (minutes > limit) {
+            add('MAX_CONTINUOUS', continuousRule, last, personnelId, {
+              person: personName(personnelId),
+              actual: formatHours(minutes / 60),
+              required: formatHours(limit / 60),
+            });
+          }
+        };
+
+        for (const assignment of sorted) {
+          if (last && assignment.startAt <= runEnd) {
+            runEnd = Math.max(runEnd, assignment.endAt);
+            last = assignment;
+          } else {
+            report();
+            runStart = assignment.startAt;
+            runEnd = assignment.endAt;
+            last = assignment;
+          }
+        }
+        report();
       }
     }
   }

@@ -158,3 +158,48 @@ describe('crew gaps', () => {
     expect(candidates[0]?.personnelId).toBe('c1');
   });
 });
+
+describe('warnings rank before score', () => {
+  it('offers the clean candidate first, even when the warned one is idler', () => {
+    // The warned soldier has done nothing all week and would win on fairness
+    // alone; the one who raises no warning still has to be offered first.
+    const busy: EnginePerson = { id: 'busy', displayName: 'עמוס', qualificationIds: [] };
+    const idle: EnginePerson = { id: 'idle', displayName: 'פנוי', qualificationIds: [] };
+
+    const evening: EngineAssignment = {
+      id: 'evening',
+      title: 'סיור',
+      startAt: at('2026-08-21', '14:00'),
+      endAt: at('2026-08-21', '22:00'),
+      requiredHeadcount: 1,
+      requiredQualifications: [],
+      assigneeIds: [],
+      publicationState: 'draft',
+    };
+    // Straight off an eight-hour shift: taking the evening makes sixteen.
+    const backToBack: EngineAssignment = {
+      id: 'prior',
+      title: 'ש״ג',
+      startAt: at('2026-08-21', '06:00'),
+      endAt: at('2026-08-21', '14:00'),
+      requiredHeadcount: 1,
+      requiredQualifications: [],
+      assigneeIds: ['idle'],
+      publicationState: 'draft',
+    };
+
+    const ranked = rankCandidates({
+      assignment: evening,
+      personnel: [busy, idle],
+      assignments: [evening, backToBack],
+      absences: [],
+      rules: DEFAULT_RULES.map((rule) =>
+        rule.code === 'MAX_CONTINUOUS' ? { ...rule, config: { minutes: 480 } } : rule,
+      ),
+      timezone: TZ,
+    });
+
+    expect(ranked[0]?.personnelId).toBe('busy');
+    expect(ranked[0]?.warnings).toHaveLength(0);
+  });
+});

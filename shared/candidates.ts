@@ -156,9 +156,20 @@ export function rankCandidates(input: CandidateInput): Candidate[] {
     };
   });
 
+  /*
+   * Warnings rank before score, not inside it.
+   *
+   * A twelve-point penalty could not outweigh a seventy-point fairness range,
+   * so a warned-but-idle soldier still beat a clean one — which is how
+   * auto-fill came to hand people sixteen continuous hours in the name of an
+   * even workload. Warnings mean "allowed, but only when nothing else is", so
+   * the clean candidates have to be exhausted first; fairness then decides
+   * within each tier, and the score keeps its plain meaning on screen.
+   */
   return candidates.sort(
     (a, b) =>
       Number(b.eligible) - Number(a.eligible) ||
+      a.warnings.length - b.warnings.length ||
       b.score - a.score ||
       a.displayName.localeCompare(b.displayName, 'he'),
   );
