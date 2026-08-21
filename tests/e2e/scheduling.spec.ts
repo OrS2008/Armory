@@ -46,9 +46,16 @@ test.describe('scheduling workflow', () => {
   test('creates an assignment and reports it as understaffed', async ({ page }) => {
     await page.goto('/schedule');
     await page.getByRole('button', { name: 'משימה חדשה' }).click();
+
+    // The type dropdown opens on a prompt, not on a value that reads like a
+    // choice, and the form says in words what it is about to create.
+    await expect(page.getByRole('combobox', { name: 'סוג משימה' })).toHaveValue('');
+    await expect(page.getByText(/בחרו סוג משימה ותאריך/)).toBeVisible();
+
     await page.getByRole('combobox', { name: 'סוג משימה' }).selectOption({ label: 'שמירה' });
     await page.getByRole('textbox', { name: 'שעת התחלה' }).fill('08:00');
-    await page.getByRole('textbox', { name: 'שעת סיום' }).fill('12:00');
+    await expect(page.getByText(/מה ייווצר/)).toBeVisible();
+
     await page.getByRole('button', { name: 'יצירת משימה' }).click();
 
     await expect(page.getByRole('button', { name: /שמירה/ }).first()).toBeVisible();

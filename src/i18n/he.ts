@@ -160,6 +160,18 @@ export const he = {
   'assignments.title': 'משימות',
   'assignments.types': 'סוגי משימות',
   'assignments.type': 'סוג משימה',
+  'assignments.typePlaceholder': 'בחרו סוג משימה…',
+  'assignments.noTypes': 'טרם הוגדרו סוגי משימות. הגדירו אחד במסך "משימות" לפני יצירת שיבוץ.',
+  'assignments.anyUnit': 'כל המסגרות',
+  'assignments.advanced': 'אפשרויות נוספות',
+  'assignments.advancedHint':
+    'שם, מסגרת, כמות אנשים, שעת סיום והערות — ברירות המחדל נלקחות מסוג המשימה.',
+  'assignments.preview': 'מה ייווצר',
+  'assignments.previewOne': 'משימה אחת, {range}.',
+  'assignments.previewShifts':
+    '{count} משמרות ביום ({times}), בכל יום עד {until}. סה״כ {total} משימות.',
+  'assignments.previewDaily': 'משימה אחת בכל יום עד {until}. סה״כ {total} משימות.',
+  'assignments.previewIncomplete': 'בחרו סוג משימה ותאריך כדי לראות מה ייווצר.',
   'assignments.addType': 'סוג משימה חדש',
   'assignments.name': 'שם המשימה',
   'assignments.category': 'קטגוריה',

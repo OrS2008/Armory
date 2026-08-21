@@ -1,11 +1,11 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useMutation } from '@tanstack/react-query';
 import { validationMessages } from '@shared/messages.he';
-import { hebrewWeekdays } from '@shared/format';
-import { SHIFT_HOUR_OPTIONS } from '@shared/recurrence';
+import { formatDayKey, formatRange, formatTime, hebrewWeekdays } from '@shared/format';
+import { SHIFT_HOUR_OPTIONS, expandRecurrence } from '@shared/recurrence';
 import { dayKeySchema, timeSchema } from '@shared/schemas';
 import { t } from '@/i18n';
 import { ApiError, api } from '@/lib/api';
@@ -124,7 +124,70 @@ export function AssignmentFormDialog({ open, dayKey, timezone, scheduleId, onClo
   });
 
   const frequency = useWatch({ control: form.control, name: 'frequency' });
+  const day = useWatch({ control: form.control, name: 'day' });
+  const startTime = useWatch({ control: form.control, name: 'startTime' });
+  const endTime = useWatch({ control: form.control, name: 'endTime' });
+  const endsNextDay = useWatch({ control: form.control, name: 'endsNextDay' });
+  const untilDate = useWatch({ control: form.control, name: 'untilDate' });
+  const weekdaysPicked = useWatch({ control: form.control, name: 'weekdays' });
   const shiftHours = Number(useWatch({ control: form.control, name: 'shiftHours' }) ?? 0);
+
+  /**
+   * Says in words what the form is about to create. The alternative is asking
+   * the reader to hold a recurrence rule, a shift length and a date range in
+   * their head and work out the answer themselves.
+   */
+  const preview = useMemo(() => {
+    if (!selectedTypeId || !day || !startTime) return t('assignments.previewIncomplete');
+
+    const startAt = toTimestamp(day, startTime, timezone);
+    const endAt = toTimestamp(endsNextDay ? nextDay(day) : day, endTime || startTime, timezone);
+    if (frequency === 'none' || !untilDate) {
+      return t('assignments.previewOne', { range: formatRange(startAt, endAt, timezone) });
+    }
+
+    const occurrences = expandRecurrence(
+      startAt,
+      endAt,
+      {
+        frequency,
+        weekdays: (weekdaysPicked ?? []).map(Number),
+        untilDate,
+        ...(shiftHours > 0 ? { shiftHours } : {}),
+      },
+      timezone,
+    );
+    if (occurrences.length === 0) return t('assignments.previewIncomplete');
+
+    if (shiftHours > 0) {
+      const perDay = 24 / shiftHours;
+      const times = occurrences
+        .slice(0, perDay)
+        .map((occurrence) => formatTime(occurrence.startAt, timezone))
+        .join(', ');
+      return t('assignments.previewShifts', {
+        count: perDay,
+        times,
+        until: formatDayKey(untilDate),
+        total: occurrences.length,
+      });
+    }
+    return t('assignments.previewDaily', {
+      until: formatDayKey(untilDate),
+      total: occurrences.length,
+    });
+  }, [
+    selectedTypeId,
+    day,
+    startTime,
+    endTime,
+    endsNextDay,
+    frequency,
+    untilDate,
+    weekdaysPicked,
+    shiftHours,
+    timezone,
+  ]);
 
   return (
     <Dialog
@@ -146,169 +209,190 @@ export function AssignmentFormDialog({ open, dayKey, timezone, scheduleId, onClo
         </>
       }
     >
-      <form className="grid gap-4 sm:grid-cols-2" onSubmit={(event) => event.preventDefault()}>
-        <Field
-          label={t('assignments.type')}
-          error={form.formState.errors.assignmentTypeId?.message}
-          required
-        >
-          {({ id, describedBy, invalid }) => (
-            <Select
-              id={id}
-              aria-describedby={describedBy}
-              aria-invalid={invalid}
-              {...form.register('assignmentTypeId')}
-            >
-              <option value="">{t('app.none')}</option>
-              {(types.data ?? [])
-                .filter((type) => type.active)
-                .map((type) => (
-                  <option key={type.id} value={type.id}>
-                    {type.name}
-                  </option>
-                ))}
-            </Select>
-          )}
-        </Field>
+      <form className="flex flex-col gap-4" onSubmit={(event) => event.preventDefault()}>
+        {types.data && types.data.filter((type) => type.active).length === 0 ? (
+          <p className="rounded-[var(--radius-control)] bg-warning-soft px-3 py-2 text-sm text-warning">
+            {t('assignments.noTypes')}
+          </p>
+        ) : null}
 
-        <Field label={t('assignments.name')} error={form.formState.errors.title?.message}>
-          {({ id }) => <Input id={id} {...form.register('title')} />}
-        </Field>
+        {/* The four fields that actually decide what gets created. Everything
+            else has a sensible default taken from the assignment type. */}
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field
+            label={t('assignments.type')}
+            error={form.formState.errors.assignmentTypeId?.message}
+            required
+          >
+            {({ id, describedBy, invalid }) => (
+              <Select
+                id={id}
+                aria-describedby={describedBy}
+                aria-invalid={invalid}
+                {...form.register('assignmentTypeId')}
+              >
+                <option value="">{t('assignments.typePlaceholder')}</option>
+                {(types.data ?? [])
+                  .filter((type) => type.active)
+                  .map((type) => (
+                    <option key={type.id} value={type.id}>
+                      {type.name}
+                    </option>
+                  ))}
+              </Select>
+            )}
+          </Field>
 
-        <Field label={t('assignments.date')} error={form.formState.errors.day?.message} required>
-          {({ id, required }) => (
-            <Input
-              aria-required={required}
-              id={id}
-              type="date"
-              dir="ltr"
-              {...form.register('day')}
-            />
-          )}
-        </Field>
+          <Field label={t('assignments.date')} error={form.formState.errors.day?.message} required>
+            {({ id, required }) => (
+              <Input
+                aria-required={required}
+                id={id}
+                type="date"
+                dir="ltr"
+                {...form.register('day')}
+              />
+            )}
+          </Field>
 
-        <Field label={t('personnel.unit')}>
-          {({ id }) => (
-            <Select id={id} {...form.register('unitId')}>
-              <option value="">{t('app.all')}</option>
-              {(units.data ?? []).map((unit) => (
-                <option key={unit.id} value={unit.id}>
-                  {unit.name}
-                </option>
-              ))}
-            </Select>
-          )}
-        </Field>
+          <Field
+            label={t('assignments.startTime')}
+            error={form.formState.errors.startTime?.message}
+            required
+          >
+            {({ id, required }) => (
+              <Input
+                aria-required={required}
+                id={id}
+                type="time"
+                dir="ltr"
+                step={300}
+                {...form.register('startTime')}
+              />
+            )}
+          </Field>
 
-        <Field
-          label={t('assignments.startTime')}
-          error={form.formState.errors.startTime?.message}
-          required
-        >
-          {({ id, required }) => (
-            <Input
-              aria-required={required}
-              id={id}
-              type="time"
-              dir="ltr"
-              step={300}
-              {...form.register('startTime')}
-            />
-          )}
-        </Field>
+          <Field label={t('assignments.recurrence')}>
+            {({ id }) => (
+              <Select id={id} {...form.register('frequency')}>
+                <option value="none">{t('assignments.recurrenceNone')}</option>
+                <option value="daily">{t('assignments.recurrenceDaily')}</option>
+                <option value="weekdays">{t('assignments.recurrenceWeekdays')}</option>
+              </Select>
+            )}
+          </Field>
 
-        <Field
-          label={t('assignments.endTime')}
-          error={form.formState.errors.endTime?.message}
-          required
-        >
-          {({ id }) => (
-            <div className="flex items-center gap-2">
-              <Input id={id} type="time" dir="ltr" step={300} {...form.register('endTime')} />
-              <label className="flex shrink-0 items-center gap-1.5 text-xs text-ink-muted">
-                <input type="checkbox" {...form.register('endsNextDay')} />
-                למחרת
-              </label>
-            </div>
-          )}
-        </Field>
+          {frequency !== 'none' ? (
+            <>
+              <Field label={t('assignments.shiftRotation')}>
+                {({ id }) => (
+                  <Select id={id} {...form.register('shiftHours')}>
+                    <option value={0}>{t('assignments.shiftRotationOff')}</option>
+                    {SHIFT_HOUR_OPTIONS.map((hours) => (
+                      <option key={hours} value={hours}>
+                        {t('assignments.shiftEvery', { hours })}
+                      </option>
+                    ))}
+                  </Select>
+                )}
+              </Field>
 
-        <Field
-          label={t('assignments.headcount')}
-          error={form.formState.errors.requiredHeadcount?.message}
-          required
-        >
-          {({ id }) => (
-            <Input
-              id={id}
-              type="number"
-              min={0}
-              max={500}
-              dir="ltr"
-              {...form.register('requiredHeadcount')}
-            />
-          )}
-        </Field>
+              <Field label={t('assignments.recurrenceUntil')}>
+                {({ id }) => (
+                  <Input id={id} type="date" dir="ltr" {...form.register('untilDate')} />
+                )}
+              </Field>
 
-        <Field label={t('assignments.recurrence')}>
-          {({ id }) => (
-            <Select id={id} {...form.register('frequency')}>
-              <option value="none">{t('assignments.recurrenceNone')}</option>
-              <option value="daily">{t('assignments.recurrenceDaily')}</option>
-              <option value="weekdays">{t('assignments.recurrenceWeekdays')}</option>
-            </Select>
-          )}
-        </Field>
+              {frequency === 'weekdays' ? (
+                <fieldset className="sm:col-span-2">
+                  <legend className="mb-1.5 text-sm font-medium">
+                    {t('assignments.recurrenceWeekdays')}
+                  </legend>
+                  <div className="flex flex-wrap gap-2">
+                    {hebrewWeekdays.map((name, index) => (
+                      <label
+                        key={name}
+                        className="flex items-center gap-1.5 rounded-[var(--radius-control)] border border-border-subtle px-2.5 py-1.5 text-sm"
+                      >
+                        <input type="checkbox" value={index} {...form.register('weekdays')} />
+                        {name}
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
+              ) : null}
+            </>
+          ) : null}
+        </div>
 
-        {frequency !== 'none' ? (
-          <>
-            <Field
-              label={t('assignments.shiftRotation')}
-              hint={
-                shiftHours > 0
-                  ? t('assignments.shiftRotationHint', { count: 24 / shiftHours })
-                  : t('assignments.shiftRotationOffHint')
-              }
-            >
-              {({ id, describedBy }) => (
-                <Select id={id} aria-describedby={describedBy} {...form.register('shiftHours')}>
-                  <option value={0}>{t('assignments.shiftRotationOff')}</option>
-                  {SHIFT_HOUR_OPTIONS.map((hours) => (
-                    <option key={hours} value={hours}>
-                      {t('assignments.shiftEvery', { hours })}
+        {/* Plain language beats making the reader simulate the form in their head. */}
+        <p className="rounded-[var(--radius-control)] bg-surface-sunken px-3 py-2 text-sm">
+          <span className="font-medium">{t('assignments.preview')}: </span>
+          {preview}
+        </p>
+
+        <details className="rounded-[var(--radius-control)] border border-border-subtle">
+          <summary className="cursor-pointer px-3 py-2 text-sm font-medium">
+            {t('assignments.advanced')}
+          </summary>
+          <div className="grid gap-4 border-t border-border-subtle p-3 sm:grid-cols-2">
+            <p className="text-xs text-ink-faint sm:col-span-2">{t('assignments.advancedHint')}</p>
+
+            <Field label={t('assignments.name')} error={form.formState.errors.title?.message}>
+              {({ id }) => <Input id={id} {...form.register('title')} />}
+            </Field>
+
+            <Field label={t('personnel.unit')}>
+              {({ id }) => (
+                <Select id={id} {...form.register('unitId')}>
+                  <option value="">{t('assignments.anyUnit')}</option>
+                  {(units.data ?? []).map((unit) => (
+                    <option key={unit.id} value={unit.id}>
+                      {unit.name}
                     </option>
                   ))}
                 </Select>
               )}
             </Field>
 
-            <Field label={t('assignments.recurrenceUntil')}>
-              {({ id }) => <Input id={id} type="date" dir="ltr" {...form.register('untilDate')} />}
+            <Field
+              label={t('assignments.headcount')}
+              error={form.formState.errors.requiredHeadcount?.message}
+            >
+              {({ id }) => (
+                <Input
+                  id={id}
+                  type="number"
+                  min={0}
+                  max={500}
+                  dir="ltr"
+                  {...form.register('requiredHeadcount')}
+                />
+              )}
             </Field>
-            {frequency === 'weekdays' ? (
-              <fieldset className="sm:col-span-2">
-                <legend className="mb-1.5 text-sm font-medium">
-                  {t('assignments.recurrenceWeekdays')}
-                </legend>
-                <div className="flex flex-wrap gap-2">
-                  {hebrewWeekdays.map((name, index) => (
-                    <label
-                      key={name}
-                      className="flex items-center gap-1.5 rounded-[var(--radius-control)] border border-border-subtle px-2.5 py-1.5 text-sm"
-                    >
-                      <input type="checkbox" value={index} {...form.register('weekdays')} />
-                      {name}
-                    </label>
-                  ))}
-                </div>
-              </fieldset>
-            ) : null}
-          </>
-        ) : null}
 
-        <Field label={t('assignments.notes')} className="sm:col-span-2">
-          {({ id }) => <Textarea id={id} {...form.register('notes')} />}
-        </Field>
+            {shiftHours > 0 ? null : (
+              <Field
+                label={t('assignments.endTime')}
+                error={form.formState.errors.endTime?.message}
+              >
+                {({ id }) => (
+                  <div className="flex items-center gap-2">
+                    <Input id={id} type="time" dir="ltr" step={300} {...form.register('endTime')} />
+                    <label className="flex shrink-0 items-center gap-1.5 text-xs text-ink-muted">
+                      <input type="checkbox" {...form.register('endsNextDay')} />
+                      למחרת
+                    </label>
+                  </div>
+                )}
+              </Field>
+            )}
+
+            <Field label={t('assignments.notes')} className="sm:col-span-2">
+              {({ id }) => <Textarea id={id} {...form.register('notes')} />}
+            </Field>
+          </div>
+        </details>
       </form>
     </Dialog>
   );
