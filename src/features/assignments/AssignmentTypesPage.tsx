@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Dialog } from '@/components/ui/Dialog';
 import { Field } from '@/components/ui/Field';
-import { Input, Textarea } from '@/components/ui/Input';
+import { Input, Select, Textarea } from '@/components/ui/Input';
 import { TableWrapper, Td, Th } from '@/components/ui/Table';
 import { QueryState } from '@/components/ui/States';
 import { useToast } from '@/components/ui/toast-context';
@@ -27,6 +27,9 @@ export function AssignmentTypesPage() {
   const qualifications = useQualifications();
   const [editing, setEditing] = useState<AssignmentType | null>(null);
   const [open, setOpen] = useState(false);
+  const [requirements, setRequirements] = useState<{ qualificationId: string; minCount: number }[]>(
+    [],
+  );
 
   const form = useForm<AssignmentTypeInput>({
     resolver: zodResolver(assignmentTypeSchema),
@@ -34,15 +37,17 @@ export function AssignmentTypesPage() {
       name: '',
       defaultDurationMinutes: 480,
       requiredHeadcount: 1,
-      qualificationIds: [],
+      requiredQualifications: [],
     },
   });
 
   const save = useMutation({
-    mutationFn: (values: AssignmentTypeInput) =>
-      editing
-        ? api.patch(`/assignment-types/${editing.id}`, values)
-        : api.post('/assignment-types', values),
+    mutationFn: (values: AssignmentTypeInput) => {
+      const payload = { ...values, requiredQualifications: requirements };
+      return editing
+        ? api.patch(`/assignment-types/${editing.id}`, payload)
+        : api.post('/assignment-types', payload);
+    },
     onSuccess: () => {
       toast.push('success', t('state.savedTitle'));
       setOpen(false);
@@ -55,6 +60,7 @@ export function AssignmentTypesPage() {
 
   const openDialog = (type: AssignmentType | null) => {
     setEditing(type);
+    setRequirements(type ? type.requiredQualifications : []);
     form.reset(
       type
         ? {
@@ -65,9 +71,14 @@ export function AssignmentTypesPage() {
             priority: type.priority,
             instructions: type.instructions,
             active: type.active,
-            qualificationIds: type.qualificationIds,
+            requiredQualifications: type.requiredQualifications,
           }
-        : { name: '', defaultDurationMinutes: 480, requiredHeadcount: 1, qualificationIds: [] },
+        : {
+            name: '',
+            defaultDurationMinutes: 480,
+            requiredHeadcount: 1,
+            requiredQualifications: [],
+          },
     );
     setOpen(true);
   };
@@ -117,11 +128,17 @@ export function AssignmentTypesPage() {
                   <Td className="ltr-inline">{type.requiredHeadcount}</Td>
                   <Td>
                     <div className="flex flex-wrap gap-1">
-                      {type.qualificationIds.map((id) => (
-                        <Badge key={id} tone="brand">
-                          {qualifications.data?.find((item) => item.id === id)?.name ?? id}
-                        </Badge>
-                      ))}
+                      {type.requiredQualifications.map((requirement) => {
+                        const name =
+                          qualifications.data?.find(
+                            (item) => item.id === requirement.qualificationId,
+                          )?.name ?? requirement.qualificationId;
+                        return (
+                          <Badge key={requirement.qualificationId} tone="brand">
+                            {requirement.minCount > 0 ? `${name} ×${requirement.minCount}` : name}
+                          </Badge>
+                        );
+                      })}
                     </div>
                   </Td>
                   <Td>
@@ -200,23 +217,65 @@ export function AssignmentTypesPage() {
           </Field>
 
           <fieldset className="sm:col-span-2">
-            <legend className="mb-1.5 text-sm font-medium">
+            <legend className="mb-1 text-sm font-medium">
               {t('assignments.requiredQualifications')}
             </legend>
-            <div className="flex flex-wrap gap-2">
-              {(qualifications.data ?? []).map((qualification) => (
-                <label
-                  key={qualification.id}
-                  className="flex items-center gap-1.5 rounded-[var(--radius-control)] border border-border-subtle px-2.5 py-1.5 text-sm"
-                >
-                  <input
-                    type="checkbox"
-                    value={qualification.id}
-                    {...form.register('qualificationIds')}
-                  />
-                  {qualification.name}
-                </label>
-              ))}
+            <p className="mb-2 text-xs text-ink-faint">{t('assignments.qualificationHint')}</p>
+            <div className="flex flex-col gap-2">
+              {(qualifications.data ?? []).map((qualification) => {
+                const current = requirements.find(
+                  (item) => item.qualificationId === qualification.id,
+                );
+                return (
+                  <div
+                    key={qualification.id}
+                    className="flex flex-wrap items-center gap-2 rounded-[var(--radius-control)] border border-border-subtle px-2.5 py-1.5 text-sm"
+                  >
+                    <label className="flex items-center gap-1.5">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(current)}
+                        onChange={(event) =>
+                          setRequirements(
+                            event.target.checked
+                              ? [
+                                  ...requirements,
+                                  { qualificationId: qualification.id, minCount: 1 },
+                                ]
+                              : requirements.filter(
+                                  (item) => item.qualificationId !== qualification.id,
+                                ),
+                          )
+                        }
+                      />
+                      {qualification.name}
+                    </label>
+                    {current ? (
+                      <Select
+                        className="h-8 w-auto"
+                        aria-label={qualification.name}
+                        value={current.minCount}
+                        onChange={(event) =>
+                          setRequirements(
+                            requirements.map((item) =>
+                              item.qualificationId === qualification.id
+                                ? { ...item, minCount: Number(event.target.value) }
+                                : item,
+                            ),
+                          )
+                        }
+                      >
+                        <option value={0}>{t('assignments.qualificationScopeAll')}</option>
+                        {[1, 2, 3, 4, 5].map((count) => (
+                          <option key={count} value={count}>
+                            {t('assignments.qualificationScopeSome', { count })}
+                          </option>
+                        ))}
+                      </Select>
+                    ) : null}
+                  </div>
+                );
+              })}
             </div>
           </fieldset>
 

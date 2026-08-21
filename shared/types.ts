@@ -75,7 +75,7 @@ export interface AssignmentType {
   color: string;
   instructions: string | null;
   active: boolean;
-  qualificationIds: string[];
+  requiredQualifications: { qualificationId: string; minCount: number }[];
 }
 
 export interface AssignmentAssignee {
@@ -102,7 +102,7 @@ export interface Assignment {
   publicationState: PublicationState;
   notes: string | null;
   assignees: AssignmentAssignee[];
-  requiredQualificationIds: string[];
+  requiredQualifications: { qualificationId: string; minCount: number }[];
   updatedAt: number;
 }
 

@@ -14,10 +14,11 @@ INSERT OR REPLACE INTO assignment_types
   ('atp_carmel','org_default','כרמל','תורנויות קבועות',480,4,1,'info',NULL,1,0,0),
   ('atp_bathefer','org_default','בת חפר','תורנויות קבועות',480,2,2,'slate',NULL,1,0,0);
 
--- סיור and כרמל each need a driver and a commander among their four.
+-- סיור and כרמל each need one driver and one commander *among* their four —
+-- min_count 1, not 0, which would demand that all four hold both.
 DELETE FROM assignment_type_qualifications WHERE assignment_type_id IN ('atp_siur','atp_carmel');
-INSERT INTO assignment_type_qualifications (assignment_type_id, qualification_id) VALUES
-  ('atp_siur','qlf_driver'),
-  ('atp_siur','qlf_commander'),
-  ('atp_carmel','qlf_driver'),
-  ('atp_carmel','qlf_commander');
+INSERT INTO assignment_type_qualifications (assignment_type_id, qualification_id, min_count) VALUES
+  ('atp_siur','qlf_driver',1),
+  ('atp_siur','qlf_commander',1),
+  ('atp_carmel','qlf_driver',1),
+  ('atp_carmel','qlf_commander',1);

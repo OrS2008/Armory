@@ -44,6 +44,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env, params })
   const candidates = rankCandidates({
     assignment: toEngineAssignment(assignment),
     personnel: pool.map(toEnginePerson),
+    roster: evaluation.personnel.map(toEnginePerson),
     assignments: evaluation.assignments.map(toEngineAssignment),
     absences: toEngineAbsences(evaluation.availability),
     rules: evaluation.rules,

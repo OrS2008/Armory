@@ -4,6 +4,7 @@ import type {
   EngineAbsence,
   EngineAssignment,
   EnginePerson,
+  RequiredQualification,
   RuleCode,
   SchedulingRule,
 } from '../../shared/conflicts';
@@ -218,18 +219,20 @@ export async function loadAssignmentTypes(env: Env): Promise<AssignmentType[]> {
     color: row.color,
     instructions: row.instructions,
     active: row.active === 1,
-    qualificationIds: links.get(row.id) ?? [],
+    requiredQualifications: links.get(row.id) ?? [],
   }));
 }
 
-export async function loadTypeQualifications(env: Env): Promise<Map<string, string[]>> {
+export async function loadTypeQualifications(
+  env: Env,
+): Promise<Map<string, RequiredQualification[]>> {
   const rows = await env.DB.prepare(
-    'SELECT assignment_type_id, qualification_id FROM assignment_type_qualifications',
-  ).all<{ assignment_type_id: string; qualification_id: string }>();
-  const map = new Map<string, string[]>();
+    'SELECT assignment_type_id, qualification_id, min_count FROM assignment_type_qualifications',
+  ).all<{ assignment_type_id: string; qualification_id: string; min_count: number }>();
+  const map = new Map<string, RequiredQualification[]>();
   for (const row of rows.results ?? []) {
     const list = map.get(row.assignment_type_id) ?? [];
-    list.push(row.qualification_id);
+    list.push({ qualificationId: row.qualification_id, minCount: row.min_count });
     map.set(row.assignment_type_id, list);
   }
   return map;
@@ -355,7 +358,7 @@ export async function loadAssignments(
     publicationState: row.publication_state,
     notes: row.notes,
     assignees: byAssignment.get(row.id) ?? [],
-    requiredQualificationIds: typeQualifications.get(row.assignment_type_id) ?? [],
+    requiredQualifications: typeQualifications.get(row.assignment_type_id) ?? [],
     updatedAt: row.updated_at,
   }));
 }
@@ -423,7 +426,7 @@ export function toEngineAssignment(assignment: Assignment): EngineAssignment {
     startAt: assignment.startAt,
     endAt: assignment.endAt,
     requiredHeadcount: assignment.requiredHeadcount,
-    requiredQualificationIds: assignment.requiredQualificationIds,
+    requiredQualifications: assignment.requiredQualifications,
     assigneeIds: assignment.assignees.map((assignee) => assignee.personnelId),
     publicationState: assignment.publicationState,
     cancelled: assignment.status === 'cancelled',

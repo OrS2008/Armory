@@ -50,13 +50,23 @@ export interface EnginePerson {
   qualificationIds: string[];
 }
 
+/**
+ * A qualification an assignment needs. `minCount: 0` means every assignee must
+ * hold it; a positive count means at least that many of them must — the
+ * difference between "four qualified drivers" and "a driver among the four".
+ */
+export interface RequiredQualification {
+  qualificationId: string;
+  minCount: number;
+}
+
 export interface EngineAssignment {
   id: string;
   title: string;
   startAt: number;
   endAt: number;
   requiredHeadcount: number;
-  requiredQualificationIds: string[];
+  requiredQualifications: RequiredQualification[];
   assigneeIds: string[];
   publicationState: 'draft' | 'published' | 'modified';
   cancelled?: boolean;
@@ -240,15 +250,50 @@ export function detectConflicts(input: EngineInput): Conflict[] {
 
     // Qualifications.
     const qualificationRule = rule('QUALIFICATION_REQUIRED');
-    if (qualificationRule && assignment.requiredQualificationIds.length > 0) {
+    if (qualificationRule && assignment.requiredQualifications.length > 0) {
+      const holds = (personnelId: string, qualificationId: string) =>
+        (people.get(personnelId)?.qualificationIds ?? []).includes(qualificationId);
+      const qualificationName = (id: string) => input.qualificationNames?.[id] ?? id;
+
+      // "Every assignee must hold it" is a fact about each person.
+      const everyone = assignment.requiredQualifications.filter((item) => item.minCount <= 0);
       for (const personnelId of assignment.assigneeIds) {
         if (isOverridden(assignment, personnelId)) continue;
-        const held = new Set(people.get(personnelId)?.qualificationIds ?? []);
-        const missing = assignment.requiredQualificationIds.filter((id) => !held.has(id));
+        const missing = everyone
+          .filter((item) => !holds(personnelId, item.qualificationId))
+          .map((item) => qualificationName(item.qualificationId));
         if (missing.length > 0) {
           add('QUALIFICATION_REQUIRED', qualificationRule, assignment, personnelId, {
             person: personName(personnelId),
-            qualifications: missing.map((id) => input.qualificationNames?.[id] ?? id).join(', '),
+            qualifications: missing.join(', '),
+          });
+        }
+      }
+
+      // "At least N among them" is a fact about the crew, so it is reported
+      // against the assignment rather than blamed on any one person.
+      for (const item of assignment.requiredQualifications) {
+        if (item.minCount <= 0) continue;
+        const present = assignment.assigneeIds.filter((personnelId) =>
+          holds(personnelId, item.qualificationId),
+        ).length;
+        if (present < item.minCount) {
+          const params = {
+            assignment: assignment.title,
+            qualification: qualificationName(item.qualificationId),
+            required: item.minCount,
+            actual: present,
+          };
+          conflicts.push({
+            id: `QUALIFICATION_MISSING_ROLE:${assignment.id}:${item.qualificationId}`,
+            code: 'QUALIFICATION_REQUIRED',
+            severity: qualificationRule.severity,
+            overridable: qualificationRule.overridable,
+            assignmentId: assignment.id,
+            personnelId: null,
+            subject: assignment.title,
+            message: conflictMessage('QUALIFICATION_MISSING_ROLE', params),
+            resolution: conflictResolution('QUALIFICATION_MISSING_ROLE', params),
           });
         }
       }

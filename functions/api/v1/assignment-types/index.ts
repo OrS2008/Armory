@@ -41,11 +41,12 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       timestamp,
       timestamp,
     ),
-    ...(input.qualificationIds ?? []).map((qualificationId) =>
+    ...(input.requiredQualifications ?? []).map((requirement) =>
       env.DB.prepare(
-        `INSERT OR IGNORE INTO assignment_type_qualifications (assignment_type_id, qualification_id)
-         VALUES (?, ?)`,
-      ).bind(id, qualificationId),
+        `INSERT OR REPLACE INTO assignment_type_qualifications
+           (assignment_type_id, qualification_id, min_count)
+         VALUES (?, ?, ?)`,
+      ).bind(id, requirement.qualificationId, requirement.minCount),
     ),
   ]);
   await writeAudit(env, user, AuditActions.ASSIGNMENT_TYPE_CREATED, 'assignment_type', id);

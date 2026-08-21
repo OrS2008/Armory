@@ -16,7 +16,14 @@ import { DAY, DEFAULT_TIMEZONE } from './time';
 
 export interface CandidateInput {
   assignment: EngineAssignment;
+  /** The pool to rank — normally everyone not already on the assignment. */
   personnel: EnginePerson[];
+  /**
+   * Everyone, including the people already assigned. Needed to judge what the
+   * crew is still short of: the pool alone cannot see that the driver seat is
+   * already filled, because that driver has been filtered out of it.
+   */
+  roster?: EnginePerson[];
   assignments: EngineAssignment[];
   absences: EngineAbsence[];
   rules: SchedulingRule[];
@@ -44,6 +51,9 @@ export function rankCandidates(input: CandidateInput): Candidate[] {
   const windowDays = input.workloadWindowDays ?? 14;
   const windowStart = input.assignment.startAt - windowDays * DAY;
   const others = input.assignments.filter((item) => item.id !== input.assignment.id);
+  const roster = new Map(
+    [...(input.roster ?? []), ...input.personnel].map((person) => [person.id, person] as const),
+  );
 
   const workloads = input.personnel.map((person) =>
     computeWorkload(person.id, others, {
@@ -79,11 +89,29 @@ export function rankCandidates(input: CandidateInput): Candidate[] {
       .map((conflict) => conflict.message);
 
     const reasons: string[] = [];
-    const required = input.assignment.requiredQualificationIds;
+    const required = input.assignment.requiredQualifications;
+    const held = new Set(person.qualificationIds);
     if (required.length > 0) {
-      const held = new Set(person.qualificationIds);
-      const matched = required.filter((id) => held.has(id)).length;
+      const matched = required.filter((item) => held.has(item.qualificationId)).length;
       reasons.push(`הכשירים: ${matched}/${required.length}`);
+    }
+
+    // A crew short of a driver values a driver above an equally rested peer.
+    const stillNeeded = required.filter((item) => {
+      if (item.minCount <= 0) return false;
+      const present = input.assignment.assigneeIds.filter((id) =>
+        roster.get(id)?.qualificationIds.includes(item.qualificationId),
+      ).length;
+      return present < item.minCount;
+    });
+    const fillsGap = stillNeeded.some((item) => held.has(item.qualificationId));
+    if (fillsGap) {
+      reasons.push(
+        `משלים הכשיר חסר: ${stillNeeded
+          .filter((item) => held.has(item.qualificationId))
+          .map((item) => input.qualificationNames?.[item.qualificationId] ?? item.qualificationId)
+          .join(', ')}`,
+      );
     }
     reasons.push(`עומס ${formatHours(workload.totalHours)} שעות ב־${windowDays} הימים האחרונים`);
     if (workload.nightHours > 0) reasons.push(`${formatHours(workload.nightHours)} שעות לילה`);
@@ -99,13 +127,17 @@ export function rankCandidates(input: CandidateInput): Candidate[] {
     const qualificationPoints =
       required.length === 0
         ? 20
-        : (20 * required.filter((id) => person.qualificationIds.includes(id)).length) /
-          required.length;
+        : (20 * required.filter((item) => held.has(item.qualificationId)).length) / required.length;
+    // Enough to outrank a slightly lighter-loaded candidate who leaves the gap open.
+    const gapPoints = fillsGap ? 25 : 0;
     const restPoints = rest === null ? 10 : Math.min(10, rest);
     const penalty = warnings.length * 12;
     const score = blockers.length
       ? 0
-      : Math.max(0, Math.round(fairnessPoints + qualificationPoints + restPoints - penalty));
+      : Math.max(
+          0,
+          Math.round(fairnessPoints + qualificationPoints + gapPoints + restPoints - penalty),
+        );
 
     return {
       personnelId: person.id,

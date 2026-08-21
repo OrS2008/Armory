@@ -54,6 +54,8 @@ export const conflictMessages: Record<string, string> = {
   NO_OVERLAP: 'לא ניתן לשבץ את {person} למשימה זו — קיימת חפיפה עם {other} בין {from}–{to}.',
   AVAILABILITY_REQUIRED: '{person} אינו זמין בזמן המשימה — {reason} בין {from}–{to}.',
   QUALIFICATION_REQUIRED: 'ל{person} חסר הכשיר הנדרש למשימה: {qualifications}.',
+  QUALIFICATION_MISSING_ROLE:
+    'במשימה {assignment} חסר {qualification} — נדרשים {required}, משובצים {actual}.',
   MIN_REST: '{person} מקבל {actual} שעות מנוחה בלבד לפני המשימה, במקום {required} שעות.',
   MAX_CONTINUOUS: 'משך השיבוץ הרצוף של {person} הוא {actual} שעות, מעל המותר ({required} שעות).',
   MAX_ASSIGNMENTS_PER_DAY: 'ל{person} {actual} שיבוצים בתאריך {date}, מעל המותר ({required}).',
@@ -69,6 +71,7 @@ export const conflictResolutions: Record<string, string> = {
   NO_OVERLAP: 'הסירו את השיבוץ הכפול או שנו את שעות אחת המשימות.',
   AVAILABILITY_REQUIRED: 'בחרו אדם זמין או עדכנו את רישום הזמינות.',
   QUALIFICATION_REQUIRED: 'בחרו אדם בעל הכשיר הנדרש או עדכנו את דרישות סוג המשימה.',
+  QUALIFICATION_MISSING_ROLE: 'שבצו למשימה אדם בעל הכשיר {qualification}.',
   MIN_REST: 'הרחיקו את המשימות זו מזו או שבצו אדם אחר.',
   MAX_CONTINUOUS: 'קצרו את המשימה או פצלו אותה בין שני אנשים.',
   MAX_ASSIGNMENTS_PER_DAY: 'פזרו את השיבוצים על פני מספר ימים.',

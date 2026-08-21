@@ -43,16 +43,17 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env, params 
     ),
   ];
 
-  if (input.qualificationIds) {
+  if (input.requiredQualifications) {
     statements.push(
       env.DB.prepare(
         'DELETE FROM assignment_type_qualifications WHERE assignment_type_id = ?',
       ).bind(id),
-      ...input.qualificationIds.map((qualificationId) =>
+      ...input.requiredQualifications.map((requirement) =>
         env.DB.prepare(
-          `INSERT OR IGNORE INTO assignment_type_qualifications (assignment_type_id, qualification_id)
-           VALUES (?, ?)`,
-        ).bind(id, qualificationId),
+          `INSERT OR REPLACE INTO assignment_type_qualifications
+             (assignment_type_id, qualification_id, min_count)
+           VALUES (?, ?, ?)`,
+        ).bind(id, requirement.qualificationId, requirement.minCount),
       ),
     );
   }

@@ -109,7 +109,14 @@ export const assignmentTypeSchema = z.object({
   color: trimmed(20).optional(),
   instructions: optionalText(1000),
   active: z.boolean().optional(),
-  qualificationIds: z.array(idSchema).max(50).optional(),
+  /**
+   * `minCount: 0` requires every assignee to hold the qualification; a positive
+   * count requires at least that many among them.
+   */
+  requiredQualifications: z
+    .array(z.object({ qualificationId: idSchema, minCount: z.number().int().min(0).max(500) }))
+    .max(50)
+    .optional(),
 });
 export type AssignmentTypeInput = z.infer<typeof assignmentTypeSchema>;
 

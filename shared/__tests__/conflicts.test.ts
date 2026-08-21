@@ -23,7 +23,7 @@ function assignment(overrides: Partial<EngineAssignment> = {}): EngineAssignment
     startAt: at('2026-08-21', '08:00'),
     endAt: at('2026-08-21', '12:00'),
     requiredHeadcount: 1,
-    requiredQualificationIds: [],
+    requiredQualifications: [],
     assigneeIds: ['p1'],
     publicationState: 'published',
     ...overrides,
@@ -116,7 +116,12 @@ describe('availability', () => {
 describe('qualifications', () => {
   it('blocks a person missing a required qualification', () => {
     const conflicts = run(
-      [assignment({ assigneeIds: ['p2'], requiredQualificationIds: ['q_driver'] })],
+      [
+        assignment({
+          assigneeIds: ['p2'],
+          requiredQualifications: [{ qualificationId: 'q_driver', minCount: 0 }],
+        }),
+      ],
       DEFAULT_RULES,
       { qualificationNames: { q_driver: 'נהיגה' } },
     );
@@ -126,7 +131,9 @@ describe('qualifications', () => {
   });
 
   it('accepts a person who holds it', () => {
-    const conflicts = run([assignment({ requiredQualificationIds: ['q_driver'] })]);
+    const conflicts = run([
+      assignment({ requiredQualifications: [{ qualificationId: 'q_driver', minCount: 0 }] }),
+    ]);
     expect(conflicts.some((item) => item.code === 'QUALIFICATION_REQUIRED')).toBe(false);
   });
 });
@@ -247,5 +254,75 @@ describe('summary', () => {
     const summary = summarizeConflicts(conflicts);
     expect(summary.blocking).toBeGreaterThan(0);
     expect(conflicts[0]?.severity).toBe('blocking');
+  });
+});
+
+describe('crew-level qualifications', () => {
+  const driver: EnginePerson = { id: 'd1', displayName: 'נהג', qualificationIds: ['q_drive'] };
+  const commander: EnginePerson = { id: 'c1', displayName: 'מפקד', qualificationIds: ['q_cmd'] };
+  const plain: EnginePerson = { id: 'x1', displayName: 'לוחם', qualificationIds: [] };
+  const names = { q_drive: 'נהג', q_cmd: 'מפקד' };
+
+  const crew = (assigneeIds: string[]): EngineAssignment =>
+    assignment({
+      title: 'סיור',
+      requiredHeadcount: 4,
+      assigneeIds,
+      requiredQualifications: [
+        { qualificationId: 'q_drive', minCount: 1 },
+        { qualificationId: 'q_cmd', minCount: 1 },
+      ],
+    });
+
+  const evaluate = (assigneeIds: string[]) =>
+    detectConflicts({
+      assignments: [crew(assigneeIds)],
+      personnel: [driver, commander, plain],
+      absences: [],
+      rules: DEFAULT_RULES,
+      qualificationNames: names,
+      timezone: TZ,
+    });
+
+  it('accepts a crew that contains one driver and one commander', () => {
+    const conflicts = evaluate(['d1', 'c1', 'x1', 'x1']);
+    expect(conflicts.some((c) => c.code === 'QUALIFICATION_REQUIRED')).toBe(false);
+  });
+
+  it('does not demand that every member hold every qualification', () => {
+    const conflicts = evaluate(['d1', 'c1']);
+    expect(conflicts.filter((c) => c.code === 'QUALIFICATION_REQUIRED')).toEqual([]);
+  });
+
+  it('reports the missing role against the assignment, not against a person', () => {
+    const conflicts = evaluate(['d1', 'x1']);
+    const missing = conflicts.find((c) => c.code === 'QUALIFICATION_REQUIRED');
+    expect(missing?.personnelId).toBeNull();
+    expect(missing?.message).toContain('מפקד');
+    expect(missing?.message).toContain('סיור');
+  });
+
+  it('reports each missing role separately', () => {
+    const conflicts = evaluate(['x1', 'x1']);
+    expect(conflicts.filter((c) => c.code === 'QUALIFICATION_REQUIRED')).toHaveLength(2);
+  });
+
+  it('still requires every assignee to hold a minCount-zero qualification', () => {
+    const conflicts = detectConflicts({
+      assignments: [
+        assignment({
+          assigneeIds: ['d1', 'x1'],
+          requiredQualifications: [{ qualificationId: 'q_drive', minCount: 0 }],
+        }),
+      ],
+      personnel: [driver, plain],
+      absences: [],
+      rules: DEFAULT_RULES,
+      qualificationNames: names,
+      timezone: TZ,
+    });
+    const missing = conflicts.filter((c) => c.code === 'QUALIFICATION_REQUIRED');
+    expect(missing).toHaveLength(1);
+    expect(missing[0]?.personnelId).toBe('x1');
   });
 });

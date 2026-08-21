@@ -40,7 +40,7 @@ config. Changing a rule changes behaviour without a deployment.
 | --- | --- | --- | --- |
 | `NO_OVERLAP` | blocking | — | One person on two overlapping assignments |
 | `AVAILABILITY_REQUIRED` | blocking | — | Assignment overlaps an approved absence |
-| `QUALIFICATION_REQUIRED` | blocking | — | Assignee lacks a qualification the type requires |
+| `QUALIFICATION_REQUIRED` | blocking | per-qualification `minCount` | A qualification the crew lacks — see below |
 | `MIN_REST` | warning | `minutes: 480` | Gap before the assignment is too short |
 | `MAX_CONTINUOUS` | warning | `minutes: 720` | A single assignment runs too long |
 | `MAX_ASSIGNMENTS_PER_DAY` | warning | `count: 2` | Too many assignments on one local day |
@@ -51,6 +51,27 @@ config. Changing a rule changes behaviour without a deployment.
 
 Expired qualifications are filtered out when personnel are loaded, so a lapsed
 certification blocks an assignment exactly like a missing one.
+
+### Two ways to need a qualification
+
+An assignment type attaches qualifications with a `minCount`, because "everyone
+on this must be a qualified driver" and "there must be a driver among them" are
+different requirements and a roster needs both:
+
+| `minCount` | Meaning | Reported against |
+| --- | --- | --- |
+| `0` | Every assignee must hold it | The person who lacks it |
+| `N > 0` | At least N of the assignees must hold it | The assignment |
+
+A four-person patrol that must include one driver and one commander is two
+requirements at `minCount: 1`. Modelling it at `0` would demand four people who
+are each both, which is why the distinction exists. The crew-level shortfall is
+reported against the assignment rather than blamed on an individual, since no
+single assignee is at fault.
+
+Candidate ranking knows about open seats: someone holding a qualification the
+crew is still short of gains 25 points and a reason saying so, which lifts them
+above an equally rested peer who would leave the gap open.
 
 ## Conflict shape
 

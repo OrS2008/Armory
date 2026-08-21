@@ -153,6 +153,10 @@ export const he = {
   'assignments.priority': 'עדיפות',
   'assignments.instructions': 'הנחיות',
   'assignments.requiredQualifications': 'הכשירים נדרשים',
+  'assignments.qualificationScopeAll': 'כל המשובצים',
+  'assignments.qualificationScopeSome': 'לפחות {count} מהצוות',
+  'assignments.qualificationHint':
+    'בחרו כמה מתוך הצוות חייבים להחזיק בכל הכשיר. "כל המשובצים" מחייב את כולם.',
   'assignments.date': 'תאריך',
   'assignments.startTime': 'שעת התחלה',
   'assignments.endTime': 'שעת סיום',
