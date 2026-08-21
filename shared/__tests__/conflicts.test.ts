@@ -450,3 +450,33 @@ describe('the hours before a soldier leaves', () => {
     expect(conflicts.some((conflict) => conflict.code === 'PRE_DEPARTURE_REST')).toBe(false);
   });
 });
+
+describe('a post scheduled twice for the same hours', () => {
+  const shift = (id: string, typeId: string) =>
+    assignment({ id, assignmentTypeId: typeId, title: 'ש״ג' });
+
+  it('names the second copy, and only the second', () => {
+    const conflicts = run([shift('a1', 'shag'), shift('a2', 'shag')]).filter(
+      (conflict) => conflict.code === 'DUPLICATE_ASSIGNMENT',
+    );
+    expect(conflicts).toHaveLength(1);
+    expect(conflicts[0]?.assignmentId).toBe('a2');
+  });
+
+  it('leaves two shifts of the same post at different hours alone', () => {
+    const later = assignment({
+      id: 'a2',
+      assignmentTypeId: 'shag',
+      startAt: at('2026-08-21', '12:00'),
+      endAt: at('2026-08-21', '16:00'),
+      assigneeIds: ['p2'],
+    });
+    const conflicts = run([shift('a1', 'shag'), later]);
+    expect(conflicts.some((conflict) => conflict.code === 'DUPLICATE_ASSIGNMENT')).toBe(false);
+  });
+
+  it('leaves two different posts at the same hours alone', () => {
+    const conflicts = run([shift('a1', 'shag'), shift('a2', 'siur')]);
+    expect(conflicts.some((conflict) => conflict.code === 'DUPLICATE_ASSIGNMENT')).toBe(false);
+  });
+});

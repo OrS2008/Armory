@@ -429,6 +429,7 @@ export async function loadAvailability(
 export function toEngineAssignment(assignment: Assignment): EngineAssignment {
   return {
     id: assignment.id,
+    assignmentTypeId: assignment.assignmentTypeId,
     title: assignment.title ?? assignment.assignmentTypeName,
     startAt: assignment.startAt,
     endAt: assignment.endAt,

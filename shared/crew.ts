@@ -113,6 +113,23 @@ export function buildCrew(
   return seats;
 }
 
+/**
+ * What to call a shift that carries no title of its own.
+ *
+ * Repeating the post name on every row of its own card says nothing; the sheet
+ * names its shifts by the part of day they cover — בוקר, צהריים, לילה — which
+ * is how people refer to them out loud.
+ */
+export function dayPartLabel(startHour: number): string {
+  // The small hours are tested first: they are night, and every later bound
+  // would otherwise catch them on the way past.
+  if (startHour < 4) return 'לילה';
+  if (startHour < 12) return 'בוקר';
+  if (startHour < 18) return 'צהריים';
+  if (startHour < 22) return 'ערב';
+  return 'לילה';
+}
+
 /** Assignments grouped into the cards the sheet prints, one per post. */
 export interface PostGroup {
   assignmentTypeId: string;

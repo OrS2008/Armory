@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildCrew, groupByPost, openSeatRoles, seatRoles } from '../crew';
+import { buildCrew, dayPartLabel, groupByPost, openSeatRoles, seatRoles } from '../crew';
 import type { Assignment, AssignmentAssignee } from '../types';
 
 const name = (id: string) => ({ q_driver: 'נהג', q_cmd: 'מפקד', q_hamal: 'חמ״ל' })[id] ?? id;
@@ -115,5 +115,15 @@ describe('grouping into posts', () => {
 
   it('leaves a cancelled shift off the sheet', () => {
     expect(groupByPost([shift({ status: 'cancelled' })])).toHaveLength(0);
+  });
+});
+
+describe('naming a shift with no title', () => {
+  it('reads by the part of day it covers', () => {
+    expect(dayPartLabel(6)).toBe('בוקר');
+    expect(dayPartLabel(14)).toBe('צהריים');
+    expect(dayPartLabel(19)).toBe('ערב');
+    expect(dayPartLabel(23)).toBe('לילה');
+    expect(dayPartLabel(2)).toBe('לילה');
   });
 });

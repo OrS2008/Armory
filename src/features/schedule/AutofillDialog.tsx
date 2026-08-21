@@ -29,6 +29,7 @@ interface Props {
 
 const toEngineAssignment = (assignment: Assignment): EngineAssignment => ({
   id: assignment.id,
+  assignmentTypeId: assignment.assignmentTypeId,
   title: assignment.title ?? assignment.assignmentTypeName,
   startAt: assignment.startAt,
   endAt: assignment.endAt,

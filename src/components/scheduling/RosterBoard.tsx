@@ -1,7 +1,8 @@
 import { Fragment } from 'react';
+import { TriangleAlert } from 'lucide-react';
 import type { Assignment, Qualification } from '@shared/types';
 import type { Conflict } from '@shared/conflicts';
-import { buildCrew, groupByPost, type PostGroup } from '@shared/crew';
+import { buildCrew, dayPartLabel, groupByPost, type PostGroup } from '@shared/crew';
 import { formatTime } from '@shared/format';
 import { t } from '@/i18n';
 import { cn } from '@/lib/cn';
@@ -97,7 +98,7 @@ function PostCard({
                 onClick={() => onOpen(shift.id)}
                 className="flex w-full items-baseline gap-3 border-t border-border-subtle px-3 py-1.5 text-start text-sm hover:bg-surface-sunken"
               >
-                <span className="ltr-inline w-24 shrink-0 font-semibold tabular-nums">
+                <span className="ltr-inline w-[6.5rem] shrink-0 whitespace-nowrap font-semibold tabular-nums">
                   {formatTime(shift.startAt, timezone)} - {formatTime(shift.endAt, timezone)}
                 </span>
                 {shift.assignees[0] ? (
@@ -143,6 +144,8 @@ function ShiftBlock({
     (conflict) => conflict.assignmentId === shift.id && conflict.severity === 'blocking',
   );
   const note = shift.notes;
+  const filled = shift.assignees.length;
+  const short = filled < shift.requiredHeadcount;
 
   return (
     <div className="border-t border-border-subtle">
@@ -151,12 +154,25 @@ function ShiftBlock({
         onClick={() => onOpen(shift.id)}
         className="flex w-full items-baseline gap-2 bg-surface-sunken px-3 py-1.5 text-start hover:bg-border-subtle"
       >
-        <span className="text-sm font-bold">{shift.title ?? shift.assignmentTypeName}</span>
-        <span className="ltr-inline ms-auto text-sm font-semibold tabular-nums">
+        <span className="text-sm font-bold">
+          {shift.title ?? dayPartLabel(Number(formatTime(shift.startAt, timezone).slice(0, 2)))}
+        </span>
+        <span
+          className={cn(
+            'ltr-inline rounded px-1.5 text-xs font-semibold tabular-nums',
+            short ? 'bg-danger-soft text-danger' : 'text-ink-muted',
+          )}
+        >
+          {filled}/{shift.requiredHeadcount}
+        </span>
+        <span className="ltr-inline ms-auto whitespace-nowrap text-sm font-semibold tabular-nums">
           {formatTime(shift.startAt, timezone)} - {formatTime(shift.endAt, timezone)}
         </span>
         {blocking ? (
-          <span className="text-xs font-semibold text-danger">{t('conflicts.blocking')}</span>
+          <TriangleAlert
+            className="size-4 shrink-0 text-danger"
+            aria-label={t('conflicts.title')}
+          />
         ) : null}
       </button>
 
@@ -165,7 +181,7 @@ function ShiftBlock({
           {seats.map((seat, index) => (
             <Fragment key={`${seat.roleQualificationId ?? 'plain'}-${index}`}>
               <tr className="border-t border-border-subtle">
-                <td className="w-24 px-3 py-1 align-top text-xs font-semibold text-ink-muted">
+                <td className="w-20 whitespace-nowrap py-1 pe-1 ps-3 align-top text-xs font-semibold text-ink-muted sm:w-28 sm:pe-3">
                   {seat.label}
                 </td>
                 <td className="px-3 py-1 align-top">
@@ -178,7 +194,7 @@ function ShiftBlock({
                 {index === 0 && note ? (
                   <td
                     rowSpan={seats.length}
-                    className="w-40 border-s border-border-subtle px-3 py-1 align-top text-xs text-ink-muted"
+                    className="hidden w-40 border-s border-border-subtle px-3 py-1 align-top text-xs text-ink-muted sm:table-cell"
                   >
                     {note}
                   </td>
@@ -188,6 +204,12 @@ function ShiftBlock({
           ))}
         </tbody>
       </table>
+
+      {note ? (
+        <p className="border-t border-border-subtle px-3 py-1 text-xs text-ink-muted sm:hidden">
+          {note}
+        </p>
+      ) : null}
     </div>
   );
 }

@@ -35,6 +35,7 @@ export const RULE_CODES = [
   'ROLE_QUALIFICATION',
   'ROLE_TAKEN',
   'PRE_DEPARTURE_REST',
+  'DUPLICATE_ASSIGNMENT',
 ] as const;
 
 export type RuleCode = (typeof RULE_CODES)[number];
@@ -66,6 +67,8 @@ export interface RequiredQualification {
 
 export interface EngineAssignment {
   id: string;
+  /** The post this shift belongs to; two shifts of one post can coincide. */
+  assignmentTypeId?: string;
   title: string;
   startAt: number;
   endAt: number;
@@ -224,6 +227,14 @@ export const DEFAULT_RULES: SchedulingRule[] = [
     config: { hours: 8 },
   },
   {
+    code: 'DUPLICATE_ASSIGNMENT',
+    name: 'אותה משימה נוצרה פעמיים',
+    enabled: true,
+    severity: 'warning',
+    overridable: true,
+    config: {},
+  },
+  {
     code: 'UNPUBLISHED_CHANGES',
     name: 'שינויים שטרם פורסמו',
     enabled: true,
@@ -269,6 +280,26 @@ export function detectConflicts(input: EngineInput): Conflict[] {
       resolution: conflictResolution(code, params),
     });
   };
+
+  // The same post scheduled twice for the same hours. Running a rotation a
+  // second time is easy to do and impossible to see on a board that lists every
+  // shift separately, so it is named rather than left to be noticed.
+  const duplicateRule = rule('DUPLICATE_ASSIGNMENT');
+  if (duplicateRule) {
+    const seen = new Set<string>();
+    for (const assignment of [...active].sort((left, right) => left.id.localeCompare(right.id))) {
+      if (!assignment.assignmentTypeId) continue;
+      const key = `${assignment.assignmentTypeId}:${assignment.startAt}:${assignment.endAt}`;
+      if (seen.has(key)) {
+        add('DUPLICATE_ASSIGNMENT', duplicateRule, assignment, null, {
+          assignment: assignment.title,
+          from: formatTime(assignment.startAt, timezone),
+          to: formatTime(assignment.endAt, timezone),
+        });
+      }
+      seen.add(key);
+    }
+  }
 
   // Per-assignment staffing checks.
   for (const assignment of active) {

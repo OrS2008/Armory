@@ -116,7 +116,7 @@ export const he = {
   'schedule.assignPerson': 'שיבוץ אדם',
   'schedule.unassign': 'הסרת שיבוץ',
   'schedule.hoursHeader': 'שעות',
-  'schedule.autofill': 'בניית שבצ״ק אוטומטית',
+  'schedule.autofill': 'שיבוץ אוטומטי',
   'schedule.autofillTitle': 'הצעת שיבוץ אוטומטית',
   'schedule.autofillSubtitle': 'ההצעה אינה נשמרת עד לאישורכם. אפשר להסיר כל שורה לפני האישור.',
   'schedule.autofillEmpty': 'כל המשימות בטווח כבר מאוישות.',

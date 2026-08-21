@@ -64,6 +64,8 @@ export const conflictMessages: Record<string, string> = {
     'ל{person} {actual} שעות שיבוץ ב־{days} הימים האחרונים, מעל המותר ({required}).',
   UNDERSTAFFED: 'המשימה {assignment} מאוישת ב־{actual} מתוך {required} אנשים.',
   OVERSTAFFED: 'המשימה {assignment} מאוישת ב־{actual} אנשים במקום {required}.',
+  DUPLICATE_ASSIGNMENT:
+    'המשימה {assignment} מופיעה פעמיים באותן שעות ({from}–{to}). ככל הנראה נוצרה כפילות.',
   UNPUBLISHED_CHANGES: 'במשימה {assignment} קיימים שינויים שטרם פורסמו.',
   EXCLUSIVE_QUALIFICATION:
     '{person} מוגדר {qualification} ומשובץ אך ורק למשימות {qualification}. {assignment} אינה כזו.',
@@ -85,6 +87,7 @@ export const conflictResolutions: Record<string, string> = {
   MAX_HOURS_IN_WINDOW: 'שבצו אדם עם עומס נמוך יותר בתקופה זו.',
   UNDERSTAFFED: 'הוסיפו אנשים למשימה או הקטינו את דרישת האיוש.',
   OVERSTAFFED: 'הסירו שיבוץ עודף או עדכנו את דרישת האיוש.',
+  DUPLICATE_ASSIGNMENT: 'בטלו את אחד העותקים — ביטול משימה מתועד ואינו מוחק את השני.',
   UNPUBLISHED_CHANGES: 'פרסמו את השבצ״ק כדי שהשינויים יגיעו למשובצים.',
   EXCLUSIVE_QUALIFICATION: 'שבצו אותו למשימת {qualification}, או הסירו ממנו את ההכשיר הייעודי.',
   ROLE_QUALIFICATION: 'בחרו אדם המחזיק בהכשיר, או שבצו אותו כלוחם.',
