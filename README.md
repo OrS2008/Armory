@@ -38,9 +38,9 @@ the equipment application. Cloudflare builds and publishes on every push to
 
 One-time setup:
 
-1. `npx wrangler d1 create shabatzak`, and commit the real `database_id` into
-   `wrangler.toml`. Pages reads that file and it overrides the dashboard, so the
-   placeholder must go.
+1. `npx wrangler d1 create shabatzak`, and put the real `database_id` into
+   `wrangler.toml`. Pages reads that file and it overrides the dashboard, so a
+   wrong id there cannot be fixed from the dashboard. (Already set.)
 2. `npx wrangler d1 migrations apply shabatzak --remote`.
 3. Dashboard → Workers & Pages → Create → **Pages** → Connect to Git. Build
    command `npm run build`, output directory `dist`, no deploy command.

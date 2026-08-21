@@ -24,21 +24,29 @@ touches Cloudflare.
 
 ### 1. Create the D1 database
 
-```bash
-npx wrangler d1 create shabatzak
+Already done — `wrangler.toml` carries the real id:
+
+```toml
+[[d1_databases]]
+binding = "DB"
+database_name = "shabatzak"
+database_id = "cdd2fb8a-d82e-4b50-bf1d-02a5f103aef6"
 ```
 
-Copy the `database_id` it prints into `wrangler.toml`, replacing the all-zeros
-placeholder, and commit it.
+For a fresh environment: `npx wrangler d1 create <name>`, then put the printed
+`database_id` here.
 
-This step is not optional. Cloudflare Pages reads `wrangler.toml` from the
-repository and it **takes precedence over the bindings configured in the
-dashboard**, so a placeholder id left in the file would deploy a site whose every
-database query fails. The equipment application commits its real id for exactly
-this reason.
+This is not optional and not cosmetic. Cloudflare Pages reads `wrangler.toml`
+from the repository and it **takes precedence over the bindings configured in
+the dashboard** — no dashboard binding can compensate for a wrong id here. A
+placeholder produced exactly this on the first deploy:
+
+```
+Error 8000022: Invalid database UUID (00000000-0000-0000-0000-000000000000)
+```
 
 The id is an identifier, not a credential: it is useless without an account API
-token.
+token, which is why the equipment application also keeps its own in the repo.
 
 ### 2. Apply the migrations
 
