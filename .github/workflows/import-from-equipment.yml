@@ -83,6 +83,24 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
+      # The live equipment system (tzayad) keeps every personal detail as
+      # ciphertext: `records` holds ek/iv/ct against an rid derived from the
+      # personal number, and the key that opens it is wrapped under a user's
+      # password. No server-side SELECT can produce a name from it, by design.
+      # Say that plainly instead of failing later on "no such table: soldiers".
+      - name: Check the source has a readable roster
+        run: |
+          set -euo pipefail
+          missing=""
+          for table in soldiers departments licenses; do
+            grep -q "\"name\": \"$table\"" tables.json || missing="$missing $table"
+          done
+          if [ -n "$missing" ]; then
+            echo "Missing tables:$missing" >> "$GITHUB_STEP_SUMMARY"
+            echo '::error::This database has no readable roster. If it is the encrypted equipment system, the names live inside records.ct and can only be decrypted in the browser by someone who has signed in. Export the roster from that application and load it through SHABATZAK: כוח אדם, ייבוא מקובץ.'
+            exit 1
+          fi
+
       # Read-only. Approved, non-archived soldiers, and only the columns
       # scheduling needs; a current military licence becomes the driver flag.
       #
