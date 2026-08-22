@@ -34,6 +34,19 @@ async function cacheShell(cache, response) {
   );
 }
 
+/**
+ * The scripts and stylesheets the shell cannot render without.
+ *
+ * Assets were cached only when the worker happened to intercept a request for
+ * them, which meant a visit that installed the worker and then closed left
+ * nothing behind: the next offline open served the shell and then failed to
+ * fetch its own bundle, showing a blank page. The shell names its assets, so
+ * they are fetched at install alongside it.
+ */
+function assetUrls(html) {
+  return [...new Set(html.match(/\/assets\/[A-Za-z0-9._-]+/g) ?? [])];
+}
+
 self.addEventListener('install', (event) => {
   event.waitUntil(
     (async () => {
@@ -58,12 +71,33 @@ self.addEventListener('activate', (event) => {
       );
       // Hashed asset names accumulate across deploys and the old ones can never
       // be requested again. Emptying the asset cache on activation keeps it
-      // bounded without tracking a manifest.
+      // bounded without tracking a manifest — and refilling it immediately,
+      // from the shell this worker just cached, is what makes the promise true.
       await caches.delete(ASSETS);
+      await precacheAssets();
       await self.clients.claim();
     })(),
   );
 });
+
+/**
+ * Fetch the assets the cached shell names, before any client is claimed.
+ *
+ * They used to be cached only when the worker happened to intercept a request
+ * for them, which is never on the visit that installs it: the page had already
+ * loaded its bundle before the worker existed. A reader who opened the app once
+ * and came back with no signal got the shell and then a blank screen, because
+ * the shell's own script was not there. Individually rather than with addAll,
+ * which is atomic — one asset that 404s must not discard the rest.
+ */
+async function precacheAssets() {
+  const shell = await caches.match(SHELL_URL);
+  if (!shell) return;
+  const urls = assetUrls(await shell.text());
+  if (urls.length === 0) return;
+  const assets = await caches.open(ASSETS);
+  await Promise.allSettled(urls.map((url) => assets.add(url)));
+}
 
 self.addEventListener('fetch', (event) => {
   const request = event.request;

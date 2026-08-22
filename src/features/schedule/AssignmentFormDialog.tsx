@@ -30,7 +30,7 @@ const formSchema = z.object({
   notes: z.string().max(1000).optional(),
   frequency: z.enum(['none', 'daily', 'weekdays']),
   /** 0 = a single occurrence per day; otherwise a round-the-clock rotation. */
-  shiftHours: z.coerce.number().int().min(0).max(12),
+  shiftHours: z.coerce.number().int().min(0).max(24),
   weekdays: z.array(z.coerce.number().int().min(0).max(6)).optional(),
   untilDate: z.string().optional(),
 });
@@ -165,6 +165,15 @@ export function AssignmentFormDialog({ open, dayKey, timezone, scheduleId, onClo
         .slice(0, perDay)
         .map((occurrence) => formatTime(occurrence.startAt, timezone))
         .join(', ');
+      // A rotation of one is a 24-hour turn — קצין מוצב — and "1 משמרות" is
+      // not how anybody says that.
+      if (perDay === 1) {
+        return t('assignments.previewFullDay', {
+          times,
+          until: formatDayKey(untilDate),
+          total: occurrences.length,
+        });
+      }
       return t('assignments.previewShifts', {
         count: perDay,
         times,

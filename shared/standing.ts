@@ -11,6 +11,7 @@
  * period needs. It is pure: the caller decides which of them already exist and
  * writes only the rest, which is what makes running it twice harmless.
  */
+import { SHIFT_HOUR_OPTIONS, isShiftHours } from './recurrence';
 import { DEFAULT_TIMEZONE, addDays, isDayKey, wallClockToUtc } from './time';
 
 export interface StandingPost {
@@ -32,12 +33,16 @@ export interface StandingShift {
 /** As long a period as one action may lay out. Eleven weeks fits comfortably. */
 export const MAX_STANDING_DAYS = 180;
 
-/** Shift lengths that tile a day exactly. A post covered in 5-hour shifts drifts. */
-export const STANDING_SHIFT_HOURS = [2, 3, 4, 6, 8, 12, 24] as const;
+/**
+ * Shift lengths that tile a day exactly. A post covered in 5-hour shifts drifts.
+ *
+ * The same list the one-off recurrence form offers, deliberately: two lists of
+ * the same idea drifted apart once already, and a קצין מוצב created from the
+ * board came out as two twelve-hour turns because only one of them knew about 24.
+ */
+export const STANDING_SHIFT_HOURS = SHIFT_HOUR_OPTIONS;
 
-export function isStandingShiftHours(hours: number): boolean {
-  return (STANDING_SHIFT_HOURS as readonly number[]).includes(hours);
-}
+export const isStandingShiftHours = isShiftHours;
 
 /** Days in `[fromDay, toDay]`, inclusive. Empty when the range is inverted. */
 export function daysInRange(fromDay: string, toDay: string): string[] {

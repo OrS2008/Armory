@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { expandRecurrence } from '../recurrence';
+import { SHIFT_HOUR_OPTIONS, expandRecurrence } from '../recurrence';
 import { formatTime } from '../format';
 import { dayKey, wallClockToUtc } from '../time';
 
@@ -120,6 +120,47 @@ describe('round-the-clock shift rotation', () => {
       { frequency: 'daily', untilDate: '2026-08-21', shiftHours: 5 },
       TZ,
     );
+    expect(occurrences).toHaveLength(1);
+  });
+});
+
+/*
+ * A rotation of one.
+ *
+ * קצין מוצב is a 24-hour turn, which is a round-the-clock post handed over
+ * once a day rather than a special case. It came out as two twelve-hour shifts
+ * because the list of shift lengths the form offered stopped at 12 while the
+ * standing post's own list went to 24 — two lists of one idea, drifted apart.
+ */
+describe('a twenty-four hour turn', () => {
+  it('is one occurrence a day, not two', () => {
+    const occurrences = expandRecurrence(
+      wallClockToUtc('2026-08-27', '00:00', TZ),
+      wallClockToUtc('2026-08-28', '00:00', TZ),
+      { frequency: 'daily', untilDate: '2026-08-29', shiftHours: 24 },
+      TZ,
+    );
+    expect(occurrences).toHaveLength(3);
+    for (const occurrence of occurrences) {
+      expect(occurrence.endAt - occurrence.startAt).toBe(24 * 60 * 60 * 1000);
+    }
+  });
+
+  it('is offered wherever a rotation can be chosen', () => {
+    expect(SHIFT_HOUR_OPTIONS).toContain(24);
+    // Every option has to tile the day, or the post drifts an hour each turn.
+    for (const hours of SHIFT_HOUR_OPTIONS) expect(24 % hours).toBe(0);
+  });
+
+  it('refuses a length that does not tile the day', () => {
+    const occurrences = expandRecurrence(
+      wallClockToUtc('2026-08-27', '00:00', TZ),
+      wallClockToUtc('2026-08-27', '05:00', TZ),
+      { frequency: 'daily', untilDate: '2026-08-27', shiftHours: 5 },
+      TZ,
+    );
+    // Falls back to the single occurrence it was given rather than inventing
+    // a rotation that leaves a four-hour hole every day.
     expect(occurrences).toHaveLength(1);
   });
 });

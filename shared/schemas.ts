@@ -2,6 +2,7 @@
 import { z } from 'zod';
 import { validationMessages as v } from './messages.he';
 import { isDayKey } from './time';
+import { isShiftHours } from './recurrence';
 import { MAX_STANDING_DAYS, isStandingShiftHours } from './standing';
 
 const trimmed = (max: number) => z.string().trim().max(max, v.tooLong);
@@ -141,7 +142,7 @@ export const recurrenceSchema = z
     weekdays: z.array(z.number().int().min(0).max(6)).max(7).optional(),
     untilDate: dayKeySchema.optional(),
     /** Round-the-clock rotation: one occurrence per handover, not per day. */
-    shiftHours: z.number().int().min(1).max(12).optional(),
+    shiftHours: z.number().int().min(1).max(24).refine(isShiftHours, v.shiftHours).optional(),
   })
   .optional();
 export type RecurrenceInput = z.infer<typeof recurrenceSchema>;

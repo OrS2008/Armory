@@ -308,6 +308,8 @@ export const he = {
   'assignments.previewOne': 'משימה אחת, {range}.',
   'assignments.previewShifts':
     '{count} משמרות ביום ({times}), בכל יום עד {until}. סה״כ {total} משימות.',
+  'assignments.previewFullDay':
+    'משמרת אחת של 24 שעות בכל יום, מ־{times}, עד {until}. סה״כ {total} משימות.',
   'assignments.previewDaily': 'משימה אחת בכל יום עד {until}. סה״כ {total} משימות.',
   'assignments.previewIncomplete': 'בחרו סוג משימה ותאריך כדי לראות מה ייווצר.',
   'assignments.standing': 'משימה קבועה',
@@ -350,6 +352,7 @@ export const he = {
   'assignments.shiftRotationOff': 'ללא — מופע אחד ביום',
   'assignments.shiftEvery': 'התחלפות כל {hours} שעות',
   'assignments.shiftRotationHint': 'המשימה תאויש ברציפות, {count} משמרות ביממה.',
+  'assignments.shiftRotationHintOne': 'המשימה תאויש ברציפות, משמרת אחת של 24 שעות ביממה.',
   'assignments.shiftRotationOffHint': 'המשימה תיווצר פעם אחת בכל יום נבחר.',
   'assignments.create': 'יצירת משימה',
   'assignments.assigned': 'משובצים',

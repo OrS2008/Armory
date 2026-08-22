@@ -109,7 +109,9 @@ export function StandingRosterDialog({ open, dayKey, onClose }: Props) {
               <li key={type.id} className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
                 <span className="font-medium">{type.name}</span>
                 <span className="text-xs text-ink-muted">
-                  {t('assignments.shiftRotationHint', { count: 24 / type.shiftHours })}
+                  {type.shiftHours === 24
+                    ? t('assignments.shiftRotationHintOne')
+                    : t('assignments.shiftRotationHint', { count: 24 / type.shiftHours })}
                 </span>
                 <span className="ltr-inline ms-auto text-xs text-ink-faint">
                   {t('schedule.standingCrew', { count: type.requiredHeadcount })} ·{' '}

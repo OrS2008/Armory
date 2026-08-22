@@ -71,13 +71,24 @@ export function expandRecurrence(
   return occurrences.length > 0 ? occurrences : [first];
 }
 
-/** Shift lengths that tile a 24-hour day exactly. */
-export const SHIFT_HOUR_OPTIONS = [2, 3, 4, 6, 8, 12] as const;
+/**
+ * Shift lengths that tile a 24-hour day exactly.
+ *
+ * 24 belongs here: a post handed over once a day is a rotation of one, and
+ * קצין מוצב is exactly that. Leaving it out did not stop anyone creating the
+ * post — it quietly made 12 the longest shift on offer, so a 24-hour turn came
+ * out as two.
+ */
+export const SHIFT_HOUR_OPTIONS = [2, 3, 4, 6, 8, 12, 24] as const;
+
+export function isShiftHours(hours: number): boolean {
+  return (SHIFT_HOUR_OPTIONS as readonly number[]).includes(hours);
+}
 
 function normaliseShiftHours(value: number | undefined): number | null {
   if (!value || !Number.isFinite(value)) return null;
   const hours = Math.trunc(value);
-  return (SHIFT_HOUR_OPTIONS as readonly number[]).includes(hours) ? hours : null;
+  return isShiftHours(hours) ? hours : null;
 }
 
 /** One day's worth of handovers, starting from the first shift's time. */
