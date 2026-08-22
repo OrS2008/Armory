@@ -1,0 +1,123 @@
+name: Clear all posts (assignment types)
+
+# The full reset: not just the schedule, the posts themselves.
+#
+# "פריסת תקופה" refills the board from whatever posts exist; this is for when
+# the posts themselves are what got tangled — duplicated shift lengths, marks
+# added in the wrong direction, whatever "מחק את הכל אני יקים מחדש" means this
+# time. It removes every assignment type, which cascades the two join tables
+# that describe what a post requires and what it refuses
+# (assignment_type_qualifications, assignment_type_exclusions).
+#
+# It does NOT touch qualifications (the marks themselves — מפקד, נהג, מבצעים,
+# מפלג, קצין מוצב), personnel, or the audit trail. Rebuilding the five standing
+# posts from scratch is `scripts/setup-company.sql`, run via the
+# "Set up the company posts" workflow, which is why this leaves the marks in
+# place — that script assumes they already exist.
+#
+# A post that still has shifts under it cannot be removed this way; the
+# database's own foreign key refuses, same as the app does. Run
+# "Clear the schedule" first if the board is not already empty.
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: Type CLEAR to go ahead. Leave empty to only report.
+        type: string
+        default: ''
+      database_name:
+        description: D1 database name
+        type: string
+        default: shabatzak
+
+concurrency:
+  group: clear-posts
+  cancel-in-progress: false
+
+jobs:
+  clear:
+    name: Report, then clear
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      DATABASE_NAME: ${{ inputs.database_name }}
+
+    steps:
+      - name: Check that the credentials are present
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo '::error::Add CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID under Settings, Secrets and variables, Actions. The token needs Account, D1, Edit.'
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - run: npm clean-install
+
+      # What is at stake. A post that still carries shifts shows up here with a
+      # non-zero count, which is the signal to clear the schedule first — the
+      # removal step below will otherwise fail on that post's foreign key.
+      - name: Count what is at stake
+        run: |
+          set -euo pipefail
+          npx wrangler d1 execute "$DATABASE_NAME" --remote --json --command \
+            "SELECT t.name, t.active, t.standing,
+                    (SELECT COUNT(*) FROM assignment_instances a
+                      WHERE a.assignment_type_id = t.id) AS shifts
+               FROM assignment_types t
+              WHERE t.org_id = 'org_default'
+              ORDER BY t.priority, t.name" \
+            | tee counts.json
+          {
+            echo '### Posts that would be removed'
+            echo '```json'
+            cat counts.json
+            echo '```'
+            echo ''
+            echo 'A post with a non-zero `shifts` count will make this step fail —'
+            echo 'run "Clear the schedule" first.'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Report only, because CLEAR was not typed
+        if: ${{ inputs.confirm != 'CLEAR' }}
+        run: |
+          {
+            echo ''
+            echo '**Nothing was written.** Run again with `confirm` set to `CLEAR` to go ahead.'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Cascades assignment_type_qualifications and assignment_type_exclusions.
+      # Leaves qualifications, personnel and the audit trail untouched.
+      - name: Clear
+        if: ${{ inputs.confirm == 'CLEAR' }}
+        run: |
+          set -euo pipefail
+          npx wrangler d1 execute "$DATABASE_NAME" --remote --command \
+            "DELETE FROM assignment_types WHERE org_id = 'org_default';"
+          echo 'All posts removed.' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Report what remains
+        if: ${{ inputs.confirm == 'CLEAR' }}
+        run: |
+          set -euo pipefail
+          npx wrangler d1 execute "$DATABASE_NAME" --remote --json --command \
+            "SELECT (SELECT COUNT(*) FROM assignment_types WHERE org_id = 'org_default') AS posts,
+                    (SELECT COUNT(*) FROM qualifications WHERE org_id = 'org_default') AS marks,
+                    (SELECT COUNT(*) FROM personnel WHERE org_id = 'org_default') AS people,
+                    (SELECT COUNT(*) FROM assignment_instances) AS shifts_left" \
+            | tee remaining.json
+          {
+            echo '### What remains'
+            echo '```json'
+            cat remaining.json
+            echo '```'
+            echo ''
+            echo 'Next: run "Set up the company posts" to recreate the five standing'
+            echo 'posts, then "פריסת תקופה" from the app to fill the board.'
+          } >> "$GITHUB_STEP_SUMMARY"
