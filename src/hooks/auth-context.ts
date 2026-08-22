@@ -2,10 +2,20 @@ import { createContext, use } from 'react';
 import type { Permission } from '@shared/rbac';
 import type { SessionUser } from '@shared/types';
 
+/**
+ * A password that was accepted but is not yet a session: the account has a
+ * second factor and the login is half done.
+ */
+export interface MfaChallenge {
+  challenge: string;
+}
+
 export interface AuthContextValue {
   user: SessionUser | null;
   isLoading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  /** Resolves to a challenge when the account has a second factor. */
+  login: (email: string, password: string) => Promise<MfaChallenge | null>;
+  completeMfa: (challenge: string, code: string) => Promise<void>;
   logout: () => Promise<void>;
   can: (permission: Permission) => boolean;
 }

@@ -43,7 +43,7 @@ log, workload reports, Hebrew RTL throughout and a responsive mobile UI.
 | Tailwind + shadcn/ui | Tailwind v4 + a small in-repo component set | shadcn components are copied-in source anyway; the in-repo set is written RTL-first and carries the plan's semantic tokens. |
 | WebSockets / Socket.IO for live updates | Query polling (45–60 s) plus refetch on focus | Pages Functions have no persistent socket; live sockets need Durable Objects. Tracked as post-MVP in `docs/06-backend-architecture.md`. |
 | Redis + BullMQ background jobs | None yet | Nothing in the MVP needs a queue. Reminder notifications will need one (Cron Triggers or Queues). |
-| MFA for privileged users | Password + session only | Not implemented. Stated plainly in `docs/10-security-model.md`. |
+| MFA for privileged users | Password + session only | TOTP with recovery codes, offered to every account and not enforced. See `docs/10-security-model.md`. |
 | CP-SAT / OR-Tools optimisation | Phase 1 only: ranked, explainable candidates | The plan sequences optimisation after the policy is agreed (plan section 48). |
 
 ## Definition of done for the MVP

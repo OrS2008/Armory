@@ -11,6 +11,7 @@ import { useNotifications } from '@/hooks/queries';
 import { useTheme } from '@/hooks/useTheme';
 import { OfflineBanner } from '@/components/layout/OfflineBanner';
 import { PasswordDialog } from '@/features/auth/PasswordDialog';
+import { MfaDialog } from '@/features/auth/MfaDialog';
 import { CommandPalette, type PaletteAction } from '@/components/command/CommandPalette';
 
 export function AppShell() {
@@ -21,6 +22,7 @@ export function AppShell() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [changingPassword, setChangingPassword] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [managingMfa, setManagingMfa] = useState(false);
 
   const visible = navItems.filter((item) => !item.permission || can(item.permission));
   const items: NavItem[] = user?.personnelId ? [personalNavItem, ...visible] : visible;
@@ -114,6 +116,13 @@ export function AppShell() {
                   label: t('account.changePassword'),
                   icon: <KeyRound className="size-4" />,
                   onSelect: () => setChangingPassword(true),
+                },
+                {
+                  key: 'mfa',
+                  label: t('mfa.title'),
+                  hint: user?.mfaEnabled ? t('mfa.statusOn') : t('mfa.statusOff'),
+                  icon: <ShieldCheck className="size-4" />,
+                  onSelect: () => setManagingMfa(true),
                 },
                 {
                   key: 'theme',
@@ -224,6 +233,7 @@ export function AppShell() {
       {/* Mounted only while open: a hidden password form on every screen is
           something browsers offer to fill, and something tests trip over. */}
       {changingPassword ? <PasswordDialog open onClose={() => setChangingPassword(false)} /> : null}
+      {managingMfa ? <MfaDialog open onClose={() => setManagingMfa(false)} /> : null}
     </div>
   );
 }

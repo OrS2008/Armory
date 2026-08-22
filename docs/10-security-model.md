@@ -103,27 +103,48 @@ replacement decisions.
 - Application logs contain no scheduling data; the single client-side log is the
   error boundary's message and component stack.
 
+## Two-factor authentication
+
+TOTP (RFC 6238, HMAC-SHA1, 30-second steps, six digits), which is what every
+authenticator app implements. Enrolment stores the secret but leaves the factor
+off until a code proves the app actually has it, so a mistyped setup cannot
+lock an account out of its own login.
+
+- A password on an enrolled account buys a five-minute, single-purpose
+  challenge — no session and no cookie until the code arrives.
+- A wrong code does not spend the challenge, so a typo does not send the reader
+  back to the password form; the guard against guessing is the login throttle,
+  which the code step shares.
+- Ten recovery codes are shown once, stored only as hashes, compared in
+  constant time, and each is spent on use.
+- An administrator can clear a lost factor from the users screen. They cannot
+  set one up for somebody else: enrolment requires holding the authenticator.
+
 ## Known gaps
 
 Stated plainly rather than implied:
 
-- **No MFA.** The plan asks for MFA on privileged accounts. Not built.
+- **MFA is offered, not enforced.** Any account can enrol; nothing requires a
+  commander to. Enforcing it needs a way in for someone who has enrolled and
+  then lost their phone before the administrator can clear it, and that path is
+  the administrator, so a unit that wants it enforced should make it policy and
+  audit `mfa_enabled`.
 - **No SSO / passkeys.**
-- **No user administration UI.** Accounts after the bootstrap admin must be
-  created directly in D1.
 - **No session-list or remote-revocation screen**, although the data supports it.
 - **No encryption at rest beyond the platform's.** D1 is encrypted by
   Cloudflare; there is no application-level field encryption.
 - **No automated dependency scanning** in CI yet (Dependabot or `npm audit`).
-- **Rate limiting covers login only**, not the API surface generally.
+- **Rate limiting covers login only**, not the API surface generally. The
+  second-factor step shares that throttle, which is what keeps a five-minute
+  challenge from being long enough to walk through six digits.
 
 ## Before production use
 
 1. Provision a dedicated D1 database and put the real id in `wrangler.toml`.
 2. Set `BOOTSTRAP_ADMIN_EMAIL` and `BOOTSTRAP_ADMIN_PASSWORD` as Pages secrets,
    log in once, then rotate them.
-3. Restrict access at the edge (Cloudflare Access or equivalent) if the unit
-   requires more than password authentication — that is the practical answer to
-   the missing MFA until it is built.
+3. Have the privileged accounts enrol in two-factor authentication from the
+   account menu, and keep their recovery codes somewhere that is not the phone
+   holding the authenticator.
 4. Enable D1 point-in-time recovery and confirm a restore.
 5. Review this gap list with whoever owns the unit's security policy.

@@ -31,6 +31,9 @@ export const errorMessages: Record<string, string> = {
     'זהו מנהל המערכת הפעיל האחרון. מנו מנהל נוסף לפני שמורידים לו הרשאה או מבטלים אותו.',
   [ErrorCodes.SELF_LOCKOUT]: 'אי אפשר לשנות לעצמך את ההרשאה או לבטל את המשתמש שלך.',
   [ErrorCodes.WRONG_PASSWORD]: 'הסיסמה הנוכחית שגויה.',
+  [ErrorCodes.MFA_REQUIRED]: 'נדרש קוד אימות דו־שלבי.',
+  [ErrorCodes.MFA_INVALID]: 'הקוד שגוי או שפג תוקפו. נסו קוד חדש מהאפליקציה.',
+  [ErrorCodes.MFA_NOT_SET_UP]: 'האימות הדו־שלבי לא הוגדר עדיין.',
   [ErrorCodes.SCHEDULING_CONFLICT]: 'קיימת התנגשות שיבוץ החוסמת את הפעולה.',
   [ErrorCodes.ALREADY_ASSIGNED]: 'האדם כבר משובץ למשימה זו.',
   [ErrorCodes.ROLE_TAKEN]: 'התפקיד הזה כבר תפוס במשימה. שבצו כלוחם, או פנו קודם את התפקיד.',
@@ -228,6 +231,7 @@ export const severityLabels: Record<Severity, string> = {
 /** Form and payload validation messages, shared by the API and the UI forms. */
 export const validationMessages = {
   passwordMismatch: 'הסיסמאות אינן זהות.',
+  mfaCode: 'יש להזין קוד בן שש ספרות.',
   passwordUnchanged: 'הסיסמה החדשה זהה לנוכחית.',
   required: 'שדה חובה',
   identifier: 'שם משתמש או דוא״ל אינם תקינים',

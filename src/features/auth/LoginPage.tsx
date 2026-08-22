@@ -12,9 +12,13 @@ import { Input } from '@/components/ui/Input';
 import { useAuth } from '@/hooks/auth-context';
 
 export function LoginPage() {
-  const { user, isLoading, login } = useAuth();
+  const { user, isLoading, login, completeMfa } = useAuth();
   const navigate = useNavigate();
   const [serverError, setServerError] = useState<string | null>(null);
+  // Set once the password has been accepted and only the code is missing.
+  const [challenge, setChallenge] = useState<string | null>(null);
+  const [code, setCode] = useState('');
+  const [verifying, setVerifying] = useState(false);
 
   const form = useForm<LoginInput>({
     resolver: zodResolver(loginSchema),
@@ -26,12 +30,31 @@ export function LoginPage() {
   const onSubmit = form.handleSubmit(async (values) => {
     setServerError(null);
     try {
-      await login(values.email, values.password);
+      const pending = await login(values.email, values.password);
+      if (pending) {
+        setChallenge(pending.challenge);
+        return;
+      }
       await navigate('/dashboard', { replace: true });
     } catch (error) {
       setServerError(error instanceof ApiError ? error.message : t('state.errorBody'));
     }
   });
+
+  const onVerify = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!challenge) return;
+    setServerError(null);
+    setVerifying(true);
+    try {
+      await completeMfa(challenge, code);
+      await navigate('/dashboard', { replace: true });
+    } catch (error) {
+      setServerError(error instanceof ApiError ? error.message : t('state.errorBody'));
+    } finally {
+      setVerifying(false);
+    }
+  };
 
   return (
     <main className="flex min-h-dvh items-center justify-center bg-surface px-4 py-10">
@@ -42,58 +65,106 @@ export function LoginPage() {
           <p className="text-sm text-ink-muted">{t('auth.subtitle')}</p>
         </div>
 
-        <form className="flex flex-col gap-4" onSubmit={(event) => void onSubmit(event)} noValidate>
-          <Field label={t('auth.email')} error={form.formState.errors.email?.message} required>
-            {({ id, describedBy, invalid, required }) => (
-              <Input
-                id={id}
-                aria-required={required}
-                type="text"
-                inputMode="text"
-                autoCapitalize="none"
-                autoCorrect="off"
-                spellCheck={false}
-                autoComplete="username"
-                dir="ltr"
-                aria-describedby={describedBy}
-                aria-invalid={invalid}
-                {...form.register('email')}
-              />
-            )}
-          </Field>
+        {challenge ? (
+          <form className="flex flex-col gap-4" onSubmit={(event) => void onVerify(event)}>
+            <p className="text-sm text-ink-muted">{t('auth.mfaPrompt')}</p>
+            <Field label={t('auth.mfaCode')} required>
+              {({ id, required }) => (
+                <Input
+                  id={id}
+                  aria-required={required}
+                  dir="ltr"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  autoCapitalize="characters"
+                  value={code}
+                  onChange={(event) => setCode(event.target.value)}
+                />
+              )}
+            </Field>
 
-          <Field
-            label={t('auth.password')}
-            error={form.formState.errors.password?.message}
-            required
-          >
-            {({ id, describedBy, invalid, required }) => (
-              <Input
-                id={id}
-                aria-required={required}
-                type="password"
-                autoComplete="current-password"
-                dir="ltr"
-                aria-describedby={describedBy}
-                aria-invalid={invalid}
-                {...form.register('password')}
-              />
-            )}
-          </Field>
+            {serverError ? (
+              <p
+                role="alert"
+                className="rounded-[var(--radius-control)] bg-danger-soft px-3 py-2 text-sm text-danger"
+              >
+                {serverError}
+              </p>
+            ) : null}
 
-          {serverError ? (
-            <p
-              role="alert"
-              className="rounded-[var(--radius-control)] bg-danger-soft px-3 py-2 text-sm text-danger"
+            <Button type="submit" size="lg" loading={verifying}>
+              {t('auth.mfaSubmit')}
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => {
+                setChallenge(null);
+                setCode('');
+                setServerError(null);
+              }}
             >
-              {serverError}
-            </p>
-          ) : null}
+              {t('auth.mfaBack')}
+            </Button>
+          </form>
+        ) : (
+          <form
+            className="flex flex-col gap-4"
+            onSubmit={(event) => void onSubmit(event)}
+            noValidate
+          >
+            <Field label={t('auth.email')} error={form.formState.errors.email?.message} required>
+              {({ id, describedBy, invalid, required }) => (
+                <Input
+                  id={id}
+                  aria-required={required}
+                  type="text"
+                  inputMode="text"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  autoComplete="username"
+                  dir="ltr"
+                  aria-describedby={describedBy}
+                  aria-invalid={invalid}
+                  {...form.register('email')}
+                />
+              )}
+            </Field>
 
-          <Button type="submit" size="lg" loading={form.formState.isSubmitting}>
-            {t('auth.submit')}
-          </Button>
-        </form>
+            <Field
+              label={t('auth.password')}
+              error={form.formState.errors.password?.message}
+              required
+            >
+              {({ id, describedBy, invalid, required }) => (
+                <Input
+                  id={id}
+                  aria-required={required}
+                  type="password"
+                  autoComplete="current-password"
+                  dir="ltr"
+                  aria-describedby={describedBy}
+                  aria-invalid={invalid}
+                  {...form.register('password')}
+                />
+              )}
+            </Field>
+
+            {serverError ? (
+              <p
+                role="alert"
+                className="rounded-[var(--radius-control)] bg-danger-soft px-3 py-2 text-sm text-danger"
+              >
+                {serverError}
+              </p>
+            ) : null}
+
+            <Button type="submit" size="lg" loading={form.formState.isSubmitting}>
+              {t('auth.submit')}
+            </Button>
+          </form>
+        )}
       </div>
     </main>
   );

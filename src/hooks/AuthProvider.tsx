@@ -4,7 +4,10 @@ import type { Permission } from '@shared/rbac';
 import type { SessionUser } from '@shared/types';
 import { ApiError, api } from '@/lib/api';
 import { rememberSession, rememberedSession } from '@/lib/session-cache';
-import { AuthContext, type AuthContextValue } from './auth-context';
+import { AuthContext, type AuthContextValue, type MfaChallenge } from './auth-context';
+
+/** Either a session, or the news that a code is still needed. */
+type LoginResponse = { user: SessionUser } | { mfaRequired: true; challenge: string };
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
@@ -36,7 +39,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const loginMutation = useMutation({
     mutationFn: (input: { email: string; password: string }) =>
-      api.post<{ user: SessionUser }>('/auth/login', input),
+      api.post<LoginResponse>('/auth/login', input),
+    onSuccess: (data) => {
+      if ('user' in data) {
+        rememberSession(data.user);
+        queryClient.setQueryData(['session'], data.user);
+      }
+    },
+  });
+
+  const mfaMutation = useMutation({
+    mutationFn: (input: { challenge: string; code: string }) =>
+      api.post<{ user: SessionUser }>('/auth/mfa/verify', input),
     onSuccess: (data) => {
       rememberSession(data.user);
       queryClient.setQueryData(['session'], data.user);
@@ -53,10 +67,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   });
 
   const login = useCallback(
-    async (email: string, password: string) => {
-      await loginMutation.mutateAsync({ email, password });
+    async (email: string, password: string): Promise<MfaChallenge | null> => {
+      const result = await loginMutation.mutateAsync({ email, password });
+      return 'mfaRequired' in result ? { challenge: result.challenge } : null;
     },
     [loginMutation],
+  );
+
+  const completeMfa = useCallback(
+    async (challenge: string, code: string) => {
+      await mfaMutation.mutateAsync({ challenge, code });
+    },
+    [mfaMutation],
   );
 
   const logout = useCallback(async () => {
@@ -69,10 +91,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user,
       isLoading: session.isLoading,
       login,
+      completeMfa,
       logout,
       can: (permission: Permission) => user?.permissions.includes(permission) ?? false,
     }),
-    [user, session.isLoading, login, logout],
+    [user, session.isLoading, login, completeMfa, logout],
   );
 
   return <AuthContext value={value}>{children}</AuthContext>;

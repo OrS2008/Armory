@@ -77,6 +77,17 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env, params 
   }
 
   const statements = [];
+  if (input.mfaEnabled === false) {
+    // A lost phone must not lock a duty officer out permanently. Clearing the
+    // factor is recorded, and the account goes back to password-only until
+    // they enrol again themselves.
+    changed.push('mfaEnabled');
+    statements.push(
+      env.DB.prepare('UPDATE users SET mfa_enabled = 0, mfa_secret = NULL WHERE id = ?').bind(id),
+      env.DB.prepare('DELETE FROM mfa_recovery_codes WHERE user_id = ?').bind(id),
+      env.DB.prepare('DELETE FROM mfa_challenges WHERE user_id = ?').bind(id),
+    );
+  }
   if (sets.length > 0) {
     sets.push('updated_at = ?');
     values.push(now(), id);

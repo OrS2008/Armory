@@ -37,6 +37,16 @@ export function UsersPanel() {
       toast.push('error', error instanceof ApiError ? error.message : t('state.errorBody')),
   });
 
+  const resetMfa = useMutation({
+    mutationFn: (id: string) => api.patch(`/users/${id}`, { mfaEnabled: false }),
+    onSuccess: () => {
+      toast.push('success', t('state.savedTitle'));
+      void users.refetch();
+    },
+    onError: (error) =>
+      toast.push('error', error instanceof ApiError ? error.message : t('state.errorBody')),
+  });
+
   const columns: Column<AdminUser>[] = [
     {
       key: 'name',
@@ -83,8 +93,12 @@ export function UsersPanel() {
       key: 'status',
       header: t('personnel.status'),
       placement: 'badge',
-      cell: (row) =>
-        row.active ? null : <Badge tone="neutral">{t('settings.userInactive')}</Badge>,
+      cell: (row) => (
+        <>
+          {row.mfaEnabled ? <Badge tone="success">{t('settings.userMfa')}</Badge> : null}
+          {row.active ? null : <Badge tone="neutral">{t('settings.userInactive')}</Badge>}
+        </>
+      ),
     },
     {
       key: 'actions',
@@ -100,6 +114,19 @@ export function UsersPanel() {
           >
             {t('personnel.edit')}
           </Button>
+          {row.mfaEnabled ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                if (window.confirm(t('mfa.resetConfirm', { name: row.displayName }))) {
+                  resetMfa.mutate(row.id);
+                }
+              }}
+            >
+              {t('mfa.reset')}
+            </Button>
+          ) : null}
           {row.id === me?.id ? null : (
             <Button
               variant="ghost"

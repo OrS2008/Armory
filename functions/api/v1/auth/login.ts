@@ -15,6 +15,7 @@ import {
   verifyPassword,
 } from '../../../_lib/auth';
 import { schemaReady } from '../../../_lib/data';
+import { createChallenge } from '../../../_lib/mfa';
 import { checkOrigin, fail, newId, now, ok, readBody, type Env } from '../../../_lib/http';
 
 interface Row {
@@ -86,6 +87,13 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       reason: 'password',
     });
     return fail(401, ErrorCodes.INVALID_CREDENTIALS);
+  }
+
+  // With a second factor the password alone buys nothing: no session, no
+  // cookie, only a short-lived challenge to present the code against.
+  if (row.mfa_enabled === 1 && !bootstrapped) {
+    await recordLoginAttempt(env, email, true);
+    return ok({ mfaRequired: true, challenge: await createChallenge(env, row.id) });
   }
 
   // The scope belongs to the account, not to the session; leaving it empty

@@ -251,6 +251,28 @@ const roleSchema = z.enum([
 ]);
 
 /** A new account. The password is set once here and never read back. */
+const totpCodeSchema = z
+  .string()
+  .trim()
+  .regex(/^\d{6}$/, v.mfaCode);
+
+export const mfaEnableSchema = z.object({ code: totpCodeSchema });
+export type MfaEnableInput = z.infer<typeof mfaEnableSchema>;
+
+export const mfaDisableSchema = z.object({ password: z.string().min(1, v.required).max(200) });
+
+/**
+ * Completing a login. Either the app's six digits or one recovery code — the
+ * point of the second is that the phone with the first is gone.
+ */
+export const mfaVerifySchema = z
+  .object({
+    challenge: z.string().min(1, v.required).max(200),
+    code: z.string().trim().min(1, v.required).max(40),
+  })
+  .transform((value) => ({ ...value, code: value.code.replace(/\s/g, '') }));
+export type MfaVerifyInput = z.infer<typeof mfaVerifySchema>;
+
 export const availabilityImportRowSchema = z.object({
   line: z.number().int().min(0),
   person: trimmed(80),
@@ -293,6 +315,8 @@ export const userPatchSchema = z.object({
   unitScope: z.array(idSchema).max(50).optional(),
   active: z.boolean().optional(),
   password: z.string().min(12, v.passwordTooShort).max(200).optional(),
+  /** Only ever false: an administrator can clear a lost second factor, never set one up for someone else. */
+  mfaEnabled: z.literal(false).optional(),
 });
 export type UserPatchInput = z.infer<typeof userPatchSchema>;
 
