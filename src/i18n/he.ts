@@ -141,6 +141,7 @@ export const he = {
   'schedule.autofillGaps': '{count} מקומות שלא ניתן לאייש',
   'schedule.demand':
     'היום דורש {hours} שעות־אדם, ויש {people} אנשים במאגר — {perPerson} שעות לאדם בממוצע.',
+  'schedule.autofillSwaps': '{count} מקומות אוישו על ידי העברת אדם ממשימה אחרת',
   'schedule.demandOverLimit':
     'זה מעל מגבלת השיבוץ הרצוף. אי אפשר לאייש את היום הזה בלי שמישהו יחרוג — צריך יותר אנשים, פחות עמדות או משמרות קצרות יותר.',
   'schedule.autofillApply': 'אישור {count} שיבוצים',

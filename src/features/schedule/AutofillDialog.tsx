@@ -166,6 +166,9 @@ export function AutofillDialog({
                 })}
               </Badge>
             ) : null}
+            {proposal.swaps > 0 ? (
+              <Badge tone="info">{t('schedule.autofillSwaps', { count: proposal.swaps })}</Badge>
+            ) : null}
           </div>
 
           <ul className="flex flex-col gap-3">

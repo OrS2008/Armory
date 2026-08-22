@@ -203,3 +203,71 @@ describe('when the day asks more of the roster than it has', () => {
     expect(proposal.demand.hoursPerPerson).toBe(24);
   });
 });
+
+describe('auto-fill repair pass', () => {
+  it('moves someone rather than leaving the only driver in the wrong seat', () => {
+    // Two people, one of them the only driver. The earlier post needs anybody;
+    // the later one needs a driver and overlaps it, so a greedy pass that hands
+    // the driver to the earlier post leaves the later one empty.
+    const two = [person('d1', 'א דן', ['q_drive']), person('n1', 'ב נועה')];
+
+    const proposal = buildAutofillProposal({
+      assignments: [
+        post('early', 'מטבח', '06:00', '14:00', 1),
+        post('patrol', 'סיור', '08:00', '16:00', 1, [{ qualificationId: 'q_drive', minCount: 1 }]),
+      ],
+      personnel: two,
+      absences: [],
+      rules: DEFAULT_RULES,
+      qualificationNames: { q_drive: 'נהג' },
+      timezone: TZ,
+    });
+
+    expect(proposal.gaps).toEqual([]);
+    expect(proposal.swaps).toBe(1);
+    expect(proposal.proposed).toHaveLength(2);
+
+    const patrol = proposal.proposed.find((item) => item.assignmentId === 'patrol');
+    const early = proposal.proposed.find((item) => item.assignmentId === 'early');
+    expect(patrol?.personnelId).toBe('d1');
+    expect(early?.personnelId).toBe('n1');
+  });
+
+  it('leaves the schedule alone when a swap would only move the hole', () => {
+    // One driver, two overlapping posts that both need one. No arrangement
+    // fills both, and the proposal must not pretend otherwise.
+    const one = [person('d1', 'א דן', ['q_drive'])];
+
+    const proposal = buildAutofillProposal({
+      assignments: [
+        post('a', 'סיור בוקר', '06:00', '14:00', 1, [{ qualificationId: 'q_drive', minCount: 1 }]),
+        post('b', 'סיור צהריים', '08:00', '16:00', 1, [
+          { qualificationId: 'q_drive', minCount: 1 },
+        ]),
+      ],
+      personnel: one,
+      absences: [],
+      rules: DEFAULT_RULES,
+      qualificationNames: { q_drive: 'נהג' },
+      timezone: TZ,
+    });
+
+    expect(proposal.swaps).toBe(0);
+    expect(proposal.proposed).toHaveLength(1);
+    expect(proposal.gaps).toHaveLength(1);
+    expect(proposal.gaps[0]?.missing).toBe(1);
+  });
+
+  it('gives a crew the seats it can fill even when one seat cannot be filled', () => {
+    // No commander exists. The patrol should still get its driver and its
+    // לוחם rather than being abandoned at the first unfillable seat.
+    const proposal = run([
+      post('p', 'סיור', '08:00', '16:00', 3, [
+        { qualificationId: 'q_cmd', minCount: 1 },
+        { qualificationId: 'q_drive', minCount: 1 },
+      ]),
+    ]);
+
+    expect(proposal.proposed.length).toBeGreaterThanOrEqual(3);
+  });
+});

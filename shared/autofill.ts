@@ -64,6 +64,8 @@ export interface AutofillProposal {
    * arithmetic, not a better search. Reported so the gap list can say why.
    */
   demand: { seatHours: number; people: number; hoursPerPerson: number };
+  /** Seats that only came out filled because someone was moved (see below). */
+  swaps: number;
 }
 
 export function buildAutofillProposal(input: AutofillInput): AutofillProposal {
@@ -105,60 +107,177 @@ export function buildAutofillProposal(input: AutofillInput): AutofillProposal {
   const proposed: ProposedAssignment[] = [];
   const gaps: AutofillGap[] = [];
 
+  type Working = (typeof working)[number];
+
+  /** Everything a chosen person carries into the proposal. */
+  interface Pick {
+    personnelId: string;
+    displayName: string;
+    score: number;
+    reasons: string[];
+    warnings: string[];
+  }
+
+  interface OpenSeat {
+    assignment: Working;
+    seat: string | null;
+    resolved: boolean;
+  }
+  const openSeats: OpenSeat[] = [];
+
+  /** The best eligible person for one seat, or nothing. */
+  const bestForSeat = (
+    assignment: Working,
+    seat: string | null,
+    exclude: Set<string>,
+  ): Pick | null => {
+    const pool = roster.filter(
+      (person) =>
+        !assignment.assigneeIds.includes(person.id) &&
+        !exclude.has(person.id) &&
+        (!seat || holds(person.id, seat)),
+    );
+    if (pool.length === 0) return null;
+
+    const [best] = rankCandidates({
+      assignment,
+      personnel: pool,
+      roster,
+      assignments: working,
+      absences: input.absences,
+      rules: input.rules,
+      ...(input.qualificationNames ? { qualificationNames: input.qualificationNames } : {}),
+      ...(input.exclusiveQualificationIds
+        ? { exclusiveQualificationIds: input.exclusiveQualificationIds }
+        : {}),
+      ...(input.weights ? { weights: input.weights } : {}),
+      timezone,
+    });
+    if (!best || !best.eligible) return null;
+    return {
+      personnelId: best.personnelId,
+      displayName: best.displayName,
+      score: best.score,
+      reasons: best.reasons,
+      warnings: best.warnings,
+    };
+  };
+
+  const take = (assignment: Working, seat: string | null, pick: Pick) => {
+    assignment.assigneeIds.push(pick.personnelId);
+    assignment.assigneeRoles[pick.personnelId] = seat;
+    proposed.push({
+      assignmentId: assignment.id,
+      assignmentTitle: assignment.title,
+      role: seat,
+      roleLabel: roleLabel(seat),
+      ...pick,
+    });
+  };
+
+  const release = (assignment: Working, personnelId: string): Pick | null => {
+    const at = proposed.findIndex(
+      (item) => item.assignmentId === assignment.id && item.personnelId === personnelId,
+    );
+    if (at < 0) return null;
+    const [entry] = proposed.splice(at, 1) as [ProposedAssignment];
+    assignment.assigneeIds = assignment.assigneeIds.filter((id) => id !== personnelId);
+    delete assignment.assigneeRoles[personnelId];
+    return {
+      personnelId: entry.personnelId,
+      displayName: entry.displayName,
+      score: entry.score,
+      reasons: entry.reasons,
+      warnings: entry.warnings,
+    };
+  };
+
   for (const target of targets) {
     // Fill seat by seat rather than head by head: a crew that needs a driver
     // and a commander is not satisfied by any four available people, and the
     // named seats go first because they are the hardest to fill.
-    const seats = openSeatRoles(target).slice(0, wanted(target));
-    let remaining = seats.length;
-
-    for (const seat of seats) {
-      const pool = roster.filter(
-        (person) => !target.assigneeIds.includes(person.id) && (!seat || holds(person.id, seat)),
-      );
-      if (pool.length === 0) break;
-
-      const [best] = rankCandidates({
-        assignment: target,
-        personnel: pool,
-        roster,
-        assignments: working,
-        absences: input.absences,
-        rules: input.rules,
-        ...(input.qualificationNames ? { qualificationNames: input.qualificationNames } : {}),
-        ...(input.exclusiveQualificationIds
-          ? { exclusiveQualificationIds: input.exclusiveQualificationIds }
-          : {}),
-        ...(input.weights ? { weights: input.weights } : {}),
-        timezone,
-      });
-
-      if (!best || !best.eligible) break;
-
-      target.assigneeIds.push(best.personnelId);
-      target.assigneeRoles[best.personnelId] = seat;
-      proposed.push({
-        assignmentId: target.id,
-        assignmentTitle: target.title,
-        personnelId: best.personnelId,
-        displayName: best.displayName,
-        role: seat,
-        roleLabel: roleLabel(seat),
-        score: best.score,
-        reasons: best.reasons,
-        warnings: best.warnings,
-      });
-      remaining -= 1;
+    for (const seat of openSeatRoles(target).slice(0, wanted(target))) {
+      const best = bestForSeat(target, seat, new Set());
+      // One unfillable seat does not condemn the rest of the crew: a post that
+      // cannot find a driver can still be given its לוחם.
+      if (!best) {
+        openSeats.push({ assignment: target, seat, resolved: false });
+        continue;
+      }
+      take(target, seat, best);
     }
+  }
 
-    if (remaining > 0) {
-      gaps.push({
-        assignmentId: target.id,
-        assignmentTitle: target.title,
-        missing: remaining,
-        reason: 'אין אנשים זמינים ומוכשרים שאינם מפרים כלל חוסם',
-      });
+  /*
+   * Repair pass.
+   *
+   * The greedy pass reads the day in order and never looks back, so the 08:00
+   * patrol takes the only driver and the 16:00 patrol — which needs one too —
+   * is left with a hole, even though the morning could have been driven by
+   * somebody else. For each hole this looks for a person already proposed
+   * elsewhere who could fill it, and checks whether the seat they would leave
+   * behind can be filled by someone else. Both halves have to work, or the
+   * swap is undone: trading one gap for another is not an improvement.
+   */
+  let swaps = 0;
+  for (const hole of openSeats) {
+    const movable = proposed
+      .filter(
+        (item) =>
+          item.assignmentId !== hole.assignment.id &&
+          (!hole.seat || holds(item.personnelId, hole.seat)),
+      )
+      // Cheapest to give up first: whoever scored worst where they are.
+      .sort((a, b) => a.score - b.score)
+      .map((item) => ({
+        assignmentId: item.assignmentId,
+        personnelId: item.personnelId,
+        seat: item.role,
+      }));
+
+    for (const move of movable) {
+      const donor = working.find((item) => item.id === move.assignmentId);
+      if (!donor) continue;
+
+      const released = release(donor, move.personnelId);
+      if (!released) continue;
+
+      const forHole = bestForSeat(hole.assignment, hole.seat, new Set());
+      const backfill =
+        forHole?.personnelId === move.personnelId
+          ? bestForSeat(donor, move.seat, new Set([move.personnelId]))
+          : null;
+
+      // Either this person is not who the hole would choose — in which case the
+      // greedy pass would already have taken whoever is — or their own seat
+      // cannot be covered. Put them back.
+      if (!forHole || !backfill) {
+        take(donor, move.seat, released);
+        continue;
+      }
+
+      take(hole.assignment, hole.seat, forHole);
+      take(donor, move.seat, backfill);
+      hole.resolved = true;
+      swaps += 1;
+      break;
     }
+  }
+
+  const unresolved = new Map<string, { assignment: Working; missing: number }>();
+  for (const hole of openSeats) {
+    if (hole.resolved) continue;
+    const entry = unresolved.get(hole.assignment.id) ?? { assignment: hole.assignment, missing: 0 };
+    entry.missing += 1;
+    unresolved.set(hole.assignment.id, entry);
+  }
+  for (const entry of unresolved.values()) {
+    gaps.push({
+      assignmentId: entry.assignment.id,
+      assignmentTitle: entry.assignment.title,
+      missing: entry.missing,
+      reason: 'אין אנשים זמינים ומוכשרים שאינם מפרים כלל חוסם',
+    });
   }
 
   const alreadyStaffed = input.assignments.reduce(
@@ -177,6 +296,7 @@ export function buildAutofillProposal(input: AutofillInput): AutofillProposal {
     proposed,
     gaps,
     alreadyStaffed,
+    swaps,
     demand: {
       seatHours,
       people,

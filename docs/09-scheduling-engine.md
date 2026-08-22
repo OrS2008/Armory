@@ -159,8 +159,28 @@ Measured on a real company: 40 people, four standing posts on 8-hour rotation,
 33 seats in a day. Filled in 492 ms with no gaps, using 33 distinct people at
 one shift each.
 
+## Auto-fill: greedy, then repair
+
+The first pass reads the day in order and fills seat by seat, named seats
+first, using the same ranking the manual candidate picker uses. It never looks
+back, which has one predictable failure: the 08:00 patrol takes the only driver
+and the 16:00 patrol, which also needs one, is left with a hole.
+
+A second pass repairs exactly that. For each hole it looks for a person already
+proposed elsewhere who could fill it, and checks whether the seat they would
+leave behind can be covered by someone else. Both halves must work or the swap
+is undone — trading one gap for another is not an improvement. The proposal
+reports how many seats were filled this way, so a reviewer can see that the
+schedule was rearranged rather than merely filled.
+
+An unfillable seat no longer abandons the rest of its crew: a patrol that
+cannot find a commander still gets its driver and its לוחם.
+
 ## Not implemented
 
-Phase 3 CP-SAT optimisation is not built. The plan makes it conditional on the
-unit's scheduling policy being agreed first (plan section 48), and the rule
-table is where that policy lives.
+Phase 3 CP-SAT optimisation is not built, and will not be built in this
+runtime: a constraint solver is a native library, and the API is Workers, where
+the budget for one request is measured in milliseconds of CPU. The repair pass
+above is the honest ceiling for a search that has to finish inside a request.
+The plan also makes phase 3 conditional on the unit's scheduling policy being
+agreed first (plan section 48), and the rule table is where that policy lives.
