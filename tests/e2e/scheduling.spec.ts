@@ -8,15 +8,26 @@ test.describe('scheduling workflow', () => {
     await login(page);
   });
 
-  test('adds a person and finds them in the roster', async ({ page }) => {
+  test('adds a person and finds them in the roster', async ({ page }, testInfo) => {
+    // Both projects share one local database, so a fixed name and personal
+    // number make the second project's save a duplicate — and the assertion
+    // would then pass on the row the first project left behind.
+    const stamp = `${testInfo.project.name}-${Date.now()}`;
+    const name = `בדיקה אוטומטית ${stamp}`;
+    const externalId = String(Date.now()).slice(-7);
+
     await page.goto('/personnel');
     await page.getByRole('button', { name: 'הוספת איש כוח אדם' }).click();
     // Role + accessible name: getByLabel would also match the decorative
     // required marker inside the <label>.
-    await page.getByRole('textbox', { name: 'שם', exact: true }).fill('בדיקה אוטומטית');
-    await page.getByRole('textbox', { name: 'מספר אישי' }).fill('9999999');
+    await page.getByRole('textbox', { name: 'שם', exact: true }).fill(name);
+    await page.getByRole('textbox', { name: 'מספר אישי' }).fill(externalId);
     await page.getByRole('button', { name: 'שמירה' }).click();
-    await expect(page.getByText('בדיקה אוטומטית')).toBeVisible();
+
+    // The dialog closing is what proves the save went through; the name alone
+    // could already be on the screen behind it.
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(page.getByText(name)).toBeVisible();
   });
 
   test('imports a roster from pasted CSV without a dead-end button', async ({ page }, testInfo) => {
