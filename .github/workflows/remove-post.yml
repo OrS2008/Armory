@@ -1,0 +1,133 @@
+name: Remove a standing post
+
+# The escape hatch the app deliberately does not offer.
+#
+# The assignment types screen refuses to remove a post that shifts have been
+# created from, because removing it takes those shifts — and everyone who was
+# ever assigned to them — with it. That refusal is right for a screen somebody
+# taps on a phone. It is not right that there be no way at all, so this exists:
+# manual dispatch, report-only by default, and the post's name has to be typed
+# back before anything is written.
+on:
+  workflow_dispatch:
+    inputs:
+      post_name:
+        description: 'Name of the post, exactly as it appears (for example: ש״ג)'
+        type: string
+        required: true
+      confirm:
+        description: Type the same name again to go ahead. Leave empty to only report.
+        type: string
+        default: ''
+      database_name:
+        description: D1 database name
+        type: string
+        default: shabatzak
+
+concurrency:
+  group: remove-post
+  cancel-in-progress: false
+
+jobs:
+  remove:
+    name: Report, then remove
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      DATABASE_NAME: ${{ inputs.database_name }}
+      POST_NAME: ${{ inputs.post_name }}
+
+    steps:
+      - name: Check that the credentials are present
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo '::error::Add CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID under Settings, Secrets and variables, Actions. The token needs Account, D1, Edit.'
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - run: npm clean-install
+
+      # What is at stake, counted before anything is touched. A post with no
+      # shifts is a harmless removal; one with two hundred is a third of the
+      # roster, and the difference has to be visible before the decision.
+      - name: Count what is at stake
+        run: |
+          set -euo pipefail
+          # The name is a string literal in the SQL below and wrangler has no way
+          # to bind a parameter, so the one character that could close the
+          # literal early is doubled — which is how SQL escapes it.
+          SAFE=${POST_NAME//\'/\'\'}
+          npx wrangler d1 execute "$DATABASE_NAME" --remote --json --command \
+            "SELECT t.name,
+                    (SELECT COUNT(*) FROM assignment_instances a
+                      WHERE a.assignment_type_id = t.id) AS shifts,
+                    (SELECT COUNT(*) FROM assignment_personnel ap
+                       JOIN assignment_instances a ON a.id = ap.assignment_id
+                      WHERE a.assignment_type_id = t.id) AS staffed_seats,
+                    (SELECT MIN(date(a.start_at/1000,'unixepoch')) FROM assignment_instances a
+                      WHERE a.assignment_type_id = t.id) AS first_day,
+                    (SELECT MAX(date(a.start_at/1000,'unixepoch')) FROM assignment_instances a
+                      WHERE a.assignment_type_id = t.id) AS last_day
+               FROM assignment_types t
+              WHERE t.org_id = 'org_default' AND t.name = '$SAFE'" \
+            | tee counts.json
+          {
+            echo "### \"$POST_NAME\""
+            echo '```json'
+            cat counts.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          if ! grep -q '"name"' counts.json; then
+            echo "::error::No post by that name. Check the spelling — ש״ג uses a gershayim (״), not two quote marks."
+            exit 1
+          fi
+
+      - name: Report only, because the name was not typed back
+        if: ${{ inputs.confirm != inputs.post_name }}
+        run: |
+          {
+            echo ''
+            echo '**Nothing was written.** Run again with `confirm` set to the same name to go ahead.'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Order matters: assignment_instances carries no cascade from its type, so
+      # the shifts go first and everything hanging off a shift follows them. The
+      # audit trail does not: it holds no foreign key precisely so that it
+      # outlives what it describes, and the removal is itself recorded there.
+      - name: Remove
+        if: ${{ inputs.confirm == inputs.post_name }}
+        run: |
+          set -euo pipefail
+          SAFE=${POST_NAME//\'/\'\'}
+          npx wrangler d1 execute "$DATABASE_NAME" --remote --command \
+            "DELETE FROM assignment_instances
+              WHERE assignment_type_id IN (
+                SELECT id FROM assignment_types
+                 WHERE org_id = 'org_default' AND name = '$SAFE');
+             DELETE FROM assignment_types
+              WHERE org_id = 'org_default' AND name = '$SAFE';"
+          echo "Removed \"$POST_NAME\"." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Report what remains
+        if: ${{ inputs.confirm == inputs.post_name }}
+        run: |
+          set -euo pipefail
+          npx wrangler d1 execute "$DATABASE_NAME" --remote --json --command \
+            "SELECT name, active, standing, shift_hours, required_headcount
+               FROM assignment_types WHERE org_id = 'org_default'
+              ORDER BY priority, name" \
+            | tee remaining.json
+          {
+            echo '### Posts that remain'
+            echo '```json'
+            cat remaining.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
