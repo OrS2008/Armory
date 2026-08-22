@@ -85,3 +85,42 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env, params 
   });
   return ok({ id });
 };
+
+/**
+ * Removes a post that was never used.
+ *
+ * A post that *has* been used cannot be deleted: assignment_instances points at
+ * it without a cascade, so the database would refuse — and it is right to. Every
+ * shift ever stood at that post names it, and deleting it would either take
+ * those shifts with it or leave the sheet unable to say what anybody was doing.
+ * The answer for a post the unit has finished with is to retire it (active = 0),
+ * which stops it being offered while yesterday still reads correctly.
+ */
+export const onRequestDelete: PagesFunction<Env> = async ({ request, env, params }) => {
+  const origin = checkOrigin(request);
+  if (origin) return origin;
+  const user = await requireUser(request, env, Permissions.assignmentTypesWrite);
+  if (user instanceof Response) return user;
+  const id = String(params.id);
+
+  const existing = await env.DB.prepare('SELECT name FROM assignment_types WHERE id = ?')
+    .bind(id)
+    .first<{ name: string }>();
+  if (!existing) return fail(404, ErrorCodes.NOT_FOUND);
+
+  const used = await env.DB.prepare(
+    'SELECT COUNT(*) AS count FROM assignment_instances WHERE assignment_type_id = ?',
+  )
+    .bind(id)
+    .first<{ count: number }>();
+  if ((used?.count ?? 0) > 0) {
+    return fail(409, ErrorCodes.IN_USE, { assignments: used?.count ?? 0 });
+  }
+
+  // The requirement and exclusion rows cascade; nothing else refers to a type.
+  await env.DB.prepare('DELETE FROM assignment_types WHERE id = ?').bind(id).run();
+  await writeAudit(env, user, AuditActions.ASSIGNMENT_TYPE_DELETED, 'assignment_type', id, {
+    name: existing.name,
+  });
+  return ok({ id, deleted: true });
+};

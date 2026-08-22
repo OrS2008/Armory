@@ -288,9 +288,12 @@ export async function loadPersonnelQualifications(env: Env): Promise<Map<string,
 
 export async function loadAssignmentTypes(env: Env): Promise<AssignmentType[]> {
   const rows = await env.DB.prepare(
-    `SELECT id, name, category, default_duration_minutes, required_headcount, priority, color,
-            instructions, active, standing, shift_hours, shift_start_hour
-       FROM assignment_types WHERE org_id = ? ORDER BY priority, name`,
+    `SELECT t.id, t.name, t.category, t.default_duration_minutes, t.required_headcount,
+            t.priority, t.color, t.instructions, t.active, t.standing, t.shift_hours,
+            t.shift_start_hour,
+            (SELECT COUNT(*) FROM assignment_instances a WHERE a.assignment_type_id = t.id)
+              AS usage_count
+       FROM assignment_types t WHERE t.org_id = ? ORDER BY t.priority, t.name`,
   )
     .bind(DEFAULT_ORG_ID)
     .all<{
@@ -306,6 +309,7 @@ export async function loadAssignmentTypes(env: Env): Promise<AssignmentType[]> {
       standing: number;
       shift_hours: number;
       shift_start_hour: number;
+      usage_count: number;
     }>();
   const [links, exclusions] = await Promise.all([
     loadTypeQualifications(env),
@@ -326,6 +330,7 @@ export async function loadAssignmentTypes(env: Env): Promise<AssignmentType[]> {
     standing: row.standing === 1,
     shiftHours: row.shift_hours,
     shiftStartHour: row.shift_start_hour,
+    usageCount: row.usage_count,
   }));
 }
 

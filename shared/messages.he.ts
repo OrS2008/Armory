@@ -26,6 +26,8 @@ export const errorMessages: Record<string, string> = {
   [ErrorCodes.INVALID_JSON]: 'תוכן הבקשה אינו תקין.',
   [ErrorCodes.JSON_REQUIRED]: 'נדרש תוכן מסוג JSON.',
   [ErrorCodes.CONFLICT]: 'הפעולה מתנגשת עם נתון קיים במערכת.',
+  [ErrorCodes.IN_USE]:
+    'הפריט הזה כבר בשימוש ולכן אי אפשר למחוק אותו — מחיקה הייתה מוחקת גם את מה שכבר נעשה. אפשר להשבית אותו במקום.',
   [ErrorCodes.EMAIL_TAKEN]: 'שם המשתמש הזה כבר תפוס.',
   [ErrorCodes.LAST_ADMIN]:
     'זהו מנהל המערכת הפעיל האחרון. מנו מנהל נוסף לפני שמורידים לו הרשאה או מבטלים אותו.',
@@ -146,6 +148,7 @@ export const auditActionLabels: Record<string, string> = {
   AVAILABILITY_UPDATED: 'עדכון זמינות',
   AVAILABILITY_DECIDED: 'החלטה בבקשת זמינות',
   ASSIGNMENT_TYPE_CREATED: 'יצירת סוג משימה',
+  ASSIGNMENT_TYPE_DELETED: 'מחיקת סוג משימה',
   ASSIGNMENT_TYPE_UPDATED: 'עדכון סוג משימה',
   ASSIGNMENT_CREATED: 'יצירת משימה',
   ASSIGNMENT_UPDATED: 'עדכון משימה',

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Pencil, Plus } from 'lucide-react';
+import { Pencil, Plus, Power, Trash2 } from 'lucide-react';
 import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation } from '@tanstack/react-query';
@@ -16,10 +16,16 @@ import { Dialog } from '@/components/ui/Dialog';
 import { Field } from '@/components/ui/Field';
 import { Input, Select, Textarea } from '@/components/ui/Input';
 import { DataTable, type Column } from '@/components/ui/DataTable';
+import { MenuButton, type MenuAction } from '@/components/ui/MenuButton';
 import { QueryState } from '@/components/ui/States';
 import { useToast } from '@/components/ui/toast-context';
 import { PageHeader } from '@/components/layout/PageHeader';
-import { useAssignmentTypes, useQualifications } from '@/hooks/queries';
+import {
+  useAssignmentTypes,
+  useDeleteAssignmentType,
+  useQualifications,
+  useSetAssignmentTypeActive,
+} from '@/hooks/queries';
 import { useAuth } from '@/hooks/auth-context';
 
 export function AssignmentTypesPage() {
@@ -36,6 +42,9 @@ export function AssignmentTypesPage() {
   // the stored unit because they divide cleanly; nobody has to read them.
   const [hours, setHours] = useState(8);
   const [excluded, setExcluded] = useState<string[]>([]);
+  const [removing, setRemoving] = useState<AssignmentType | null>(null);
+  const remove = useDeleteAssignmentType();
+  const setActive = useSetAssignmentTypeActive();
 
   const form = useForm<AssignmentTypeInput>({
     resolver: zodResolver(assignmentTypeSchema),
@@ -162,6 +171,12 @@ export function AssignmentTypesPage() {
         ),
     },
     {
+      key: 'usage',
+      header: t('assignments.typeShiftsCreated'),
+      className: 'ltr-inline tabular-nums',
+      cell: (type) => (type.usageCount > 0 ? type.usageCount : null),
+    },
+    {
       key: 'excluded',
       header: t('assignments.excludedQualifications'),
       cell: (type) =>
@@ -181,15 +196,62 @@ export function AssignmentTypesPage() {
       placement: 'actions',
       cell: (type) =>
         can(Permissions.assignmentTypesWrite) ? (
-          <Button
-            variant="secondary"
-            size="sm"
-            icon={<Pencil className="size-4" />}
-            onClick={() => openDialog(type)}
-          >
-            {t('personnel.edit')}
-          </Button>
+          <div className="flex items-center gap-1.5">
+            <Button
+              variant="secondary"
+              size="sm"
+              icon={<Pencil className="size-4" />}
+              onClick={() => openDialog(type)}
+            >
+              {t('personnel.edit')}
+            </Button>
+            <MenuButton
+              label={t('app.more')}
+              ariaLabel={`${t('app.more')} — ${type.name}`}
+              actions={rowActions(type)}
+            />
+          </div>
         ) : null,
+    },
+  ];
+
+  /*
+   * Retiring and deleting are different acts, and which one is available is a
+   * fact about the post rather than a preference: a post shifts have been
+   * created from cannot be deleted without taking those shifts with it, so it
+   * is retired instead. Both are offered, and the one that cannot work says why
+   * when it is pressed rather than being silently absent.
+   */
+  const rowActions = (type: AssignmentType): MenuAction[] => [
+    {
+      key: 'active',
+      label: type.active ? t('assignments.retireType') : t('assignments.restoreType'),
+      ...(type.active ? { hint: t('assignments.retireTypeHint') } : {}),
+      icon: <Power className="size-4" />,
+      onSelect: () =>
+        setActive.mutate(
+          { id: type.id, active: !type.active },
+          {
+            onSuccess: () =>
+              toast.push(
+                'success',
+                type.active ? t('assignments.retireTypeDone') : t('assignments.restoreTypeDone'),
+              ),
+            onError: (error) =>
+              toast.push('error', error instanceof ApiError ? error.message : t('state.errorBody')),
+          },
+        ),
+    },
+    {
+      key: 'delete',
+      label: t('assignments.deleteType'),
+      hint:
+        type.usageCount > 0
+          ? t('assignments.deleteTypeInUse', { count: type.usageCount })
+          : t('assignments.typeUnused'),
+      icon: <Trash2 className="size-4" />,
+      disabled: type.usageCount > 0,
+      onSelect: () => setRemoving(type),
     },
   ];
 
@@ -223,6 +285,44 @@ export function AssignmentTypesPage() {
           />
         </QueryState>
       </div>
+
+      <Dialog
+        open={Boolean(removing)}
+        title={t('assignments.deleteType')}
+        {...(removing
+          ? { description: t('assignments.deleteTypeConfirm', { name: removing.name }) }
+          : {})}
+        onClose={() => setRemoving(null)}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setRemoving(null)}>
+              {t('app.cancel')}
+            </Button>
+            <Button
+              variant="danger"
+              loading={remove.isPending}
+              onClick={() =>
+                removing &&
+                remove.mutate(removing.id, {
+                  onSuccess: () => {
+                    toast.push('success', t('assignments.deleteTypeDone'));
+                    setRemoving(null);
+                  },
+                  onError: (error) =>
+                    toast.push(
+                      'error',
+                      error instanceof ApiError ? error.message : t('state.errorBody'),
+                    ),
+                })
+              }
+            >
+              {t('assignments.deleteType')}
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm text-ink-muted">{t('assignments.retireTypeHint')}</p>
+      </Dialog>
 
       <Dialog
         open={open}

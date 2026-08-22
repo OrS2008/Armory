@@ -111,6 +111,12 @@ export interface AssignmentType {
   standing: boolean;
   shiftHours: number;
   shiftStartHour: number;
+  /**
+   * How many shifts have ever been created from this post. A post nobody has
+   * used can be deleted outright; one that has been used can only be retired,
+   * because deleting it would take the duty sheets it appears on with it.
+   */
+  usageCount: number;
 }
 
 export interface AssignmentAssignee {

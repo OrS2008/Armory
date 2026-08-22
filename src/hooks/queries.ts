@@ -99,6 +99,24 @@ export function useQualifications() {
   });
 }
 
+export function useDeleteAssignmentType() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.delete<{ id: string }>(`/assignment-types/${id}`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.assignmentTypes }),
+  });
+}
+
+/** Retiring a post that has been used, or bringing one back. */
+export function useSetAssignmentTypeActive() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { id: string; active: boolean }) =>
+      api.patch<{ id: string }>(`/assignment-types/${input.id}`, { active: input.active }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.assignmentTypes }),
+  });
+}
+
 export function useAssignmentTypes() {
   return useQuery({
     queryKey: queryKeys.assignmentTypes,

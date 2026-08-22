@@ -323,6 +323,20 @@ export const he = {
   'assignments.excludedHint':
     'מי שמסומן כך לא ישובץ למשימה הזאת. למשל: לסיור לא משבצים מי שמסומן מבצעים, ולש״ג לא משבצים מפקד.',
   'assignments.addType': 'סוג משימה חדש',
+  'assignments.deleteType': 'מחיקת סוג המשימה',
+  'assignments.deleteTypeConfirm': 'סוג המשימה "{name}" יימחק. הפעולה אינה הפיכה.',
+  'assignments.deleteTypeDone': 'סוג המשימה נמחק.',
+  'assignments.deleteTypeInUse':
+    'אי אפשר למחוק — כבר נוצרו {count} משמרות מסוג המשימה הזה, ומחיקה הייתה מוחקת גם אותן מהלוח ומההיסטוריה.',
+  'assignments.retireType': 'השבתת סוג המשימה',
+  'assignments.retireTypeHint':
+    'סוג משימה מושבת לא מוצע יותר ביצירת משימה ולא נפרס לתקופה, אבל משמרות שכבר נוצרו ממנו נשארות בלוח.',
+  'assignments.retireTypeDone': 'סוג המשימה הושבת.',
+  'assignments.restoreType': 'הפעלה מחדש',
+  'assignments.restoreTypeDone': 'סוג המשימה הופעל מחדש.',
+  'assignments.typeUsage': 'נוצרו ממנו {count} משמרות',
+  'assignments.typeShiftsCreated': 'משמרות שנוצרו',
+  'assignments.typeUnused': 'טרם נוצרו ממנו משמרות',
   'assignments.name': 'שם המשימה',
   'assignments.category': 'קטגוריה',
   'assignments.duration': 'משך משמרת (שעות)',
