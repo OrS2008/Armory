@@ -56,11 +56,12 @@ the live site reports `"schema":"ready"`.
 
 ## Standing posts
 
-ש״ג, סיור, נחל שכם and כרמל run round the clock and are handed over every eight
-hours; קצין מוצב runs in 24-hour turns. None of them is a decision anybody makes
-in the morning, so a post carries its own rhythm and **שבצ״ק → עוד → פריסת
-תקופה** lays out every shift in a stated period at once. Running it again is
-harmless — shifts that already exist are counted and skipped.
+These posts run round the clock, but not all on the same rhythm: סיור and נחל
+שכם hand over every eight hours, ש״ג every four, and כרמל and קצין מוצב are
+full 24-hour crews. None of that is a decision anybody makes in the morning, so
+each post carries its own rhythm and **שבצ״ק → עוד → פריסת תקופה** lays out
+every shift in a stated period at once. Running it again is harmless — shifts
+that already exist are counted and skipped.
 
 Who may stand a post is data, not code: a post can require a qualification
 (one driver and one commander among the four) and can refuse a mark (no מבצעים

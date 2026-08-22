@@ -148,8 +148,9 @@ test.describe('scheduling workflow', () => {
     await dialog.getByLabel('עד תאריך').fill(to);
     await dialog.getByRole('button', { name: 'פריסה' }).click();
 
-    // Two days of four eight-hour posts plus one round-the-clock post.
-    await expect(page.getByText(/נוצרו 26 משמרות/)).toBeVisible({ timeout: 15_000 });
+    // Two days: ש״ג every 4h (6), סיור and נחל שכם every 8h (3 each), כרמל and
+    // קצין מוצב full-day (1 each) — 14 shifts a day, 28 for the two.
+    await expect(page.getByText(/נוצרו 28 משמרות/)).toBeVisible({ timeout: 15_000 });
     await expect(page.getByRole('dialog')).toHaveCount(0);
 
     // Running it a second time creates nothing rather than a second roster.

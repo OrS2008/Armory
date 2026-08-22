@@ -68,14 +68,21 @@ INSERT OR IGNORE INTO assignment_types
   ('atp_nahalshechem','org_default','נחל שכם','תורנויות קבועות',480,2,2,'slate',NULL,1,0,0),
   ('atp_post_officer','org_default','קצין מוצב','תורנויות קבועות',1440,1,1,'success',NULL,1,0,0);
 
+-- סיור and נחל שכם hand over every eight hours: three shifts a day.
 UPDATE assignment_types
    SET standing = 1, shift_hours = 8, shift_start_hour = 0,
        default_duration_minutes = 480, active = 1, updated_at = 0
- WHERE org_id = 'org_default' AND name IN ('ש״ג','סיור','כרמל','נחל שכם');
+ WHERE org_id = 'org_default' AND name IN ('סיור','נחל שכם');
+-- כרמל and קצין מוצב are both full-day crews: one shift a day.
 UPDATE assignment_types
    SET standing = 1, shift_hours = 24, shift_start_hour = 0,
        default_duration_minutes = 1440, active = 1, updated_at = 0
- WHERE org_id = 'org_default' AND name = 'קצין מוצב';
+ WHERE org_id = 'org_default' AND name IN ('כרמל','קצין מוצב');
+-- ש״ג hands over every four hours: six shifts a day.
+UPDATE assignment_types
+   SET standing = 1, shift_hours = 4, shift_start_hour = 0,
+       default_duration_minutes = 240, active = 1, updated_at = 0
+ WHERE org_id = 'org_default' AND name = 'ש״ג';
 
 UPDATE assignment_types SET required_headcount = 1
  WHERE org_id = 'org_default' AND name IN ('ש״ג','קצין מוצב');
