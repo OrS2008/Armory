@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Check, Plus, X } from 'lucide-react';
+import { Check, FileUp, Plus, X } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { useMutation } from '@tanstack/react-query';
 import { availabilityKindLabels } from '@shared/messages.he';
@@ -20,6 +20,7 @@ import { QueryState } from '@/components/ui/States';
 import { useToast } from '@/components/ui/toast-context';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { useAvailability, usePersonnel } from '@/hooks/queries';
+import { AvailabilityImportDialog } from './AvailabilityImportDialog';
 import { useAuth } from '@/hooks/auth-context';
 
 interface FormValues {
@@ -44,6 +45,7 @@ export function AvailabilityPage() {
   const { user, can } = useAuth();
   const toast = useToast();
   const [creating, setCreating] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [status, setStatus] = useState('');
 
   const window = useMemo(() => {
@@ -182,6 +184,16 @@ export function AvailabilityPage() {
               <option value="approved">{t('availability.approved')}</option>
               <option value="rejected">{t('availability.rejected')}</option>
             </Select>
+            {mayManage ? (
+              <Button
+                variant="secondary"
+                size="sm"
+                icon={<FileUp className="size-4" />}
+                onClick={() => setImporting(true)}
+              >
+                {t('availability.import')}
+              </Button>
+            ) : null}
             <Button size="sm" icon={<Plus className="size-4" />} onClick={() => setCreating(true)}>
               {mayManage ? t('availability.add') : t('availability.request')}
             </Button>
@@ -205,6 +217,14 @@ export function AvailabilityPage() {
           />
         </QueryState>
       </div>
+
+      {importing ? (
+        <AvailabilityImportDialog
+          open
+          onClose={() => setImporting(false)}
+          onImported={() => void availability.refetch()}
+        />
+      ) : null}
 
       <Dialog
         open={creating}

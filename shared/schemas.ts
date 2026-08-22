@@ -251,6 +251,25 @@ const roleSchema = z.enum([
 ]);
 
 /** A new account. The password is set once here and never read back. */
+export const availabilityImportRowSchema = z.object({
+  line: z.number().int().min(0),
+  person: trimmed(80),
+  externalId: trimmed(32).nullable(),
+  kind: z.enum(['available', 'leave', 'training', 'medical', 'home', 'other']),
+  fromDay: dayKeySchema,
+  fromTime: timeSchema,
+  toDay: dayKeySchema,
+  toTime: timeSchema,
+  reason: trimmed(300).nullable(),
+});
+
+export const availabilityImportSchema = z.object({
+  rows: z.array(availabilityImportRowSchema).min(1).max(2000),
+  /** Validate and report without writing anything. */
+  dryRun: z.boolean().default(true),
+});
+export type AvailabilityImportInput = z.infer<typeof availabilityImportSchema>;
+
 export const userSchema = z.object({
   email: identifierSchema,
   displayName: trimmed(80).min(2, v.nameTooShort),

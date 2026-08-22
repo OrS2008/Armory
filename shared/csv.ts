@@ -1,5 +1,5 @@
 /**
- * Personnel CSV import (plan section 44).
+ * CSV import for the roster and for availability (plan section 44).
  *
  * Parsing and validation live here, away from the UI, so the preview the
  * scheduler sees and the rows the server writes come from the same code. A
@@ -8,6 +8,8 @@
  */
 import { z } from 'zod';
 import { validationMessages as v } from './messages.he';
+import { isDayKey } from './time';
+import type { AvailabilityKind } from './types';
 
 /**
  * Split CSV text into rows. Handles quoted fields, escaped quotes, embedded
@@ -206,3 +208,198 @@ export const COLUMN_LABELS: Record<PersonnelColumn, string> = {
 };
 
 export const CSV_TEMPLATE = 'שם,מספר אישי,מסגרת,תפקיד,טלפון,הכשירים\n';
+
+// ------------------------------------------------------------ availability --
+
+/**
+ * Availability import. The roster import answers "who exists"; this one answers
+ * "who is not here", which is the other half of a day the scheduler cannot see
+ * without typing it in one person at a time.
+ */
+const AVAILABILITY_ALIASES = {
+  person: ['שם', 'שם מלא', 'שם החייל', 'name', 'full name'],
+  externalId: ['מספר אישי', 'מ״א', 'מא', 'id', 'personal id'],
+  kind: ['סוג', 'סיבה כללית', 'סטטוס', 'kind', 'type'],
+  from: ['מתאריך', 'מ־תאריך', 'התחלה', 'from', 'start'],
+  to: ['עד תאריך', 'עד־תאריך', 'סיום', 'to', 'end'],
+  reason: ['סיבה', 'הערה', 'הערות', 'reason', 'note'],
+} as const satisfies Record<string, readonly string[]>;
+
+export type AvailabilityColumn = keyof typeof AVAILABILITY_ALIASES;
+
+export const AVAILABILITY_COLUMN_LABELS: Record<AvailabilityColumn, string> = {
+  person: 'שם',
+  externalId: 'מספר אישי',
+  kind: 'סוג',
+  from: 'מתאריך',
+  to: 'עד תאריך',
+  reason: 'סיבה',
+};
+
+/** Hebrew words a sheet actually uses, mapped onto the stored kinds. */
+const KIND_WORDS: Record<string, AvailabilityKind> = {
+  זמין: 'available',
+  חופשה: 'leave',
+  חופש: 'leave',
+  רגילה: 'leave',
+  הכשרה: 'training',
+  קורס: 'training',
+  אימון: 'training',
+  גימלים: 'medical',
+  גימלימים: 'medical',
+  מחלה: 'medical',
+  רפואי: 'medical',
+  בבית: 'home',
+  בית: 'home',
+  אחר: 'other',
+  היעדרות: 'other',
+  'היעדרות מאושרת': 'other',
+};
+
+export interface AvailabilityImportRow {
+  line: number;
+  person: string;
+  externalId: string | null;
+  kind: AvailabilityKind;
+  fromDay: string;
+  fromTime: string;
+  toDay: string;
+  toTime: string;
+  reason: string | null;
+}
+
+export interface ParsedAvailabilityImport {
+  rows: AvailabilityImportRow[];
+  problems: RowProblem[];
+  columns: AvailabilityColumn[];
+}
+
+function mapAvailabilityHeaders(header: string[]): Partial<Record<AvailabilityColumn, number>> {
+  const mapping: Partial<Record<AvailabilityColumn, number>> = {};
+  header.forEach((cell, index) => {
+    const key = normalise(cell);
+    for (const column of Object.keys(AVAILABILITY_ALIASES) as AvailabilityColumn[]) {
+      const aliases: readonly string[] = AVAILABILITY_ALIASES[column];
+      if (mapping[column] === undefined && aliases.some((alias) => normalise(alias) === key)) {
+        mapping[column] = index;
+      }
+    }
+  });
+  return mapping;
+}
+
+/**
+ * A date cell as a person writes it: 21/08/2026, 21.8.26, 2026-08-21, with an
+ * optional time after it. Returns null rather than guessing at anything else.
+ */
+export function parseDateCell(value: string): { day: string; time: string | null } | null {
+  const text = value.trim();
+  if (text === '') return null;
+
+  const [datePart, timePart] = text.split(/[\sT]+/);
+  if (!datePart) return null;
+  const time =
+    timePart && /^([01]?\d|2[0-3]):[0-5]\d$/.test(timePart) ? timePart.padStart(5, '0') : null;
+
+  const iso = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(datePart);
+  const local = /^(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})$/.exec(datePart);
+
+  let year: number;
+  let month: number;
+  let day: number;
+  if (iso) {
+    [, year, month, day] = iso.map(Number) as [number, number, number, number];
+  } else if (local) {
+    const [, d, m, y] = local.map(Number) as [number, number, number, number];
+    day = d;
+    month = m;
+    // Two digits mean this century: a duty sheet is not about 1926.
+    year = y < 100 ? 2000 + y : y;
+  } else {
+    return null;
+  }
+
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+  const key = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  return isDayKey(key) ? { day: key, time } : null;
+}
+
+export function parseAvailabilityCsv(text: string): ParsedAvailabilityImport {
+  const grid = parseCsv(text);
+  if (grid.length === 0) {
+    return { rows: [], problems: [{ line: 0, message: 'הקובץ ריק.' }], columns: [] };
+  }
+
+  const [header, ...body] = grid as [string[], ...string[][]];
+  const mapping = mapAvailabilityHeaders(header);
+  if (mapping.person === undefined && mapping.externalId === undefined) {
+    return {
+      rows: [],
+      problems: [{ line: 1, message: 'לא נמצאה עמודת שם או מספר אישי.' }],
+      columns: [],
+    };
+  }
+  if (mapping.from === undefined) {
+    return {
+      rows: [],
+      problems: [{ line: 1, message: 'לא נמצאה עמודת תאריך התחלה. נדרשת כותרת "מתאריך".' }],
+      columns: [],
+    };
+  }
+
+  const rows: AvailabilityImportRow[] = [];
+  const problems: RowProblem[] = [];
+
+  body.forEach((cells, index) => {
+    const line = index + 2;
+    const read = (column: AvailabilityColumn) => {
+      const at = mapping[column];
+      return at === undefined ? null : blankToNull(cells[at]);
+    };
+
+    const person = read('person');
+    const externalId = read('externalId');
+    if (!person && !externalId) {
+      problems.push({ line, message: 'אין שם ואין מספר אישי.' });
+      return;
+    }
+
+    const from = parseDateCell(read('from') ?? '');
+    if (!from) {
+      problems.push({ line, message: 'תאריך התחלה אינו תקין.' });
+      return;
+    }
+    // A single-day absence is written once; the row then covers that whole day.
+    const to = parseDateCell(read('to') ?? '') ?? { day: from.day, time: null };
+
+    const kindCell = read('kind');
+    const kind = kindCell ? KIND_WORDS[normalise(kindCell)] : 'leave';
+    if (kindCell && !kind) {
+      problems.push({ line, message: `סוג לא מוכר: ${kindCell}` });
+      return;
+    }
+
+    const fromTime = from.time ?? '00:00';
+    const toTime = to.time ?? '23:59';
+    if (to.day < from.day || (to.day === from.day && toTime <= fromTime)) {
+      problems.push({ line, message: v.endBeforeStart });
+      return;
+    }
+
+    rows.push({
+      line,
+      person: person ?? '',
+      externalId,
+      kind: kind ?? 'leave',
+      fromDay: from.day,
+      fromTime,
+      toDay: to.day,
+      toTime,
+      reason: read('reason'),
+    });
+  });
+
+  return { rows, problems, columns: Object.keys(mapping) as AvailabilityColumn[] };
+}
+
+export const AVAILABILITY_CSV_TEMPLATE = 'שם,מספר אישי,סוג,מתאריך,עד תאריך,סיבה\n';

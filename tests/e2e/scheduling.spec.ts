@@ -57,6 +57,40 @@ test.describe('scheduling workflow', () => {
     await expect(page.getByText(second)).toBeVisible();
   });
 
+  test('imports a leave sheet and shows who was skipped', async ({ page }, testInfo) => {
+    const run = `${testInfo.project.name}-${Date.now()}`;
+    const known = `רס״ל ${run}`;
+
+    // Someone to be absent, plus a name the roster has never heard of.
+    await page.goto('/personnel');
+    await page.getByRole('button', { name: 'הוספת איש כוח אדם' }).click();
+    const form = page.locator('dialog[open]');
+    await form.getByRole('textbox', { name: 'שם', exact: true }).fill(known);
+    await form.getByRole('button', { name: 'שמירה' }).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+
+    await page.goto('/availability');
+    await page.getByRole('button', { name: 'ייבוא מקובץ' }).click();
+    const importer = page.locator('dialog[open]');
+    await importer
+      .getByRole('textbox', { name: 'או הדביקו כאן את תוכן הקובץ' })
+      .fill(
+        `שם,סוג,מתאריך,עד תאריך\n${known},חופשה,21/08/2026,23/08/2026\nרוח רפאים,חופשה,21/08/2026,`,
+      );
+
+    // The dry run explains the unknown name before anything is written.
+    await expect(importer.getByText('לא נמצא במאגר כוח האדם')).toBeVisible();
+    const importButton = importer.getByRole('button', { name: /ייבוא 1 רשומות/ });
+    await expect(importButton).toBeEnabled({ timeout: 15_000 });
+    await importButton.click();
+
+    // Scoped to the list: the closed "add availability" dialog also carries the
+    // name, in its person picker.
+    const list = page.locator('.card').first();
+    await expect(list.getByText(known).first()).toBeVisible();
+    await expect(list.getByText('חופשה').first()).toBeVisible();
+  });
+
   test('creates an assignment and reports it as understaffed', async ({ page }) => {
     await page.goto('/schedule');
     await page.getByRole('button', { name: 'משימה חדשה' }).click();

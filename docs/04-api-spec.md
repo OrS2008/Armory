@@ -119,7 +119,7 @@ listed in `shared/errors.ts`, messages in `shared/messages.he.ts`.
 
 ## Not implemented
 
-No OpenAPI document is generated yet; this file is the specification. There are
-no user-administration endpoints and no PDF/Excel export — the reports screen
-exports CSV in the browser from data it already holds. `POST /personnel/import`
-takes CSV for the roster; availability has no equivalent.
+No OpenAPI document is generated yet; this file is the specification. There is
+no PDF/Excel export — the reports screen exports CSV in the browser from data it
+already holds. `POST /personnel/import` and `POST /availability/import` both
+take parsed CSV rows and both default to a dry run.
