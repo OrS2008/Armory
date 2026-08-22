@@ -71,5 +71,5 @@ plan's mobile (375–480), tablet (768–1024), desktop (1280+) and command-disp
 ## Not implemented
 
 Dark mode (tokens are structured for it, but no dark palette is defined),
-tooltips, dropdown menus, a drawer/sheet primitive, file upload, and a component
-gallery page.
+tooltips, a drawer/sheet primitive and a component gallery page. `MenuButton`
+covers the overflow menus the board and the page headers need.
