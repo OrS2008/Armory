@@ -110,8 +110,27 @@ current, so nothing stale is mistaken for live.
 
 ## Not implemented
 
-Drag-and-drop on the board, undo/redo and PWA offline caching. The board
-currently assigns through the candidate dialog rather than by dragging.
+Drag-and-drop on the board and undo/redo. The board currently assigns through
+the candidate dialog rather than by dragging.
+
+## Offline
+
+`public/sw.js` caches the shell and the build's content-hashed assets so the
+app opens without a network. It deliberately does not cache API responses: a
+schedule changes, and yesterday's duty sheet shown as today's is worse than an
+honest failure, so every `/api` request goes to the network and each screen
+renders its own error state when it fails.
+
+Two details cost a debugging session each and are worth keeping:
+`cache.addAll` is atomic, so one missing extra silently leaves the shell
+uncached; and `/index.html` redirects to `/` on Pages, which marks the cached
+response as redirected — a flag that makes the browser refuse it for a
+navigation. The worker fetches `/` and rebuilds the response to drop the flag.
+
+The signed-in identity is remembered in `localStorage` so an offline reload
+opens the app instead of a login form nobody can submit. It is not a
+credential — the session cookie is, and the server authorises every request
+against it.
 
 ## Command palette
 

@@ -42,6 +42,23 @@ export default tseslint.config(
     },
   },
   {
+    // The service worker runs in its own global scope, outside the app's
+    // TypeScript projects, so it is linted without the type-aware rules.
+    files: ['public/sw.js'],
+    ...tseslint.configs.disableTypeChecked,
+    languageOptions: {
+      parserOptions: { projectService: false, project: false },
+      globals: {
+        self: 'readonly',
+        caches: 'readonly',
+        fetch: 'readonly',
+        Response: 'readonly',
+        URL: 'readonly',
+        Promise: 'readonly',
+      },
+    },
+  },
+  {
     files: ['src/**/*.{ts,tsx}'],
     plugins: { 'react-hooks': reactHooks, 'react-refresh': reactRefresh },
     rules: {

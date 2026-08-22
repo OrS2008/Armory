@@ -130,6 +130,30 @@ test.describe('navigation and screen states', () => {
     await expect(page).toHaveURL(/\/reports$/);
   });
 
+  test('opens without a network once it has been visited', async ({ page, context }) => {
+    await login(page);
+    await page.evaluate(() => navigator.serviceWorker.ready.then(() => undefined));
+    // Being registered is not the same as controlling this page, and only a
+    // controlled page can be served from the cache.
+    await expect
+      .poll(() => page.evaluate(() => navigator.serviceWorker.controller !== null))
+      .toBe(true);
+
+    await context.setOffline(true);
+    await page.reload();
+
+    // The shell renders from cache, still signed in, rather than the browser's
+    // own error page or a login form the duty officer cannot submit.
+    await expect(page.getByRole('heading', { name: 'לוח בקרה' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'כניסה' })).toHaveCount(0);
+
+    // And the data is not served from a cache: yesterday's duty sheet shown as
+    // today's is worse than an honest failure, so the screen says it failed.
+    await expect(page.getByText('לא הצלחנו לטעון את המסך')).toBeVisible();
+
+    await context.setOffline(false);
+  });
+
   // A title alone ("זמינות", "דוחות") does not tell a first-time reader what the
   // screen is for. Every main screen answers that in its own words.
   const screens = [
