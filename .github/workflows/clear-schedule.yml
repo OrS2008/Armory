@@ -1,0 +1,142 @@
+name: Clear the schedule
+
+# Start the board over.
+#
+# This removes shifts, not posts. The distinction is the whole point: the posts
+# carry their crew sizes, their required qualifications and the marks they
+# refuse, and re-entering those by hand is exactly the work somebody is trying
+# to avoid when they say the schedule is a mess. Deleting the shifts leaves a
+# clean board that "פריסת תקופה" refills in one press.
+#
+# Report-only unless CLEAR is typed back. The audit trail is untouched: it
+# carries no foreign key precisely so it outlives what it describes.
+on:
+  workflow_dispatch:
+    inputs:
+      from_date:
+        description: 'Only shifts starting on or after this day (YYYY-MM-DD). Empty means from the beginning.'
+        type: string
+        default: ''
+      to_date:
+        description: 'Only shifts starting on or before this day (YYYY-MM-DD). Empty means to the end.'
+        type: string
+        default: ''
+      confirm:
+        description: Type CLEAR to go ahead. Leave empty to only report.
+        type: string
+        default: ''
+      database_name:
+        description: D1 database name
+        type: string
+        default: shabatzak
+
+concurrency:
+  group: clear-schedule
+  cancel-in-progress: false
+
+jobs:
+  clear:
+    name: Report, then clear
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      DATABASE_NAME: ${{ inputs.database_name }}
+      FROM_DATE: ${{ inputs.from_date }}
+      TO_DATE: ${{ inputs.to_date }}
+
+    steps:
+      - name: Check that the credentials are present
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo '::error::Add CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID under Settings, Secrets and variables, Actions. The token needs Account, D1, Edit.'
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - run: npm clean-install
+
+      # A date is either empty or YYYY-MM-DD. Anything else stops the run rather
+      # than being pasted into SQL.
+      - name: Build the range
+        id: range
+        run: |
+          set -euo pipefail
+          valid() { [ -z "$1" ] || printf '%s' "$1" | grep -Eq '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'; }
+          if ! valid "$FROM_DATE" || ! valid "$TO_DATE"; then
+            echo '::error::Dates must be YYYY-MM-DD, or empty.'
+            exit 1
+          fi
+          WHERE=""
+          [ -n "$FROM_DATE" ] && WHERE="$WHERE AND date(start_at/1000,'unixepoch') >= '$FROM_DATE'"
+          [ -n "$TO_DATE" ] && WHERE="$WHERE AND date(start_at/1000,'unixepoch') <= '$TO_DATE'"
+          echo "where=$WHERE" >> "$GITHUB_OUTPUT"
+          echo "Range: ${FROM_DATE:-beginning} to ${TO_DATE:-end}" >> "$GITHUB_STEP_SUMMARY"
+
+      # What is at stake, counted before anything is touched, broken down by post
+      # so a surprise — a post with ten times the shifts it should have — is
+      # visible rather than averaged away.
+      - name: Count what is at stake
+        run: |
+          set -euo pipefail
+          npx wrangler d1 execute "$DATABASE_NAME" --remote --json --command \
+            "SELECT t.name,
+                    COUNT(DISTINCT a.id) AS shifts,
+                    COUNT(ap.id) AS staffed_seats,
+                    MIN(date(a.start_at/1000,'unixepoch')) AS first_day,
+                    MAX(date(a.start_at/1000,'unixepoch')) AS last_day
+               FROM assignment_instances a
+               JOIN assignment_types t ON t.id = a.assignment_type_id
+               LEFT JOIN assignment_personnel ap ON ap.assignment_id = a.id
+              WHERE a.org_id = 'org_default' ${{ steps.range.outputs.where }}
+              GROUP BY t.name ORDER BY shifts DESC" \
+            | tee counts.json
+          {
+            echo '### Shifts that would go'
+            echo '```json'
+            cat counts.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Report only, because CLEAR was not typed
+        if: ${{ inputs.confirm != 'CLEAR' }}
+        run: |
+          {
+            echo ''
+            echo '**Nothing was written.** Run again with `confirm` set to `CLEAR` to go ahead.'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Only the shifts. assignment_personnel and any replacement request hang
+      # off a shift and cascade with it; the posts, the roster and the audit
+      # trail are all left standing.
+      - name: Clear
+        if: ${{ inputs.confirm == 'CLEAR' }}
+        run: |
+          set -euo pipefail
+          npx wrangler d1 execute "$DATABASE_NAME" --remote --command \
+            "DELETE FROM assignment_instances
+              WHERE org_id = 'org_default' ${{ steps.range.outputs.where }};"
+          echo 'Schedule cleared.' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Report what remains
+        if: ${{ inputs.confirm == 'CLEAR' }}
+        run: |
+          set -euo pipefail
+          npx wrangler d1 execute "$DATABASE_NAME" --remote --json --command \
+            "SELECT (SELECT COUNT(*) FROM assignment_instances) AS shifts_left,
+                    (SELECT COUNT(*) FROM assignment_personnel) AS seats_left,
+                    (SELECT COUNT(*) FROM assignment_types WHERE org_id = 'org_default') AS posts,
+                    (SELECT COUNT(*) FROM personnel WHERE org_id = 'org_default') AS people" \
+            | tee remaining.json
+          {
+            echo '### What remains'
+            echo '```json'
+            cat remaining.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
