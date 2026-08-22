@@ -17,7 +17,19 @@ export interface MenuAction {
  * toolbar is the whole point: a row of ten equal-weight buttons tells nobody
  * which one they are supposed to press.
  */
-export function MenuButton({ label, actions }: { label: string; actions: MenuAction[] }) {
+export function MenuButton({
+  label,
+  actions,
+  className,
+  ariaLabel,
+}: {
+  label: string;
+  actions: MenuAction[];
+  className?: string;
+  /** Use when the visible label is a person's name or otherwise varies: the
+   *  button's accessible name should say what the menu is. */
+  ariaLabel?: string;
+}) {
   const [open, setOpen] = useState(false);
   const wrapper = useRef<HTMLDivElement>(null);
   const menuId = useId();
@@ -45,9 +57,10 @@ export function MenuButton({ label, actions }: { label: string; actions: MenuAct
       <button
         type="button"
         aria-haspopup="menu"
+        {...(ariaLabel ? { 'aria-label': ariaLabel } : {})}
         aria-expanded={open}
         aria-controls={menuId}
-        className={buttonClass('secondary', 'sm')}
+        className={buttonClass('secondary', 'sm', className)}
         onClick={() => setOpen((current) => !current)}
       >
         {label}

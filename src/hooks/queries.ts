@@ -2,6 +2,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Conflict, SchedulingRule } from '@shared/conflicts';
 import type {
+  AdminUser,
   Assignment,
   AssignmentType,
   Availability,
@@ -36,6 +37,7 @@ export const queryKeys = {
   workload: (window: { from: number; to: number }) => ['workload', window] as const,
   mySchedule: ['my-schedule'] as const,
   candidates: (assignmentId: string) => ['candidates', assignmentId] as const,
+  users: ['users'] as const,
 };
 
 export interface DashboardData {
@@ -171,6 +173,15 @@ export function useAuditEvents(filters: Record<string, string | number | undefin
     queryKey: queryKeys.audit(filters),
     queryFn: () => api.get<{ events: AuditEvent[] }>('/audit', filters),
     select: (data) => data.events,
+  });
+}
+
+export function useUsers(enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.users,
+    queryFn: () => api.get<{ users: AdminUser[] }>('/users'),
+    select: (data) => data.users,
+    enabled,
   });
 }
 

@@ -76,6 +76,21 @@ the granted unit ids; an empty scope means company-wide.
 
 ## Not implemented
 
-User administration has no UI or endpoints yet: accounts are created by the
-first-run bootstrap and then directly in the database. `users.manage` and
-`settings.manage` are defined and enforced, but nothing calls them yet.
+`settings.manage` is defined and enforced but nothing calls it yet; the
+settings that exist are covered by the more specific permissions above.
+
+## User administration
+
+`users.manage` gates `GET/POST /users` and `PATCH /users/:id`, and the
+משתמשים tab in settings. Three guards stop the screen locking the unit out of
+its own system:
+
+- Nobody may change their own role or switch their own account off.
+- The last active `system_admin` may not be demoted or deactivated.
+- A reset password, a changed role or a deactivation revokes that account's
+  sessions, so an open browser somewhere does not keep the old access.
+
+A person changes their own password through `POST /auth/password`, which
+verifies the current one and signs out every other device. An administrator
+resetting someone else's goes through `PATCH /users/:id` — a different act,
+recorded separately in the audit trail.

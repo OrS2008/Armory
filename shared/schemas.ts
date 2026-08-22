@@ -242,12 +242,53 @@ export const personnelImportSchema = z.object({
 });
 export type PersonnelImportInput = z.infer<typeof personnelImportSchema>;
 
+const roleSchema = z.enum([
+  'system_admin',
+  'company_commander',
+  'unit_scheduler',
+  'soldier',
+  'viewer',
+]);
+
+/** A new account. The password is set once here and never read back. */
 export const userSchema = z.object({
   email: identifierSchema,
   displayName: trimmed(80).min(2, v.nameTooShort),
-  password: z.string().min(12, v.passwordTooShort).max(200).optional(),
-  role: z.enum(['system_admin', 'company_commander', 'unit_scheduler', 'soldier', 'viewer']),
+  password: z.string().min(12, v.passwordTooShort).max(200),
+  role: roleSchema,
   personnelId: optionalId(),
   unitScope: z.array(idSchema).max(50).optional(),
   active: z.boolean().optional(),
 });
+export type UserInput = z.infer<typeof userSchema>;
+
+/**
+ * Editing an account. Every field is optional because the screen sends only
+ * what changed; `password` here is an administrator resetting someone else's,
+ * which is a different act from a person changing their own.
+ */
+export const userPatchSchema = z.object({
+  displayName: trimmed(80).min(2, v.nameTooShort).optional(),
+  role: roleSchema.optional(),
+  personnelId: optionalId(),
+  unitScope: z.array(idSchema).max(50).optional(),
+  active: z.boolean().optional(),
+  password: z.string().min(12, v.passwordTooShort).max(200).optional(),
+});
+export type UserPatchInput = z.infer<typeof userPatchSchema>;
+
+export const passwordChangeSchema = z
+  .object({
+    currentPassword: z.string().min(1, v.required).max(200),
+    newPassword: z.string().min(12, v.passwordTooShort).max(200),
+    confirmPassword: z.string().min(1, v.required).max(200),
+  })
+  .refine((value) => value.newPassword === value.confirmPassword, {
+    path: ['confirmPassword'],
+    message: v.passwordMismatch,
+  })
+  .refine((value) => value.newPassword !== value.currentPassword, {
+    path: ['newPassword'],
+    message: v.passwordUnchanged,
+  });
+export type PasswordChangeInput = z.infer<typeof passwordChangeSchema>;

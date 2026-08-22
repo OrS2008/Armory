@@ -8,8 +8,9 @@ import { AuditPanel } from './AuditPanel';
 import { QualificationsPanel } from './QualificationsPanel';
 import { RulesPanel } from './RulesPanel';
 import { UnitsPanel } from './UnitsPanel';
+import { UsersPanel } from './UsersPanel';
 
-type Tab = 'rules' | 'units' | 'qualifications' | 'audit';
+type Tab = 'rules' | 'units' | 'qualifications' | 'users' | 'audit';
 
 export function SettingsPage() {
   const { can } = useAuth();
@@ -23,6 +24,7 @@ export function SettingsPage() {
       label: t('settings.qualifications'),
       visible: can(Permissions.qualificationsRead),
     },
+    { id: 'users', label: t('settings.users'), visible: can(Permissions.usersManage) },
     { id: 'audit', label: t('settings.audit'), visible: can(Permissions.auditRead) },
   ];
 
@@ -55,6 +57,7 @@ export function SettingsPage() {
       {tab === 'rules' ? <RulesPanel /> : null}
       {tab === 'units' ? <UnitsPanel /> : null}
       {tab === 'qualifications' ? <QualificationsPanel /> : null}
+      {tab === 'users' ? <UsersPanel /> : null}
       {tab === 'audit' ? <AuditPanel /> : null}
 
       {/* Which build is live, so "did my change reach the site?" has an answer. */}

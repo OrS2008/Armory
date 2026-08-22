@@ -10,12 +10,14 @@ import type {
 } from '../../shared/conflicts';
 import { detectConflicts } from '../../shared/conflicts';
 import type {
+  AdminUser,
   Assignment,
   AssignmentType,
   Availability,
   Personnel,
   PublicationState,
   Qualification,
+  Role,
   Severity,
   Unit,
 } from '../../shared/types';
@@ -124,6 +126,69 @@ export async function loadQualifications(env: Env): Promise<Qualification[]> {
     active: row.active === 1,
     exclusive: row.exclusive === 1,
   }));
+}
+
+/**
+ * Accounts for the administration screen. The password columns are not
+ * selected: nothing outside the auth path has a reason to see them.
+ */
+export async function loadUsers(env: Env): Promise<AdminUser[]> {
+  const rows = await env.DB.prepare(
+    `SELECT u.id, u.email, u.display_name, u.role, u.personnel_id, p.display_name AS personnel_name,
+            u.active, u.mfa_enabled, u.last_login_at, u.created_at
+       FROM users u
+       LEFT JOIN personnel p ON p.id = u.personnel_id
+      ORDER BY u.active DESC, u.display_name`,
+  ).all<{
+    id: string;
+    email: string;
+    display_name: string;
+    role: Role;
+    personnel_id: string | null;
+    personnel_name: string | null;
+    active: number;
+    mfa_enabled: number;
+    last_login_at: number | null;
+    created_at: number;
+  }>();
+
+  const scopeRows = await env.DB.prepare('SELECT user_id, unit_id FROM user_scopes').all<{
+    user_id: string;
+    unit_id: string;
+  }>();
+  const scopes = new Map<string, string[]>();
+  for (const scope of scopeRows.results ?? []) {
+    const list = scopes.get(scope.user_id) ?? [];
+    list.push(scope.unit_id);
+    scopes.set(scope.user_id, list);
+  }
+
+  return (rows.results ?? []).map((row) => ({
+    id: row.id,
+    email: row.email,
+    displayName: row.display_name,
+    role: row.role,
+    personnelId: row.personnel_id,
+    personnelName: row.personnel_name,
+    unitScope: scopes.get(row.id) ?? [],
+    active: row.active === 1,
+    mfaEnabled: row.mfa_enabled === 1,
+    lastLoginAt: row.last_login_at,
+    createdAt: row.created_at,
+  }));
+}
+
+/**
+ * How many administrators could still sign in if this one were changed. The
+ * screen must not be able to lock the unit out of its own system.
+ */
+export async function otherActiveAdmins(env: Env, exceptUserId: string): Promise<number> {
+  const row = await env.DB.prepare(
+    "SELECT COUNT(*) AS count FROM users WHERE role = 'system_admin' AND active = 1 AND id != ?",
+  )
+    .bind(exceptUserId)
+    .first<{ count: number }>();
+  return row?.count ?? 0;
 }
 
 export async function loadPersonnel(

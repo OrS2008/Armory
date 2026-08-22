@@ -4,7 +4,7 @@
  * hardcodes Hebrew inside a component or a handler.
  */
 import { ErrorCodes } from './errors';
-import type { AvailabilityKind, Severity } from './types';
+import type { AvailabilityKind, Role, Severity } from './types';
 
 type Params = Record<string, string | number>;
 
@@ -26,6 +26,11 @@ export const errorMessages: Record<string, string> = {
   [ErrorCodes.INVALID_JSON]: 'תוכן הבקשה אינו תקין.',
   [ErrorCodes.JSON_REQUIRED]: 'נדרש תוכן מסוג JSON.',
   [ErrorCodes.CONFLICT]: 'הפעולה מתנגשת עם נתון קיים במערכת.',
+  [ErrorCodes.EMAIL_TAKEN]: 'שם המשתמש הזה כבר תפוס.',
+  [ErrorCodes.LAST_ADMIN]:
+    'זהו מנהל המערכת הפעיל האחרון. מנו מנהל נוסף לפני שמורידים לו הרשאה או מבטלים אותו.',
+  [ErrorCodes.SELF_LOCKOUT]: 'אי אפשר לשנות לעצמך את ההרשאה או לבטל את המשתמש שלך.',
+  [ErrorCodes.WRONG_PASSWORD]: 'הסיסמה הנוכחית שגויה.',
   [ErrorCodes.SCHEDULING_CONFLICT]: 'קיימת התנגשות שיבוץ החוסמת את הפעולה.',
   [ErrorCodes.ALREADY_ASSIGNED]: 'האדם כבר משובץ למשימה זו.',
   [ErrorCodes.ROLE_TAKEN]: 'התפקיד הזה כבר תפוס במשימה. שבצו כלוחם, או פנו קודם את התפקיד.',
@@ -171,6 +176,23 @@ export function auditEntityLabel(entityType: string): string {
   return auditEntityLabels[entityType] ?? entityType;
 }
 
+/** Account roles, and what each one may actually do. */
+export const roleLabels: Record<Role, string> = {
+  system_admin: 'מנהל מערכת',
+  company_commander: 'מפקד פלוגה',
+  unit_scheduler: 'משבץ',
+  soldier: 'חייל',
+  viewer: 'צופה',
+};
+
+export const roleDescriptions: Record<Role, string> = {
+  system_admin: 'הכול, כולל ניהול משתמשים והגדרות המערכת.',
+  company_commander: 'יצירת משימות, שיבוץ, פרסום שבצ״ק, שינוי כללים וצפייה ביומן הפעולות.',
+  unit_scheduler: 'יצירת משימות ושיבוץ אנשים — בלי פרסום ובלי שינוי כללים.',
+  soldier: 'רואה את השבצ״ק שלו, מאשר קבלת משימה ומבקש החלפה.',
+  viewer: 'צפייה בלבד, בלי לשנות דבר.',
+};
+
 export const DEFAULT_CREW_ROLE = 'לוחם';
 
 /**
@@ -205,6 +227,8 @@ export const severityLabels: Record<Severity, string> = {
 
 /** Form and payload validation messages, shared by the API and the UI forms. */
 export const validationMessages = {
+  passwordMismatch: 'הסיסמאות אינן זהות.',
+  passwordUnchanged: 'הסיסמה החדשה זהה לנוכחית.',
   required: 'שדה חובה',
   identifier: 'שם משתמש או דוא״ל אינם תקינים',
   email: 'כתובת דוא״ל אינה תקינה',

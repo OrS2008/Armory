@@ -23,6 +23,21 @@ export interface SessionUser {
   mfaEnabled: boolean;
 }
 
+/** A user account as the administration screen sees it — never the password. */
+export interface AdminUser {
+  id: string;
+  email: string;
+  displayName: string;
+  role: Role;
+  personnelId: string | null;
+  personnelName: string | null;
+  unitScope: string[];
+  active: boolean;
+  mfaEnabled: boolean;
+  lastLoginAt: number | null;
+  createdAt: number;
+}
+
 export interface Unit {
   id: string;
   parentId: string | null;

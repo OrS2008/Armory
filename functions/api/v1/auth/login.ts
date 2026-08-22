@@ -88,6 +88,12 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     return fail(401, ErrorCodes.INVALID_CREDENTIALS);
   }
 
+  // The scope belongs to the account, not to the session; leaving it empty
+  // here made a scoped user look unrestricted until the first /auth/me.
+  const scopes = await env.DB.prepare('SELECT unit_id FROM user_scopes WHERE user_id = ?')
+    .bind(row.id)
+    .all<{ unit_id: string }>();
+
   const session = await createSession(
     env,
     row.id,
@@ -111,7 +117,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
         displayName: row.display_name,
         role: row.role,
         personnelId: row.personnel_id,
-        unitScope: [],
+        unitScope: (scopes.results ?? []).map((scope) => scope.unit_id),
         permissions: permissionsForRole(row.role),
         mfaEnabled: row.mfa_enabled === 1,
       },

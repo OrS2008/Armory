@@ -19,3 +19,17 @@ export async function login(page: Page): Promise<void> {
   await page.getByRole('button', { name: 'כניסה' }).click();
   await expect(page.getByRole('heading', { name: 'לוח בקרה' })).toBeVisible();
 }
+
+/** Signs out through the account menu, the way a person would. */
+export async function logout(page: Page): Promise<void> {
+  await page.getByRole('button', { name: 'החשבון שלי' }).click();
+  await page.getByRole('menuitem', { name: 'התנתקות' }).click();
+  await expect(page.getByRole('button', { name: 'כניסה' })).toBeVisible();
+}
+
+export async function loginAs(page: Page, email: string, password: string): Promise<void> {
+  await page.goto('/login');
+  await page.getByRole('textbox', { name: 'שם משתמש' }).fill(email);
+  await page.getByLabel('סיסמה').fill(password);
+  await page.getByRole('button', { name: 'כניסה' }).click();
+}

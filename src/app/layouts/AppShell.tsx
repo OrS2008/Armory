@@ -1,20 +1,22 @@
 import { useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { Bell, LogOut, Menu, ShieldCheck, X } from 'lucide-react';
+import { Bell, KeyRound, LogOut, Menu, ShieldCheck, X } from 'lucide-react';
 import { t } from '@/i18n';
 import { cn } from '@/lib/cn';
-import { Button } from '@/components/ui/Button';
+import { MenuButton } from '@/components/ui/MenuButton';
 import { IconButton } from '@/components/ui/IconButton';
 import { navItems, personalNavItem, type NavItem } from '@/components/layout/navigation';
 import { useAuth } from '@/hooks/auth-context';
 import { useNotifications } from '@/hooks/queries';
 import { OfflineBanner } from '@/components/layout/OfflineBanner';
+import { PasswordDialog } from '@/features/auth/PasswordDialog';
 
 export function AppShell() {
   const { user, logout, can } = useAuth();
   const navigate = useNavigate();
   const notifications = useNotifications();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [changingPassword, setChangingPassword] = useState(false);
 
   const visible = navItems.filter((item) => !item.permission || can(item.permission));
   const items: NavItem[] = user?.personnelId ? [personalNavItem, ...visible] : visible;
@@ -61,17 +63,25 @@ export function AppShell() {
                 </span>
               ) : null}
             </NavLink>
-            <span className="hidden text-sm text-ink-muted sm:inline">
-              {t('auth.loggedInAs', { name: user?.displayName ?? '' })}
-            </span>
-            <Button
-              variant="ghost"
-              size="sm"
-              icon={<LogOut className="size-4" />}
-              onClick={() => void handleLogout()}
-            >
-              <span className="hidden sm:inline">{t('auth.logout')}</span>
-            </Button>
+            <MenuButton
+              className="max-w-40"
+              ariaLabel={t('nav.account')}
+              label={user?.displayName ?? t('nav.account')}
+              actions={[
+                {
+                  key: 'password',
+                  label: t('account.changePassword'),
+                  icon: <KeyRound className="size-4" />,
+                  onSelect: () => setChangingPassword(true),
+                },
+                {
+                  key: 'logout',
+                  label: t('auth.logout'),
+                  icon: <LogOut className="size-4" />,
+                  onSelect: () => void handleLogout(),
+                },
+              ]}
+            />
           </div>
         </div>
       </header>
@@ -140,6 +150,10 @@ export function AppShell() {
             </NavLink>
           ))}
       </nav>
+
+      {/* Mounted only while open: a hidden password form on every screen is
+          something browsers offer to fill, and something tests trip over. */}
+      {changingPassword ? <PasswordDialog open onClose={() => setChangingPassword(false)} /> : null}
     </div>
   );
 }
