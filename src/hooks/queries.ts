@@ -72,11 +72,12 @@ export function useDashboard() {
   });
 }
 
-export function usePersonnel(filters: Record<string, string | undefined> = {}) {
+export function usePersonnel(filters: Record<string, string | undefined> = {}, enabled = true) {
   return useQuery({
     queryKey: queryKeys.personnel(filters),
     queryFn: () => api.get<{ personnel: Personnel[] }>('/personnel', filters),
     select: (data) => data.personnel,
+    enabled,
   });
 }
 

@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { Bell, KeyRound, LogOut, Menu, Moon, ShieldCheck, Sun, X } from 'lucide-react';
+import { Bell, KeyRound, LogOut, Menu, Moon, Search, ShieldCheck, Sun, X } from 'lucide-react';
 import { t } from '@/i18n';
 import { cn } from '@/lib/cn';
 import { MenuButton } from '@/components/ui/MenuButton';
@@ -11,6 +11,7 @@ import { useNotifications } from '@/hooks/queries';
 import { useTheme } from '@/hooks/useTheme';
 import { OfflineBanner } from '@/components/layout/OfflineBanner';
 import { PasswordDialog } from '@/features/auth/PasswordDialog';
+import { CommandPalette, type PaletteAction } from '@/components/command/CommandPalette';
 
 export function AppShell() {
   const { user, logout, can } = useAuth();
@@ -19,15 +20,48 @@ export function AppShell() {
   const theme = useTheme();
   const [menuOpen, setMenuOpen] = useState(false);
   const [changingPassword, setChangingPassword] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
 
   const visible = navItems.filter((item) => !item.permission || can(item.permission));
   const items: NavItem[] = user?.personnelId ? [personalNavItem, ...visible] : visible;
   const unread = notifications.data?.unreadCount ?? 0;
 
+  // Ctrl/Cmd-K anywhere, including from inside a field: it is the shortcut
+  // people already have in their fingers, and it is not an editing key.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key.toLowerCase() !== 'k' || !(event.metaKey || event.ctrlKey)) return;
+      event.preventDefault();
+      setPaletteOpen((open) => !open);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+
   const handleLogout = async () => {
     await logout();
     await navigate('/login', { replace: true });
   };
+
+  const paletteActions = useMemo<PaletteAction[]>(
+    () => [
+      {
+        key: 'password',
+        label: t('account.changePassword'),
+        run: () => setChangingPassword(true),
+      },
+      {
+        key: 'theme',
+        label: theme.resolved === 'dark' ? t('theme.toLight') : t('theme.toDark'),
+        run: () => theme.select(theme.resolved === 'dark' ? 'light' : 'dark'),
+      },
+      { key: 'logout', label: t('auth.logout'), run: () => void handleLogout() },
+    ],
+    // handleLogout closes over `navigate` and `logout`, both stable enough that
+    // rebuilding the list on every render would only churn the palette.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [theme.resolved],
+  );
 
   return (
     <div className="min-h-dvh bg-surface text-ink">
@@ -53,6 +87,11 @@ export function AppShell() {
           </div>
 
           <div className="ms-auto flex items-center gap-1">
+            <IconButton
+              label={t('palette.open')}
+              icon={<Search className="size-5" />}
+              onClick={() => setPaletteOpen(true)}
+            />
             <NavLink
               to="/notifications"
               className="relative inline-flex size-9 items-center justify-center rounded-[var(--radius-control)] text-ink-muted hover:bg-surface-sunken"
@@ -173,6 +212,14 @@ export function AppShell() {
             </NavLink>
           ))}
       </nav>
+
+      {/* Mounted only while open: a hidden password form on every screen is
+          something browsers offer to fill, and something tests trip over. */}
+      <CommandPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        actions={paletteActions}
+      />
 
       {/* Mounted only while open: a hidden password form on every screen is
           something browsers offer to fill, and something tests trip over. */}

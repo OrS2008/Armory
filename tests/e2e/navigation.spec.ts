@@ -103,6 +103,33 @@ test.describe('navigation and screen states', () => {
     expect(Array.from(head)).toEqual([0x50, 0x4b, 0x03, 0x04]);
   });
 
+  test('finds a person from anywhere with the command palette', async ({ page }) => {
+    await login(page);
+    await page.keyboard.press('Control+k');
+
+    const palette = page.getByRole('dialog', { name: 'חיפוש ופעולות מהירות' });
+    await expect(palette).toBeVisible();
+    await palette.getByRole('combobox').fill('דניאל');
+    await palette
+      .getByRole('option', { name: /דניאל כהן/ })
+      .first()
+      .click();
+
+    // Lands on the roster already filtered, and the filter is in the URL.
+    await expect(page).toHaveURL(/\/personnel\?q=/);
+    await expect(page.getByRole('heading', { name: 'כוח אדם' })).toBeVisible();
+    await expect(page.locator('.card').first().getByText('דניאל כהן')).toBeVisible();
+  });
+
+  test('opens the palette from the header for anyone without a keyboard', async ({ page }) => {
+    await login(page);
+    await page.getByRole('button', { name: 'חיפוש מהיר' }).click();
+    const palette = page.getByRole('dialog', { name: 'חיפוש ופעולות מהירות' });
+    await expect(palette).toBeVisible();
+    await palette.getByRole('option', { name: 'דוחות' }).click();
+    await expect(page).toHaveURL(/\/reports$/);
+  });
+
   // A title alone ("זמינות", "דוחות") does not tell a first-time reader what the
   // screen is for. Every main screen answers that in its own words.
   const screens = [

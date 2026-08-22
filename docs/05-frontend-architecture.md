@@ -110,6 +110,13 @@ current, so nothing stale is mistaken for live.
 
 ## Not implemented
 
-Command palette (Ctrl/⌘-K), global search, keyboard shortcuts, drag-and-drop on
-the board, undo/redo and PWA offline caching. All are post-MVP in the plan; the
-board currently assigns through the candidate dialog rather than by dragging.
+Drag-and-drop on the board, undo/redo and PWA offline caching. The board
+currently assigns through the candidate dialog rather than by dragging.
+
+## Command palette
+
+Ctrl/⌘-K, or the search button in the header for anyone without a keyboard,
+opens one box over people, screens and a few account actions. Choosing a person
+lands on the roster filtered to them: the roster's query lives in the URL
+(`/personnel?q=`), so a search is linkable and the palette has somewhere real
+to send you.

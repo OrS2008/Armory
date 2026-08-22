@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { FileUp, Pencil, Plus, Search, UserMinus } from 'lucide-react';
 import { useMutation } from '@tanstack/react-query';
 import type { Personnel } from '@shared/types';
@@ -26,7 +27,11 @@ const statusLabels: Record<Personnel['status'], string> = {
 export function PersonnelPage() {
   const { can } = useAuth();
   const toast = useToast();
-  const [search, setSearch] = useState('');
+  // The query lives in the URL, so a search can be linked to and so the
+  // command palette can land here already filtered to one person.
+  const [params, setParams] = useSearchParams();
+  const search = params.get('q') ?? '';
+  const setSearch = (value: string) => setParams(value ? { q: value } : {}, { replace: true });
   const [unitId, setUnitId] = useState('');
   const [qualificationId, setQualificationId] = useState('');
   const [editing, setEditing] = useState<Personnel | null>(null);
