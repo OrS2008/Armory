@@ -132,14 +132,20 @@ test.describe('scheduling workflow', () => {
    */
   test('lays out a whole period of standing posts, and says so when it is already laid out', async ({
     page,
-  }) => {
+  }, testInfo) => {
+    // A period this database has never seen. Idempotence is the thing under
+    // test, so a window some earlier run already laid out would make the first
+    // assertion pass on that run's work — the same trap the roster tests hit,
+    // and worse here, because the second half would then be checking nothing.
+    const [from, to] = freshPeriod(testInfo.project.name);
+
     await page.goto('/schedule');
     await page.getByRole('button', { name: 'עוד' }).click();
     await page.getByRole('menuitem', { name: 'פריסת תקופה' }).click();
 
     const dialog = page.locator('dialog[open]');
-    await dialog.getByLabel('מתאריך').fill('2026-09-15');
-    await dialog.getByLabel('עד תאריך').fill('2026-09-16');
+    await dialog.getByLabel('מתאריך').fill(from);
+    await dialog.getByLabel('עד תאריך').fill(to);
     await dialog.getByRole('button', { name: 'פריסה' }).click();
 
     // Two days of four eight-hour posts plus one round-the-clock post.
@@ -150,8 +156,8 @@ test.describe('scheduling workflow', () => {
     await page.getByRole('button', { name: 'עוד' }).click();
     await page.getByRole('menuitem', { name: 'פריסת תקופה' }).click();
     const again = page.locator('dialog[open]');
-    await again.getByLabel('מתאריך').fill('2026-09-15');
-    await again.getByLabel('עד תאריך').fill('2026-09-16');
+    await again.getByLabel('מתאריך').fill(from);
+    await again.getByLabel('עד תאריך').fill(to);
     await again.getByRole('button', { name: 'פריסה' }).click();
     await expect(page.getByText('כל המשמרות בתקופה כבר קיימות')).toBeVisible({ timeout: 15_000 });
   });
@@ -228,7 +234,15 @@ test.describe('scheduling workflow', () => {
    */
   test('auto-fills a laid-out day from the whole roster, and honours the marks', async ({
     page,
+    isMobile,
   }) => {
+    // Desktop only, and not for speed: both projects share one database, so by
+    // the time the phone run reaches today the desktop run has already staffed
+    // it. The second run could only ever auto-fill a day that is already full,
+    // which proves nothing. What is under test — that the proposal draws on the
+    // whole roster and obeys the marks — is server-side and identical either way.
+    test.skip(isMobile, 'the desktop run has already staffed today');
+
     const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem' }).format(
       new Date(),
     );
@@ -240,7 +254,13 @@ test.describe('scheduling workflow', () => {
     await layout.getByLabel('מתאריך').fill(today);
     await layout.getByLabel('עד תאריך').fill(today);
     await layout.getByRole('button', { name: 'פריסה' }).click();
-    await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 20_000 });
+    // Laid out now, or laid out by an earlier run against this same server —
+    // either way the day has its shifts, which is all this test needs.
+    await expect(page.getByText(/נוצרו \d+ משמרות|כל המשמרות בתקופה כבר קיימות/)).toBeVisible({
+      timeout: 20_000,
+    });
+    if (await page.locator('dialog[open]').count()) await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog')).toHaveCount(0);
 
     await page.getByRole('button', { name: 'שיבוץ אוטומטי' }).click();
     const proposal = page.locator('dialog[open]');
@@ -260,3 +280,21 @@ test.describe('scheduling workflow', () => {
     await expect(page.getByText('משה אלימלך')).toHaveCount(0);
   });
 });
+
+/**
+ * A two-day period no run of this suite has laid out before.
+ *
+ * Both Playwright projects share one local database and the suite is run
+ * repeatedly against a server that is already up, so the window has to vary
+ * with the clock. Windows are spaced two days apart and each project takes its
+ * own parity, so desktop and mobile cannot collide even in the same second.
+ */
+function freshPeriod(project: string): [string, string] {
+  const slot = (Math.floor(Date.now() / 1000) % 3000) * 2 + (project === 'mobile' ? 1 : 0);
+  const day = (offset: number) => {
+    const date = new Date(Date.UTC(2027, 0, 1));
+    date.setUTCDate(date.getUTCDate() + slot * 2 + offset);
+    return date.toISOString().slice(0, 10);
+  };
+  return [day(0), day(1)];
+}
