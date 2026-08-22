@@ -20,10 +20,13 @@ test.describe('scheduling workflow', () => {
   });
 
   test('imports a roster from pasted CSV without a dead-end button', async ({ page }, testInfo) => {
-    // Both projects share one local database, and importing the same names
-    // twice is correctly refused as a duplicate — so each run brings its own.
-    const first = `רס״ר ${testInfo.project.name}`;
-    const second = `סמל ${testInfo.project.name}`;
+    // Both projects share one local database and importing the same name twice
+    // is correctly refused as a duplicate, so each run brings its own names —
+    // the project alone is not enough when the suite runs twice against a
+    // server that is already up.
+    const run = `${testInfo.project.name}-${Date.now()}`;
+    const first = `רס״ר ${run}`;
+    const second = `סמל ${run}`;
 
     await page.goto('/personnel');
     await page.getByRole('button', { name: 'ייבוא מקובץ' }).click();

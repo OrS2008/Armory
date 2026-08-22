@@ -5,6 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation } from '@tanstack/react-query';
 import { assignmentTypeSchema, type AssignmentTypeInput } from '@shared/schemas';
 import { Permissions } from '@shared/rbac';
+import { formatHours } from '@shared/format';
 import type { AssignmentType } from '@shared/types';
 import { t } from '@/i18n';
 import { ApiError, api } from '@/lib/api';
@@ -13,7 +14,7 @@ import { Button } from '@/components/ui/Button';
 import { Dialog } from '@/components/ui/Dialog';
 import { Field } from '@/components/ui/Field';
 import { Input, Select, Textarea } from '@/components/ui/Input';
-import { TableWrapper, Td, Th } from '@/components/ui/Table';
+import { DataTable, type Column } from '@/components/ui/DataTable';
 import { QueryState } from '@/components/ui/States';
 import { useToast } from '@/components/ui/toast-context';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -91,6 +92,70 @@ export function AssignmentTypesPage() {
     setOpen(true);
   };
 
+  const rows = types.data ?? [];
+  const qualificationName = (id: string) =>
+    qualifications.data?.find((item) => item.id === id)?.name ?? id;
+
+  const columns: Column<AssignmentType>[] = [
+    {
+      key: 'name',
+      header: t('assignments.name'),
+      placement: 'title',
+      cell: (type) => type.name,
+    },
+    {
+      key: 'active',
+      header: t('personnel.status'),
+      placement: 'badge',
+      cell: (type) => (type.active ? null : <Badge>{t('personnel.statusInactive')}</Badge>),
+    },
+    { key: 'category', header: t('assignments.category'), cell: (type) => type.category },
+    {
+      key: 'duration',
+      header: t('assignments.duration'),
+      className: 'ltr-inline tabular-nums',
+      cell: (type) => formatHours(type.defaultDurationMinutes / 60),
+    },
+    {
+      key: 'headcount',
+      header: t('assignments.headcount'),
+      className: 'ltr-inline tabular-nums',
+      cell: (type) => type.requiredHeadcount,
+    },
+    {
+      key: 'qualifications',
+      header: t('assignments.requiredQualifications'),
+      cell: (type) =>
+        type.requiredQualifications.length === 0 ? null : (
+          <div className="flex flex-wrap gap-1">
+            {type.requiredQualifications.map((requirement) => (
+              <Badge key={requirement.qualificationId} tone="brand">
+                {requirement.minCount > 0
+                  ? `${qualificationName(requirement.qualificationId)} ×${requirement.minCount}`
+                  : qualificationName(requirement.qualificationId)}
+              </Badge>
+            ))}
+          </div>
+        ),
+    },
+    {
+      key: 'actions',
+      header: t('app.actions'),
+      placement: 'actions',
+      cell: (type) =>
+        can(Permissions.assignmentTypesWrite) ? (
+          <Button
+            variant="secondary"
+            size="sm"
+            icon={<Pencil className="size-4" />}
+            onClick={() => openDialog(type)}
+          >
+            {t('personnel.edit')}
+          </Button>
+        ) : null,
+    },
+  ];
+
   return (
     <>
       <PageHeader
@@ -109,64 +174,16 @@ export function AssignmentTypesPage() {
         <QueryState
           isLoading={types.isLoading}
           error={types.error}
-          isEmpty={(types.data ?? []).length === 0}
+          isEmpty={rows.length === 0}
           emptyDescription={t('assignments.typesEmpty')}
           onRetry={() => void types.refetch()}
         >
-          <TableWrapper>
-            <thead>
-              <tr>
-                <Th>{t('assignments.name')}</Th>
-                <Th>{t('assignments.category')}</Th>
-                <Th>{t('assignments.duration')}</Th>
-                <Th>{t('assignments.headcount')}</Th>
-                <Th>{t('assignments.requiredQualifications')}</Th>
-                <Th>{t('app.actions')}</Th>
-              </tr>
-            </thead>
-            <tbody>
-              {(types.data ?? []).map((type) => (
-                <tr key={type.id} className="hover:bg-surface-sunken">
-                  <Td>
-                    <span className="font-medium">{type.name}</span>
-                    {!type.active ? (
-                      <Badge className="ms-2">{t('personnel.statusInactive')}</Badge>
-                    ) : null}
-                  </Td>
-                  <Td>{type.category ?? '—'}</Td>
-                  <Td className="ltr-inline">{type.defaultDurationMinutes / 60}</Td>
-                  <Td className="ltr-inline">{type.requiredHeadcount}</Td>
-                  <Td>
-                    <div className="flex flex-wrap gap-1">
-                      {type.requiredQualifications.map((requirement) => {
-                        const name =
-                          qualifications.data?.find(
-                            (item) => item.id === requirement.qualificationId,
-                          )?.name ?? requirement.qualificationId;
-                        return (
-                          <Badge key={requirement.qualificationId} tone="brand">
-                            {requirement.minCount > 0 ? `${name} ×${requirement.minCount}` : name}
-                          </Badge>
-                        );
-                      })}
-                    </div>
-                  </Td>
-                  <Td>
-                    {can(Permissions.assignmentTypesWrite) ? (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        icon={<Pencil className="size-4" />}
-                        onClick={() => openDialog(type)}
-                      >
-                        {t('personnel.edit')}
-                      </Button>
-                    ) : null}
-                  </Td>
-                </tr>
-              ))}
-            </tbody>
-          </TableWrapper>
+          <DataTable
+            rows={rows}
+            columns={columns}
+            rowKey={(type) => type.id}
+            caption={t('assignments.types')}
+          />
         </QueryState>
       </div>
 

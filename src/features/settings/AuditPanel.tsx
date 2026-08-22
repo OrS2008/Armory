@@ -1,11 +1,61 @@
 import { formatDateTime } from '@shared/format';
+import { auditActionLabel, auditEntityLabel } from '@shared/messages.he';
+import type { AuditEvent } from '@shared/types';
 import { t } from '@/i18n';
-import { TableWrapper, Td, Th } from '@/components/ui/Table';
+import { DataTable, type Column } from '@/components/ui/DataTable';
 import { QueryState } from '@/components/ui/States';
 import { useAuditEvents } from '@/hooks/queries';
 
+function printValue(value: unknown): string {
+  if (value === null || value === undefined) return '—';
+  if (typeof value === 'object') return JSON.stringify(value);
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  return JSON.stringify(value) ?? '';
+}
+
+/** Audit metadata holds identifiers and changed field names, never free text. */
+function describeMetadata(metadata: Record<string, unknown>): string | null {
+  const entries = Object.entries(metadata);
+  if (entries.length === 0) return null;
+  return entries.map(([key, value]) => `${key}: ${printValue(value)}`).join(' · ');
+}
+
+const columns: Column<AuditEvent>[] = [
+  {
+    key: 'time',
+    header: t('audit.time'),
+    className: 'ltr-inline whitespace-nowrap',
+    cell: (event) => formatDateTime(event.createdAt),
+  },
+  {
+    key: 'action',
+    header: t('audit.action'),
+    placement: 'title',
+    cell: (event) => auditActionLabel(event.action),
+  },
+  { key: 'actor', header: t('audit.actor'), cell: (event) => event.actorName },
+  {
+    key: 'entity',
+    header: t('audit.entity'),
+    cell: (event) => (
+      <>
+        {auditEntityLabel(event.entityType)}
+        <span className="ltr-inline block text-xs text-ink-faint">{event.entityId}</span>
+      </>
+    ),
+  },
+  {
+    key: 'details',
+    header: t('audit.details'),
+    className: 'ltr-inline max-w-72 truncate text-xs text-ink-faint',
+    cell: (event) => describeMetadata(event.metadata),
+  },
+];
+
 export function AuditPanel() {
   const events = useAuditEvents({ limit: 150 });
+  const rows = events.data ?? [];
 
   return (
     <>
@@ -14,38 +64,16 @@ export function AuditPanel() {
         <QueryState
           isLoading={events.isLoading}
           error={events.error}
-          isEmpty={(events.data ?? []).length === 0}
+          isEmpty={rows.length === 0}
           emptyDescription={t('audit.empty')}
           onRetry={() => void events.refetch()}
         >
-          <TableWrapper>
-            <thead>
-              <tr>
-                <Th>{t('audit.time')}</Th>
-                <Th>{t('audit.actor')}</Th>
-                <Th>{t('audit.action')}</Th>
-                <Th>{t('audit.entity')}</Th>
-                <Th>{t('audit.details')}</Th>
-              </tr>
-            </thead>
-            <tbody>
-              {(events.data ?? []).map((event) => (
-                <tr key={event.id} className="hover:bg-surface-sunken">
-                  <Td className="ltr-inline whitespace-nowrap">
-                    {formatDateTime(event.createdAt)}
-                  </Td>
-                  <Td>{event.actorName}</Td>
-                  <Td className="ltr-inline">{event.action}</Td>
-                  <Td className="ltr-inline text-xs text-ink-muted">
-                    {event.entityType}/{event.entityId}
-                  </Td>
-                  <Td className="ltr-inline max-w-72 truncate text-xs text-ink-faint">
-                    {JSON.stringify(event.metadata)}
-                  </Td>
-                </tr>
-              ))}
-            </tbody>
-          </TableWrapper>
+          <DataTable
+            rows={rows}
+            columns={columns}
+            rowKey={(event) => event.id}
+            caption={t('settings.audit')}
+          />
         </QueryState>
       </div>
     </>

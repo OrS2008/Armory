@@ -4,9 +4,9 @@ import { useForm } from 'react-hook-form';
 import { useMutation } from '@tanstack/react-query';
 import { availabilityKindLabels } from '@shared/messages.he';
 import { Permissions } from '@shared/rbac';
-import { formatDateTime } from '@shared/format';
+import { formatRange } from '@shared/format';
 import { DAY, startOfDay } from '@shared/time';
-import type { AvailabilityKind } from '@shared/types';
+import type { Availability, AvailabilityKind } from '@shared/types';
 import { t } from '@/i18n';
 import { ApiError, api } from '@/lib/api';
 import { todayKey, toTimestamp } from '@/lib/datetime';
@@ -15,7 +15,7 @@ import { Button } from '@/components/ui/Button';
 import { Dialog } from '@/components/ui/Dialog';
 import { Field } from '@/components/ui/Field';
 import { Input, Select } from '@/components/ui/Input';
-import { TableWrapper, Td, Th } from '@/components/ui/Table';
+import { DataTable, type Column } from '@/components/ui/DataTable';
 import { QueryState } from '@/components/ui/States';
 import { useToast } from '@/components/ui/toast-context';
 import { PageHeader } from '@/components/layout/PageHeader';
@@ -97,6 +97,73 @@ export function AvailabilityPage() {
       toast.push('error', error instanceof ApiError ? error.message : t('state.errorBody')),
   });
 
+  const entries = availability.data ?? [];
+
+  const columns: Column<Availability>[] = [
+    {
+      key: 'person',
+      header: t('availability.person'),
+      placement: 'title',
+      cell: (entry) => entry.personnelName,
+    },
+    {
+      key: 'kind',
+      header: t('availability.kind'),
+      cell: (entry) => availabilityKindLabels[entry.kind],
+    },
+    {
+      key: 'range',
+      header: t('availability.range'),
+      className: 'ltr-inline',
+      cell: (entry) => formatRange(entry.startAt, entry.endAt),
+    },
+    { key: 'reason', header: t('availability.reason'), cell: (entry) => entry.reason },
+    {
+      key: 'status',
+      header: t('availability.status'),
+      placement: 'badge',
+      cell: (entry) => (
+        <Badge
+          tone={
+            entry.status === 'approved'
+              ? 'success'
+              : entry.status === 'rejected'
+                ? 'danger'
+                : 'warning'
+          }
+        >
+          {statusLabels[entry.status]}
+        </Badge>
+      ),
+    },
+    {
+      key: 'actions',
+      header: t('app.actions'),
+      placement: 'actions',
+      cell: (entry) =>
+        can(Permissions.availabilityApprove) && entry.status === 'pending' ? (
+          <>
+            <Button
+              variant="secondary"
+              size="sm"
+              icon={<Check className="size-4" />}
+              onClick={() => decide.mutate({ id: entry.id, status: 'approved' })}
+            >
+              {t('availability.approve')}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              icon={<X className="size-4" />}
+              onClick={() => decide.mutate({ id: entry.id, status: 'rejected' })}
+            >
+              {t('availability.reject')}
+            </Button>
+          </>
+        ) : null,
+    },
+  ];
+
   return (
     <>
       <PageHeader
@@ -110,7 +177,7 @@ export function AvailabilityPage() {
               value={status}
               onChange={(event) => setStatus(event.target.value)}
             >
-              <option value="">{t('app.all')}</option>
+              <option value="">{t('availability.allStatuses')}</option>
               <option value="pending">{t('availability.pending')}</option>
               <option value="approved">{t('availability.approved')}</option>
               <option value="rejected">{t('availability.rejected')}</option>
@@ -126,67 +193,16 @@ export function AvailabilityPage() {
         <QueryState
           isLoading={availability.isLoading}
           error={availability.error}
-          isEmpty={(availability.data ?? []).length === 0}
+          isEmpty={entries.length === 0}
           emptyDescription={t('availability.empty')}
           onRetry={() => void availability.refetch()}
         >
-          <TableWrapper>
-            <thead>
-              <tr>
-                <Th>{t('availability.person')}</Th>
-                <Th>{t('availability.kind')}</Th>
-                <Th>{t('availability.from')}</Th>
-                <Th>{t('availability.to')}</Th>
-                <Th>{t('availability.status')}</Th>
-                <Th>{t('app.actions')}</Th>
-              </tr>
-            </thead>
-            <tbody>
-              {(availability.data ?? []).map((entry) => (
-                <tr key={entry.id} className="hover:bg-surface-sunken">
-                  <Td>{entry.personnelName}</Td>
-                  <Td>{availabilityKindLabels[entry.kind]}</Td>
-                  <Td className="ltr-inline">{formatDateTime(entry.startAt)}</Td>
-                  <Td className="ltr-inline">{formatDateTime(entry.endAt)}</Td>
-                  <Td>
-                    <Badge
-                      tone={
-                        entry.status === 'approved'
-                          ? 'success'
-                          : entry.status === 'rejected'
-                            ? 'danger'
-                            : 'warning'
-                      }
-                    >
-                      {statusLabels[entry.status]}
-                    </Badge>
-                  </Td>
-                  <Td>
-                    {can(Permissions.availabilityApprove) && entry.status === 'pending' ? (
-                      <div className="flex gap-1">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          icon={<Check className="size-4" />}
-                          onClick={() => decide.mutate({ id: entry.id, status: 'approved' })}
-                        >
-                          {t('availability.approve')}
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          icon={<X className="size-4" />}
-                          onClick={() => decide.mutate({ id: entry.id, status: 'rejected' })}
-                        >
-                          {t('availability.reject')}
-                        </Button>
-                      </div>
-                    ) : null}
-                  </Td>
-                </tr>
-              ))}
-            </tbody>
-          </TableWrapper>
+          <DataTable
+            rows={entries}
+            columns={columns}
+            rowKey={(entry) => entry.id}
+            caption={t('availability.title')}
+          />
         </QueryState>
       </div>
 

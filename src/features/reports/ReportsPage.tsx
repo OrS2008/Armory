@@ -1,13 +1,13 @@
 import { useMemo, useState } from 'react';
 import { Download } from 'lucide-react';
-import { formatDayKey, formatRange } from '@shared/format';
+import { formatDayKey, formatHours, formatRange } from '@shared/format';
 import { DAY, startOfDay } from '@shared/time';
 import { t } from '@/i18n';
 import { todayKey } from '@/lib/datetime';
 import { Button } from '@/components/ui/Button';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Select } from '@/components/ui/Input';
-import { TableWrapper, Td, Th } from '@/components/ui/Table';
+import { DataTable, type Column } from '@/components/ui/DataTable';
 import { QueryState } from '@/components/ui/States';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { useWorkloadReport, type WorkloadRow } from '@/hooks/queries';
@@ -54,6 +54,62 @@ export function ReportsPage() {
     URL.revokeObjectURL(url);
   };
 
+  const peakHours = rows.reduce((max, row) => Math.max(max, row.totalHours), 0);
+
+  const columns: Column<WorkloadRow>[] = [
+    {
+      key: 'name',
+      header: t('personnel.name'),
+      placement: 'title',
+      cell: (row) => row.displayName,
+    },
+    { key: 'unit', header: t('personnel.unit'), cell: (row) => row.unitName },
+    {
+      key: 'total',
+      header: t('reports.totalHours'),
+      cell: (row) => (
+        <div className="flex items-center gap-2">
+          <span className="ltr-inline tabular-nums">{formatHours(row.totalHours)}</span>
+          {peakHours > 0 ? (
+            <span
+              aria-hidden
+              className="hidden h-1.5 w-20 overflow-hidden rounded-full bg-surface-sunken sm:block"
+            >
+              <span
+                className="block h-full rounded-full bg-brand-500"
+                style={{ inlineSize: `${Math.round((row.totalHours / peakHours) * 100)}%` }}
+              />
+            </span>
+          ) : null}
+        </div>
+      ),
+    },
+    {
+      key: 'night',
+      header: t('reports.nightHours'),
+      className: 'ltr-inline tabular-nums',
+      cell: (row) => formatHours(row.nightHours),
+    },
+    {
+      key: 'weekend',
+      header: t('reports.weekendHours'),
+      className: 'ltr-inline tabular-nums',
+      cell: (row) => formatHours(row.weekendHours),
+    },
+    {
+      key: 'count',
+      header: t('reports.assignmentCount'),
+      className: 'ltr-inline tabular-nums',
+      cell: (row) => row.assignmentCount,
+    },
+    {
+      key: 'score',
+      header: t('reports.fairnessScore'),
+      className: 'ltr-inline tabular-nums',
+      cell: (row) => row.score,
+    },
+  ];
+
   return (
     <>
       <PageHeader
@@ -69,7 +125,7 @@ export function ReportsPage() {
             >
               {RANGES.map((days) => (
                 <option key={days} value={days}>
-                  {days}
+                  {t('reports.rangeDays', { days })}
                 </option>
               ))}
             </Select>
@@ -95,32 +151,12 @@ export function ReportsPage() {
       >
         <div className="flex flex-col gap-4">
           <div className="card p-0">
-            <TableWrapper>
-              <thead>
-                <tr>
-                  <Th>{t('personnel.name')}</Th>
-                  <Th>{t('personnel.unit')}</Th>
-                  <Th>{t('reports.totalHours')}</Th>
-                  <Th>{t('reports.nightHours')}</Th>
-                  <Th>{t('reports.weekendHours')}</Th>
-                  <Th>{t('reports.assignmentCount')}</Th>
-                  <Th>{t('reports.fairnessScore')}</Th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => (
-                  <tr key={row.personnelId} className="hover:bg-surface-sunken">
-                    <Td>{row.displayName}</Td>
-                    <Td>{row.unitName ?? '—'}</Td>
-                    <Td className="ltr-inline tabular-nums">{row.totalHours}</Td>
-                    <Td className="ltr-inline tabular-nums">{row.nightHours}</Td>
-                    <Td className="ltr-inline tabular-nums">{row.weekendHours}</Td>
-                    <Td className="ltr-inline tabular-nums">{row.assignmentCount}</Td>
-                    <Td className="ltr-inline tabular-nums">{row.score}</Td>
-                  </tr>
-                ))}
-              </tbody>
-            </TableWrapper>
+            <DataTable
+              rows={rows}
+              columns={columns}
+              rowKey={(row) => row.personnelId}
+              caption={t('reports.title')}
+            />
           </div>
 
           {gaps.length > 0 ? (

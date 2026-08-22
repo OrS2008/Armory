@@ -34,6 +34,35 @@ test.describe('navigation and screen states', () => {
     await expect(page.getByText('windowDays')).toHaveCount(0);
   });
 
+  // Six columns squeezed into a phone used to mean a sideways scrollbar with the
+  // actions parked off-screen. The list changes shape instead of shrinking.
+  test('lists people as a table on desktop and as cards on a phone', async ({ page, isMobile }) => {
+    await login(page);
+    await page.goto('/personnel');
+    await expect(page.getByText('דניאל כהן')).toBeVisible();
+
+    if (isMobile) {
+      await expect(page.getByRole('table')).toHaveCount(0);
+      // Each card labels its own values rather than relying on a header row.
+      await expect(page.getByText('מסגרת', { exact: true }).first()).toBeVisible();
+    } else {
+      await expect(page.getByRole('columnheader', { name: 'הכשירים' })).toBeVisible();
+    }
+
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(overflow).toBeLessThanOrEqual(0);
+  });
+
+  test('states rule durations in hours, not minutes', async ({ page }) => {
+    await login(page);
+    await page.goto('/settings');
+    const rule = page.locator('li', { hasText: 'משך שיבוץ רצוף מרבי' }).first();
+    await expect(rule.getByText('שעות', { exact: true })).toBeVisible();
+    await expect(rule.getByRole('spinbutton')).toHaveValue('12');
+  });
+
   // A title alone ("זמינות", "דוחות") does not tell a first-time reader what the
   // screen is for. Every main screen answers that in its own words.
   const screens = [

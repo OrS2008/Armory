@@ -113,7 +113,89 @@ export const availabilityKindLabels: Record<AvailabilityKind, string> = {
 };
 
 /** The seat a person fills in a crew when no qualification names it. */
+/**
+ * The audit trail stores machine codes; a duty officer reading it should not
+ * have to know that PERSONNEL_ASSIGNED is a person being put on a shift.
+ */
+export const auditActionLabels: Record<string, string> = {
+  LOGIN: 'התחברות',
+  LOGIN_FAILED: 'ניסיון התחברות שנכשל',
+  LOGOUT: 'התנתקות',
+  PERSONNEL_CREATED: 'הוספת איש כוח אדם',
+  PERSONNEL_UPDATED: 'עדכון פרטי איש כוח אדם',
+  PERSONNEL_ARCHIVED: 'העברת איש כוח אדם לארכיון',
+  UNIT_CREATED: 'יצירת מסגרת',
+  UNIT_UPDATED: 'עדכון מסגרת',
+  QUALIFICATION_CREATED: 'יצירת הכשיר',
+  QUALIFICATION_UPDATED: 'עדכון הכשיר',
+  AVAILABILITY_CREATED: 'רישום זמינות',
+  AVAILABILITY_UPDATED: 'עדכון זמינות',
+  AVAILABILITY_DECIDED: 'החלטה בבקשת זמינות',
+  ASSIGNMENT_TYPE_CREATED: 'יצירת סוג משימה',
+  ASSIGNMENT_TYPE_UPDATED: 'עדכון סוג משימה',
+  ASSIGNMENT_CREATED: 'יצירת משימה',
+  ASSIGNMENT_UPDATED: 'עדכון משימה',
+  ASSIGNMENT_CANCELLED: 'ביטול משימה',
+  ASSIGNMENT_DELETED: 'מחיקת משימה',
+  PERSONNEL_ASSIGNED: 'שיבוץ למשימה',
+  PERSONNEL_UNASSIGNED: 'הסרה משיבוץ',
+  ASSIGNMENT_OVERRIDE: 'עקיפת כלל שיבוץ',
+  ASSIGNMENT_ACKNOWLEDGED: 'אישור קבלת משימה',
+  SCHEDULE_CREATED: 'יצירת שבצ״ק',
+  SCHEDULE_PUBLISHED: 'פרסום שבצ״ק',
+  RULE_UPDATED: 'עדכון כלל שיבוץ',
+  REPLACEMENT_REQUESTED: 'בקשת החלפה',
+  REPLACEMENT_DECIDED: 'החלטה בבקשת החלפה',
+  USER_CREATED: 'יצירת משתמש',
+  USER_UPDATED: 'עדכון משתמש',
+};
+
+export const auditEntityLabels: Record<string, string> = {
+  user: 'משתמש',
+  personnel: 'איש כוח אדם',
+  unit: 'מסגרת',
+  qualification: 'הכשיר',
+  availability: 'זמינות',
+  assignment: 'משימה',
+  assignment_type: 'סוג משימה',
+  schedule: 'שבצ״ק',
+  scheduling_rule: 'כלל שיבוץ',
+  replacement: 'בקשת החלפה',
+};
+
+export function auditActionLabel(action: string): string {
+  return auditActionLabels[action] ?? action;
+}
+
+export function auditEntityLabel(entityType: string): string {
+  return auditEntityLabels[entityType] ?? entityType;
+}
+
 export const DEFAULT_CREW_ROLE = 'לוחם';
+
+/**
+ * What each rule actually does, in the words a duty officer would use. The
+ * settings screen used to print the rule's machine code under its name, which
+ * told the reader nothing they could not already see.
+ */
+export const ruleDescriptions: Record<string, string> = {
+  NO_OVERLAP: 'אדם לא יכול להיות בשתי משימות שחופפות בזמן.',
+  AVAILABILITY_REQUIRED: 'מי שרשום כלא זמין — חופשה, גימלים, קורס — לא ישובץ בשעות האלה.',
+  QUALIFICATION_REQUIRED: 'משימה שדורשת הכשיר תאויש רק במי שמחזיק בו.',
+  MIN_REST: 'כמה זמן מנוחה חייב לעבור בין סוף משימה לתחילת הבאה.',
+  MAX_CONTINUOUS: 'אורך הרצף המרבי של משמרות צמודות לאותו אדם, גם אם הן משימות שונות.',
+  MAX_ASSIGNMENTS_PER_DAY: 'כמה משימות אפשר להטיל על אדם אחד באותו יום.',
+  MAX_HOURS_IN_WINDOW: 'תקרת שעות מצטברת לאדם בתוך חלון של כמה ימים.',
+  UNDERSTAFFED: 'התרעה על משימה שחסרים בה אנשים להשלמת התקן.',
+  OVERSTAFFED: 'התרעה על משימה שמשובצים בה יותר אנשים מהנדרש.',
+  EXCLUSIVE_QUALIFICATION:
+    'מי שמוגדר בהכשיר ייעודי (חמ״ל) יעשה רק את המשימות שלו, ורק הוא יעשה אותן.',
+  ROLE_QUALIFICATION: 'מי שמשובץ כנהג או כמפקד חייב להחזיק בהכשיר של אותו תפקיד.',
+  ROLE_TAKEN: 'בכל משימה יש מקום אחד לנהג ומקום אחד למפקד.',
+  PRE_DEPARTURE_REST: 'כמה שעות לפני יציאה הביתה כבר לא משבצים את החייל.',
+  DUPLICATE_ASSIGNMENT: 'התרעה על שתי משימות זהות באותו מקום ובאותן שעות.',
+  UNPUBLISHED_CHANGES: 'התרעה על שינויים שנעשו אחרי הפרסום וטרם פורסמו מחדש.',
+};
 
 export const severityLabels: Record<Severity, string> = {
   info: 'מידע',

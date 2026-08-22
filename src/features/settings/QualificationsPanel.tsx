@@ -4,6 +4,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation } from '@tanstack/react-query';
 import { qualificationSchema, type QualificationInput } from '@shared/schemas';
+import type { Qualification } from '@shared/types';
 import { Permissions } from '@shared/rbac';
 import { t } from '@/i18n';
 import { ApiError, api } from '@/lib/api';
@@ -12,7 +13,7 @@ import { Button } from '@/components/ui/Button';
 import { Dialog } from '@/components/ui/Dialog';
 import { Field } from '@/components/ui/Field';
 import { Input, Textarea } from '@/components/ui/Input';
-import { TableWrapper, Td, Th } from '@/components/ui/Table';
+import { DataTable, type Column } from '@/components/ui/DataTable';
 import { QueryState } from '@/components/ui/States';
 import { useToast } from '@/components/ui/toast-context';
 import { useQualifications } from '@/hooks/queries';
@@ -41,6 +42,37 @@ export function QualificationsPanel() {
       toast.push('error', error instanceof ApiError ? error.message : t('state.errorBody')),
   });
 
+  const items = qualifications.data ?? [];
+
+  const columns: Column<Qualification>[] = [
+    {
+      key: 'name',
+      header: t('personnel.name'),
+      placement: 'title',
+      cell: (item) => (
+        <>
+          {item.name}
+          {item.exclusive ? (
+            <Badge className="ms-2" tone="warning">
+              {t('settings.exclusiveBadge')}
+            </Badge>
+          ) : null}
+        </>
+      ),
+    },
+    { key: 'code', header: t('settings.code'), className: 'ltr-inline', cell: (item) => item.code },
+    {
+      key: 'active',
+      header: t('personnel.status'),
+      placement: 'badge',
+      cell: (item) => (
+        <Badge tone={item.active ? 'success' : 'neutral'}>
+          {item.active ? t('personnel.statusActive') : t('personnel.statusInactive')}
+        </Badge>
+      ),
+    },
+  ];
+
   return (
     <>
       <p className="mb-3 text-sm text-ink-muted">{t('settings.qualificationsHint')}</p>
@@ -59,40 +91,15 @@ export function QualificationsPanel() {
         <QueryState
           isLoading={qualifications.isLoading}
           error={qualifications.error}
-          isEmpty={(qualifications.data ?? []).length === 0}
+          isEmpty={items.length === 0}
           onRetry={() => void qualifications.refetch()}
         >
-          <TableWrapper>
-            <thead>
-              <tr>
-                <Th>{t('settings.code')}</Th>
-                <Th>{t('personnel.name')}</Th>
-                <Th>{t('personnel.status')}</Th>
-              </tr>
-            </thead>
-            <tbody>
-              {(qualifications.data ?? []).map((qualification) => (
-                <tr key={qualification.id}>
-                  <Td className="ltr-inline">{qualification.code}</Td>
-                  <Td>
-                    {qualification.name}
-                    {qualification.exclusive ? (
-                      <Badge className="ms-2" tone="warning">
-                        {t('settings.exclusiveBadge')}
-                      </Badge>
-                    ) : null}
-                  </Td>
-                  <Td>
-                    <Badge tone={qualification.active ? 'success' : 'neutral'}>
-                      {qualification.active
-                        ? t('personnel.statusActive')
-                        : t('personnel.statusInactive')}
-                    </Badge>
-                  </Td>
-                </tr>
-              ))}
-            </tbody>
-          </TableWrapper>
+          <DataTable
+            rows={items}
+            columns={columns}
+            rowKey={(item) => item.id}
+            caption={t('settings.qualifications')}
+          />
         </QueryState>
       </div>
 

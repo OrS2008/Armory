@@ -178,6 +178,10 @@ export const he = {
   'personnel.archive': 'העברה לארכיון',
   'personnel.archiveConfirm': 'להעביר את {name} לארכיון? השיבוצים הקיימים יישמרו.',
   'personnel.searchPlaceholder': 'חיפוש לפי שם, מספר אישי או תפקיד',
+  'personnel.allUnits': 'כל המסגרות',
+  'personnel.allQualifications': 'כל ההכשירים',
+  'personnel.count': '{count} אנשים',
+  'personnel.countOne': 'אדם אחד',
   'personnel.import': 'ייבוא מקובץ',
   'personnel.importTitle': 'ייבוא כוח אדם מקובץ CSV',
   'personnel.importChooseFile': 'בחירת קובץ',
@@ -218,6 +222,8 @@ export const he = {
   'availability.empty':
     'אין רישומי זמינות בטווח שנבחר. כל עוד אין רישום — כולם נחשבים זמינים לשיבוץ.',
   'availability.person': 'אדם',
+  'availability.range': 'טווח',
+  'availability.allStatuses': 'כל הסטטוסים',
 
   'assignments.title': 'משימות',
   'assignments.types': 'סוגי משימות',
@@ -304,6 +310,7 @@ export const he = {
   'replacements.request': 'בקשת החלפה',
   'replacements.reason': 'סיבה',
   'replacements.replacement': 'מחליף',
+  'replacements.pickReplacement': 'בחרו מחליף כדי לאשר את הבקשה.',
   'replacements.approve': 'אישור החלפה',
   'replacements.reject': 'דחייה',
   'replacements.empty': 'אין בקשות החלפה פתוחות. בקשה נפתחת ממסך "השבצ״ק שלי" של החייל.',
@@ -330,6 +337,7 @@ export const he = {
   'reports.staffingGaps': 'פערי איוש',
   'reports.export': 'ייצוא CSV',
   'reports.range': 'טווח',
+  'reports.rangeDays': '{days} ימים אחרונים',
   'reports.empty': 'אין נתונים בטווח שנבחר.',
 
   'settings.title': 'הגדרות',
