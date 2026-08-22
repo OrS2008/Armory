@@ -381,7 +381,7 @@ export function AssignmentFormDialog({ open, dayKey, timezone, scheduleId, onClo
                     <Input id={id} type="time" dir="ltr" step={300} {...form.register('endTime')} />
                     <label className="flex shrink-0 items-center gap-1.5 text-xs text-ink-muted">
                       <input type="checkbox" {...form.register('endsNextDay')} />
-                      למחרת
+                      {t('assignments.nextDayShort')}
                     </label>
                   </div>
                 )}

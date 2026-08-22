@@ -36,6 +36,8 @@ export const RULE_CODES = [
   'ROLE_TAKEN',
   'PRE_DEPARTURE_REST',
   'DUPLICATE_ASSIGNMENT',
+  'EXCLUDED_QUALIFICATION',
+  'NOT_SCHEDULABLE',
 ] as const;
 
 export type RuleCode = (typeof RULE_CODES)[number];
@@ -74,6 +76,12 @@ export interface EngineAssignment {
   endAt: number;
   requiredHeadcount: number;
   requiredQualifications: RequiredQualification[];
+  /**
+   * Marks that disqualify their holder from this post — the mirror image of
+   * `requiredQualifications`. "אי אפשר לשבץ חייל מהמבצעים" is not expressible
+   * as a requirement on anybody else, so it is stated here.
+   */
+  excludedQualificationIds?: string[];
   assigneeIds: string[];
   /**
    * Which seat each assignee fills, keyed by personnel id: the qualification
@@ -106,6 +114,11 @@ export interface EngineInput {
    * them: whoever is marked חמ״ל does חמ״ל and nothing else.
    */
   exclusiveQualificationIds?: string[];
+  /**
+   * Marks that take their holder out of the rotation entirely: whoever is
+   * marked מפלג has a job, not a shift.
+   */
+  blockingQualificationIds?: string[];
   timezone?: string;
 }
 
@@ -150,9 +163,13 @@ export const DEFAULT_RULES: SchedulingRule[] = [
     code: 'MIN_REST',
     name: 'מנוחה מזערית בין שיבוצים',
     enabled: true,
-    severity: 'warning',
+    // Eight hours on, sixteen off. Blocking rather than advisory, for the same
+    // reason MAX_CONTINUOUS is: nothing acts on a warning, and the schedule
+    // went on stacking shifts while dutifully reporting that it had. Still
+    // overridable, so a commander can say yes with a recorded reason.
+    severity: 'blocking',
     overridable: true,
-    config: { minutes: 480 },
+    config: { minutes: 960 },
   },
   {
     code: 'MAX_CONTINUOUS',
@@ -164,7 +181,7 @@ export const DEFAULT_RULES: SchedulingRule[] = [
     // say yes for a reason that gets recorded.
     severity: 'blocking',
     overridable: true,
-    config: { minutes: 720 },
+    config: { minutes: 480 },
   },
   {
     code: 'MAX_ASSIGNMENTS_PER_DAY',
@@ -239,9 +256,25 @@ export const DEFAULT_RULES: SchedulingRule[] = [
     config: {},
   },
   {
+    code: 'EXCLUDED_QUALIFICATION',
+    name: 'סימון הפוסל שיבוץ לסוג המשימה',
+    enabled: true,
+    severity: 'blocking',
+    overridable: true,
+    config: {},
+  },
+  {
+    code: 'NOT_SCHEDULABLE',
+    name: 'מסומן כמי שאינו משובץ למשימות',
+    enabled: true,
+    severity: 'blocking',
+    overridable: true,
+    config: {},
+  },
+  {
     code: 'UNPUBLISHED_CHANGES',
     name: 'שינויים שטרם פורסמו',
-    enabled: true,
+    enabled: false,
     severity: 'info',
     overridable: true,
     config: {},
@@ -419,6 +452,45 @@ export function detectConflicts(input: EngineInput): Conflict[] {
             assignment: assignment.title,
             qualification: qualificationLabel(role),
             other: personName(held),
+          });
+        }
+      }
+    }
+
+    // A mark that disqualifies. The post names it; nobody holding it stands
+    // there, whatever else they are qualified for.
+    const excludedRule = rule('EXCLUDED_QUALIFICATION');
+    const excludedIds = assignment.excludedQualificationIds ?? [];
+    if (excludedRule && excludedIds.length > 0) {
+      for (const personnelId of assignment.assigneeIds) {
+        if (isOverridden(assignment, personnelId)) continue;
+        const held = (people.get(personnelId)?.qualificationIds ?? []).filter((id) =>
+          excludedIds.includes(id),
+        );
+        if (held.length > 0) {
+          add('EXCLUDED_QUALIFICATION', excludedRule, assignment, personnelId, {
+            person: personName(personnelId),
+            qualification: held.map(qualificationLabel).join(', '),
+            assignment: assignment.title,
+          });
+        }
+      }
+    }
+
+    // A mark that takes its holder out of the rotation altogether.
+    const notSchedulableRule = rule('NOT_SCHEDULABLE');
+    const blockingIds = input.blockingQualificationIds ?? [];
+    if (notSchedulableRule && blockingIds.length > 0) {
+      for (const personnelId of assignment.assigneeIds) {
+        if (isOverridden(assignment, personnelId)) continue;
+        const held = (people.get(personnelId)?.qualificationIds ?? []).filter((id) =>
+          blockingIds.includes(id),
+        );
+        if (held.length > 0) {
+          add('NOT_SCHEDULABLE', notSchedulableRule, assignment, personnelId, {
+            person: personName(personnelId),
+            qualification: held.map(qualificationLabel).join(', '),
+            assignment: assignment.title,
           });
         }
       }

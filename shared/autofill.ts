@@ -25,6 +25,7 @@ export interface AutofillInput {
   rules: SchedulingRule[];
   qualificationNames?: Record<string, string> | undefined;
   exclusiveQualificationIds?: string[] | undefined;
+  blockingQualificationIds?: string[] | undefined;
   weights?: FairnessWeights | undefined;
   timezone?: string | undefined;
   /** Restrict filling to these assignments; defaults to every understaffed one. */
@@ -149,6 +150,9 @@ export function buildAutofillProposal(input: AutofillInput): AutofillProposal {
       ...(input.qualificationNames ? { qualificationNames: input.qualificationNames } : {}),
       ...(input.exclusiveQualificationIds
         ? { exclusiveQualificationIds: input.exclusiveQualificationIds }
+        : {}),
+      ...(input.blockingQualificationIds
+        ? { blockingQualificationIds: input.blockingQualificationIds }
         : {}),
       ...(input.weights ? { weights: input.weights } : {}),
       timezone,

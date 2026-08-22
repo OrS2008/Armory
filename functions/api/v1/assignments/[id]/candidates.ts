@@ -5,7 +5,7 @@ import { DAY } from '../../../../../shared/time';
 import { requireUser } from '../../../../_lib/auth';
 import {
   evaluateWindow,
-  loadQualifications,
+  engineQualifications,
   toEngineAbsences,
   toEngineAssignment,
   toEnginePerson,
@@ -32,7 +32,15 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env, params })
   const assignment = evaluation.assignments.find((item) => item.id === assignmentId);
   if (!assignment) return fail(404, ErrorCodes.NOT_FOUND);
 
-  const onlyUnit = searchParams(request).get('unitId') ?? row.unit_id;
+  /*
+   * The pool is the whole company unless the caller narrows it.
+   *
+   * It used to fall back to the assignment's own unit, which quietly hid every
+   * driver and commander who happened to belong to another platoon — the list
+   * looked like the ranking had ignored the roster, when in fact the roster had
+   * never been offered. A post is staffed by whoever the unit has.
+   */
+  const onlyUnit = searchParams(request).get('unitId');
   const pool = evaluation.personnel.filter(
     (person) =>
       person.status === 'active' &&
@@ -40,7 +48,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env, params })
       (!onlyUnit || person.unitId === onlyUnit),
   );
 
-  const qualifications = await loadQualifications(env);
+  const qualifications = await engineQualifications(env);
   const candidates = rankCandidates({
     assignment: toEngineAssignment(assignment),
     personnel: pool.map(toEnginePerson),
@@ -48,12 +56,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env, params })
     assignments: evaluation.assignments.map(toEngineAssignment),
     absences: toEngineAbsences(evaluation.availability),
     rules: evaluation.rules,
-    qualificationNames: Object.fromEntries(
-      qualifications.map((qualification) => [qualification.id, qualification.name]),
-    ),
-    exclusiveQualificationIds: qualifications
-      .filter((qualification) => qualification.exclusive)
-      .map((qualification) => qualification.id),
+    ...qualifications,
     timezone: evaluation.timezone,
   });
 

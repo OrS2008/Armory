@@ -106,7 +106,7 @@ export async function loadUnits(env: Env): Promise<Unit[]> {
 
 export async function loadQualifications(env: Env): Promise<Qualification[]> {
   const rows = await env.DB.prepare(
-    `SELECT id, code, name, description, active, exclusive
+    `SELECT id, code, name, description, active, exclusive, blocks_scheduling
        FROM qualifications WHERE org_id = ? ORDER BY name`,
   )
     .bind(DEFAULT_ORG_ID)
@@ -117,6 +117,7 @@ export async function loadQualifications(env: Env): Promise<Qualification[]> {
       description: string | null;
       active: number;
       exclusive: number;
+      blocks_scheduling: number;
     }>();
   return (rows.results ?? []).map((row) => ({
     id: row.id,
@@ -125,7 +126,34 @@ export async function loadQualifications(env: Env): Promise<Qualification[]> {
     description: row.description,
     active: row.active === 1,
     exclusive: row.exclusive === 1,
+    blocksScheduling: row.blocks_scheduling === 1,
   }));
+}
+
+/**
+ * The qualification facts the engine needs, in the shape it takes them.
+ *
+ * Every caller that runs `detectConflicts` needs the same three lists, and a
+ * handler that assembled two of them judged a schedule by different rules than
+ * the board did. Assembling them once is what keeps the answers identical.
+ */
+export async function engineQualifications(env: Env): Promise<{
+  qualificationNames: Record<string, string>;
+  exclusiveQualificationIds: string[];
+  blockingQualificationIds: string[];
+}> {
+  const qualifications = await loadQualifications(env);
+  return {
+    qualificationNames: Object.fromEntries(
+      qualifications.map((qualification) => [qualification.id, qualification.name]),
+    ),
+    exclusiveQualificationIds: qualifications
+      .filter((qualification) => qualification.exclusive)
+      .map((qualification) => qualification.id),
+    blockingQualificationIds: qualifications
+      .filter((qualification) => qualification.blocksScheduling)
+      .map((qualification) => qualification.id),
+  };
 }
 
 /**
@@ -261,7 +289,7 @@ export async function loadPersonnelQualifications(env: Env): Promise<Map<string,
 export async function loadAssignmentTypes(env: Env): Promise<AssignmentType[]> {
   const rows = await env.DB.prepare(
     `SELECT id, name, category, default_duration_minutes, required_headcount, priority, color,
-            instructions, active
+            instructions, active, standing, shift_hours, shift_start_hour
        FROM assignment_types WHERE org_id = ? ORDER BY priority, name`,
   )
     .bind(DEFAULT_ORG_ID)
@@ -275,8 +303,14 @@ export async function loadAssignmentTypes(env: Env): Promise<AssignmentType[]> {
       color: string;
       instructions: string | null;
       active: number;
+      standing: number;
+      shift_hours: number;
+      shift_start_hour: number;
     }>();
-  const links = await loadTypeQualifications(env);
+  const [links, exclusions] = await Promise.all([
+    loadTypeQualifications(env),
+    loadTypeExclusions(env),
+  ]);
   return (rows.results ?? []).map((row) => ({
     id: row.id,
     name: row.name,
@@ -288,7 +322,25 @@ export async function loadAssignmentTypes(env: Env): Promise<AssignmentType[]> {
     instructions: row.instructions,
     active: row.active === 1,
     requiredQualifications: links.get(row.id) ?? [],
+    excludedQualificationIds: exclusions.get(row.id) ?? [],
+    standing: row.standing === 1,
+    shiftHours: row.shift_hours,
+    shiftStartHour: row.shift_start_hour,
   }));
+}
+
+/** Marks that disqualify their holder, per assignment type. */
+export async function loadTypeExclusions(env: Env): Promise<Map<string, string[]>> {
+  const rows = await env.DB.prepare(
+    'SELECT assignment_type_id, qualification_id FROM assignment_type_exclusions',
+  ).all<{ assignment_type_id: string; qualification_id: string }>();
+  const map = new Map<string, string[]>();
+  for (const row of rows.results ?? []) {
+    const list = map.get(row.assignment_type_id) ?? [];
+    list.push(row.qualification_id);
+    map.set(row.assignment_type_id, list);
+  }
+  return map;
 }
 
 export async function loadTypeQualifications(
@@ -413,7 +465,10 @@ export async function loadAssignments(
     byAssignment.set(row.assignment_id, list);
   }
 
-  const typeQualifications = await loadTypeQualifications(env);
+  const [typeQualifications, typeExclusions] = await Promise.all([
+    loadTypeQualifications(env),
+    loadTypeExclusions(env),
+  ]);
   return assignments.map((row) => ({
     id: row.id,
     scheduleId: row.schedule_id,
@@ -430,6 +485,7 @@ export async function loadAssignments(
     notes: row.notes,
     assignees: byAssignment.get(row.id) ?? [],
     requiredQualifications: typeQualifications.get(row.assignment_type_id) ?? [],
+    excludedQualificationIds: typeExclusions.get(row.assignment_type_id) ?? [],
     instructions: row.instructions,
     updatedAt: row.updated_at,
   }));
@@ -500,6 +556,7 @@ export function toEngineAssignment(assignment: Assignment): EngineAssignment {
     endAt: assignment.endAt,
     requiredHeadcount: assignment.requiredHeadcount,
     requiredQualifications: assignment.requiredQualifications,
+    excludedQualificationIds: assignment.excludedQualificationIds,
     assigneeIds: assignment.assignees.map((assignee) => assignee.personnelId),
     assigneeRoles: Object.fromEntries(
       assignment.assignees.map((assignee) => [assignee.personnelId, assignee.role]),
@@ -565,7 +622,7 @@ export async function evaluateWindow(
       loadPersonnel(env, { includeInactive: true }),
       loadAvailability(env, { from: window.from, to: window.to, status: 'approved' }),
       loadRules(env),
-      loadQualifications(env),
+      engineQualifications(env),
       orgTimezone(env),
     ],
   );
@@ -575,12 +632,7 @@ export async function evaluateWindow(
     personnel: personnel.map(toEnginePerson),
     absences: toEngineAbsences(availability),
     rules,
-    qualificationNames: Object.fromEntries(
-      qualifications.map((qualification) => [qualification.id, qualification.name]),
-    ),
-    exclusiveQualificationIds: qualifications
-      .filter((qualification) => qualification.exclusive)
-      .map((qualification) => qualification.id),
+    ...qualifications,
     timezone,
   });
 

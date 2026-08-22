@@ -25,8 +25,9 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     env.DB.prepare(
       `INSERT INTO assignment_types (id, org_id, name, category, default_duration_minutes,
                                      required_headcount, priority, color, instructions, active,
+                                     standing, shift_hours, shift_start_hour,
                                      created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).bind(
       id,
       DEFAULT_ORG_ID,
@@ -38,6 +39,9 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       input.color ?? 'slate',
       input.instructions ?? null,
       boolToInt(input.active, 1),
+      boolToInt(input.standing, 0),
+      input.shiftHours ?? 8,
+      input.shiftStartHour ?? 0,
       timestamp,
       timestamp,
     ),
@@ -47,6 +51,12 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
            (assignment_type_id, qualification_id, min_count)
          VALUES (?, ?, ?)`,
       ).bind(id, requirement.qualificationId, requirement.minCount),
+    ),
+    ...(input.excludedQualificationIds ?? []).map((qualificationId) =>
+      env.DB.prepare(
+        `INSERT OR IGNORE INTO assignment_type_exclusions (assignment_type_id, qualification_id)
+         VALUES (?, ?)`,
+      ).bind(id, qualificationId),
     ),
   ]);
   await writeAudit(env, user, AuditActions.ASSIGNMENT_TYPE_CREATED, 'assignment_type', id);

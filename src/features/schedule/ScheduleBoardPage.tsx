@@ -2,24 +2,20 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   CalendarPlus,
+  CalendarRange,
   ChevronLeft,
   ChevronRight,
   Printer,
-  Send,
   Sparkles,
   TriangleAlert,
 } from 'lucide-react';
-import { useMutation } from '@tanstack/react-query';
 import { formatDayKey, weekdayName } from '@shared/format';
 import { Permissions } from '@shared/rbac';
 import { addDays, endOfDay, startOfDay, weekDays } from '@shared/time';
 import { t } from '@/i18n';
-import { ApiError, api } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { todayKey } from '@/lib/datetime';
 import { Button } from '@/components/ui/Button';
-import { Dialog } from '@/components/ui/Dialog';
-import { Field } from '@/components/ui/Field';
 import { IconButton } from '@/components/ui/IconButton';
 import { Select } from '@/components/ui/Input';
 import { MenuButton, type MenuAction } from '@/components/ui/MenuButton';
@@ -30,43 +26,42 @@ import { DayTimeline } from '@/components/scheduling/DayTimeline';
 import { RosterBoard } from '@/components/scheduling/RosterBoard';
 import { PersonnelTimeline } from '@/components/scheduling/PersonnelTimeline';
 import { WeekGrid } from '@/components/scheduling/WeekGrid';
-import { useToast } from '@/components/ui/toast-context';
 import {
   useAssignments,
-  useAvailability,
   usePersonnel,
   useQualifications,
   useRules,
-  useScheduleInvalidation,
-  useSchedules,
   useUnits,
 } from '@/hooks/queries';
 import { useAuth } from '@/hooks/auth-context';
 import { AssignmentDetailDialog } from './AssignmentDetailDialog';
+import { AssignmentEditDialog } from './AssignmentEditDialog';
 import { AssignmentFormDialog } from './AssignmentFormDialog';
 import { AutofillDialog } from './AutofillDialog';
+import { StandingRosterDialog } from './StandingRosterDialog';
 
 type View = 'roster' | 'day' | 'week' | 'personnel';
 
 export function ScheduleBoardPage() {
   const { can } = useAuth();
-  const toast = useToast();
-  const invalidate = useScheduleInvalidation();
 
   // The roster is the sheet people actually read, so it opens first; the
   // timeline stays a click away for the 'what is happening at 14:00' question.
   const [view, setView] = useState<View>('roster');
   const [day, setDay] = useState(() => todayKey());
   const [unitId, setUnitId] = useState('');
-  const [scheduleId, setScheduleId] = useState('');
   const [creating, setCreating] = useState(false);
   const [openAssignmentId, setOpenAssignmentId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [autofilling, setAutofilling] = useState(false);
-  const [publishing, setPublishing] = useState(false);
+  const [layingOut, setLayingOut] = useState(false);
 
   const units = useUnits();
-  const schedules = useSchedules();
-  const personnel = usePersonnel(unitId ? { unitId } : {});
+  // Auto-fill judges people against the whole roster, so the unit filter
+  // narrows what is *shown* and never who may be considered. Filtering the
+  // fetch instead is how a post came to be told there were no drivers when the
+  // drivers were simply in another platoon.
+  const personnel = usePersonnel();
   const qualifications = useQualifications();
   const rules = useRules();
 
@@ -82,16 +77,15 @@ export function ScheduleBoardPage() {
   }, [view, days, day, unitId]);
 
   const board = useAssignments(boardWindow);
-  const availability = useAvailability({
-    from: boardWindow.from,
-    to: boardWindow.to,
-    status: 'approved',
-  });
   const timezone = board.data?.timezone ?? 'Asia/Jerusalem';
   const assignments = board.data?.assignments ?? [];
   const conflicts = board.data?.conflicts ?? [];
   const blockingCount = conflicts.filter((conflict) => conflict.severity === 'blocking').length;
   const openAssignment = assignments.find((item) => item.id === openAssignmentId) ?? null;
+  const editingAssignment = assignments.find((item) => item.id === editingId) ?? null;
+  const shownPersonnel = (personnel.data ?? []).filter(
+    (person) => !unitId || person.unitId === unitId,
+  );
 
   const seatsNeeded = assignments.reduce((total, item) => total + item.requiredHeadcount, 0);
   const seatsFilled = assignments.reduce(
@@ -102,24 +96,14 @@ export function ScheduleBoardPage() {
   );
   const seatsMissing = seatsNeeded - seatsFilled;
 
-  const publish = useMutation({
-    mutationFn: (id: string) =>
-      api.post<{ version: number; notified: number }>(`/schedules/${id}/publish`, {}),
-    onSuccess: (result) => {
-      invalidate();
-      setPublishing(false);
-      toast.push('success', `${t('schedule.published')} (${result.notified})`);
-    },
-    onError: (error) => {
-      toast.push('error', error instanceof ApiError ? error.message : t('state.errorBody'));
-    },
-  });
-
   const shift = (direction: -1 | 1) =>
     setDay((current) => addDays(current, view === 'week' ? 7 * direction : direction));
 
-  // Everything that is not "create" or "auto-fill" lives behind one menu, so the
-  // toolbar shows the two buttons a manager actually presses on a normal day.
+  /*
+   * The sheet goes out as a PDF in the group chat, so there is no publication
+   * step to press — exporting it *is* the act of publishing. The board keeps
+   * one overflow menu anyway, for the actions that are real but rare.
+   */
   const menuActions: MenuAction[] = [
     {
       key: 'print',
@@ -128,14 +112,14 @@ export function ScheduleBoardPage() {
       icon: <Printer className="size-4" />,
       onSelect: () => window.print(),
     },
-    ...(can(Permissions.schedulesPublish)
+    ...(can(Permissions.assignmentsWrite)
       ? [
           {
-            key: 'publish',
-            label: t('schedule.publish'),
-            hint: t('schedule.publishExplain'),
-            icon: <Send className="size-4" />,
-            onSelect: () => setPublishing(true),
+            key: 'standing',
+            label: t('schedule.standing'),
+            hint: t('schedule.standingSubtitle'),
+            icon: <CalendarRange className="size-4" />,
+            onSelect: () => setLayingOut(true),
           },
         ]
       : []),
@@ -180,7 +164,19 @@ export function ScheduleBoardPage() {
         />
 
         {assignments.length === 0 && !board.isLoading ? (
-          <StepsHint steps={[t('schedule.step1'), t('schedule.step2'), t('schedule.step3')]} />
+          <>
+            <StepsHint steps={[t('schedule.step1'), t('schedule.step2'), t('schedule.step3')]} />
+            {can(Permissions.assignmentsWrite) ? (
+              <Button
+                className="mb-3"
+                size="sm"
+                icon={<CalendarRange className="size-4" />}
+                onClick={() => setLayingOut(true)}
+              >
+                {t('schedule.standing')}
+              </Button>
+            ) : null}
+          </>
         ) : null}
 
         <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -365,7 +361,7 @@ export function ScheduleBoardPage() {
             <PersonnelTimeline
               dayKey={day}
               timezone={timezone}
-              personnel={personnel.data ?? []}
+              personnel={shownPersonnel}
               assignments={assignments}
               conflicts={conflicts}
               onOpen={setOpenAssignmentId}
@@ -374,65 +370,31 @@ export function ScheduleBoardPage() {
         </QueryState>
       </div>
 
-      <Dialog
-        open={publishing}
-        title={t('schedule.publishTitle')}
-        description={t('schedule.publishExplain')}
-        onClose={() => setPublishing(false)}
-        footer={
-          <>
-            <Button variant="secondary" onClick={() => setPublishing(false)}>
-              {t('app.cancel')}
-            </Button>
-            <Button
-              icon={<Send className="size-4" />}
-              disabled={!scheduleId}
-              loading={publish.isPending}
-              onClick={() => scheduleId && publish.mutate(scheduleId)}
-            >
-              {t('schedule.publish')}
-            </Button>
-          </>
-        }
-      >
-        {(schedules.data ?? []).length === 0 ? (
-          <p className="text-sm text-ink-muted">{t('schedule.publishNoSchedules')}</p>
-        ) : (
-          <Field label={t('schedule.publishChoose')}>
-            {({ id }) => (
-              <Select
-                id={id}
-                value={scheduleId}
-                onChange={(event) => setScheduleId(event.target.value)}
-              >
-                <option value="">{t('schedule.selectSchedule')}</option>
-                {(schedules.data ?? []).map((schedule) => (
-                  <option key={schedule.id} value={schedule.id}>
-                    {schedule.name}
-                  </option>
-                ))}
-              </Select>
-            )}
-          </Field>
-        )}
-      </Dialog>
-
       <AutofillDialog
         open={autofilling}
         onClose={() => setAutofilling(false)}
         assignments={assignments}
+        window={{ from: boardWindow.from, to: boardWindow.to }}
         personnel={personnel.data ?? []}
-        availability={availability.data ?? []}
         qualifications={qualifications.data ?? []}
         rules={rules.data ?? []}
         timezone={timezone}
+      />
+
+      {/* Keyed on the day so the date it suggests follows the board, rather
+          than the day the dialog first mounted. */}
+      <StandingRosterDialog
+        key={day}
+        open={layingOut}
+        dayKey={day}
+        onClose={() => setLayingOut(false)}
       />
 
       <AssignmentFormDialog
         open={creating}
         dayKey={day}
         timezone={timezone}
-        scheduleId={scheduleId || null}
+        scheduleId={null}
         onClose={() => setCreating(false)}
       />
 
@@ -441,6 +403,16 @@ export function ScheduleBoardPage() {
         conflicts={conflicts.filter((conflict) => conflict.assignmentId === openAssignmentId)}
         timezone={timezone}
         onClose={() => setOpenAssignmentId(null)}
+        onEdit={(assignment) => {
+          setOpenAssignmentId(null);
+          setEditingId(assignment.id);
+        }}
+      />
+
+      <AssignmentEditDialog
+        assignment={editingAssignment}
+        timezone={timezone}
+        onClose={() => setEditingId(null)}
       />
     </>
   );

@@ -38,8 +38,12 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   const understaffed = todaysAssignments.filter(
     (assignment) => assignment.assignees.length < assignment.requiredHeadcount,
   );
-  const unpublished = evaluation.assignments.filter(
-    (assignment) => assignment.publicationState !== 'published',
+  // Seats, not shifts: a post short of three people and a post short of one
+  // are not the same problem, and the sheet is read by the seat.
+  const openSeats = todaysAssignments.reduce(
+    (total, assignment) =>
+      total + Math.max(0, assignment.requiredHeadcount - assignment.assignees.length),
+    0,
   );
 
   const recent = can(user, Permissions.auditRead)
@@ -65,7 +69,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
       assignedCount: assignedToday.size,
       personnelCount: activePersonnel.length,
       understaffedCount: understaffed.length,
-      unpublishedCount: unpublished.length,
+      openSeatCount: openSeats,
     },
     conflictSummary: summarizeConflicts(evaluation.conflicts),
     upcoming: evaluation.assignments

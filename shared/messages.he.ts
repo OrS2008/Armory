@@ -81,6 +81,9 @@ export const conflictMessages: Record<string, string> = {
   ROLE_TAKEN: 'תפקיד {qualification} כבר תפוס במשימה {assignment} — {other} ממלא אותו.',
   PRE_DEPARTURE_REST:
     '{person} יוצא ב־{from}. המשימה מסתיימת {actual} שעות לפני היציאה בלבד, במקום {required}.',
+  EXCLUDED_QUALIFICATION:
+    '{person} מסומן {qualification}, ולמשימת {assignment} לא משבצים מי שמסומן כך.',
+  NOT_SCHEDULABLE: '{person} מסומן {qualification} ואינו משובץ למשימות.',
 };
 
 /** How to resolve it, per conflict code. */
@@ -101,6 +104,9 @@ export const conflictResolutions: Record<string, string> = {
   ROLE_QUALIFICATION: 'בחרו אדם המחזיק בהכשיר, או שבצו אותו כלוחם.',
   ROLE_TAKEN: 'הסירו קודם את {other} מהתפקיד, או שבצו את האדם כלוחם.',
   PRE_DEPARTURE_REST: 'הקדימו את המשימה, או שבצו אדם שאינו יוצא בסמוך לה.',
+  EXCLUDED_QUALIFICATION:
+    'בחרו אדם אחר, או הסירו את {qualification} מרשימת הפסילות של סוג המשימה בהגדרות ← סוגי משימות.',
+  NOT_SCHEDULABLE: 'אם יש לשבצו בכל זאת, הסירו ממנו את הסימון {qualification} במסך כוח האדם.',
 };
 
 export function conflictMessage(code: string, params: Params): string {
@@ -220,6 +226,9 @@ export const ruleDescriptions: Record<string, string> = {
   PRE_DEPARTURE_REST: 'כמה שעות לפני יציאה הביתה כבר לא משבצים את החייל.',
   DUPLICATE_ASSIGNMENT: 'התרעה על שתי משימות זהות באותו מקום ובאותן שעות.',
   UNPUBLISHED_CHANGES: 'התרעה על שינויים שנעשו אחרי הפרסום וטרם פורסמו מחדש.',
+  EXCLUDED_QUALIFICATION:
+    'סוג משימה יכול לפסול סימונים: למשימת סיור לא משבצים מי שמסומן מבצעים, ולש״ג לא משבצים מפקד.',
+  NOT_SCHEDULABLE: 'מי שמסומן מפלג אינו נכנס לסבב המשימות כלל.',
 };
 
 export const severityLabels: Record<Severity, string> = {
@@ -245,4 +254,6 @@ export const validationMessages = {
   invalidTime: 'שעה אינה תקינה',
   tooLong: 'הטקסט ארוך מדי',
   phone: 'מספר טלפון אינו תקין',
+  rangeTooLong: 'הטווח ארוך מדי — אפשר לפרוס עד 180 ימים בפעולה אחת',
+  shiftHours: 'אורך משמרת חייב להתחלק ב־24 שעות ללא שארית',
 } as const;

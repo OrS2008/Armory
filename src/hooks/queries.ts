@@ -49,7 +49,7 @@ export interface DashboardData {
     assignedCount: number;
     personnelCount: number;
     understaffedCount: number;
-    unpublishedCount: number;
+    openSeatCount: number;
   };
   conflictSummary: Record<Severity, number>;
   upcoming: Assignment[];
@@ -115,8 +115,12 @@ export interface AssignmentsResponse {
   window: { from: number; to: number };
 }
 
-export function useAssignments(window: { from: number; to: number; unitId?: string }) {
+export function useAssignments(
+  window: { from: number; to: number; unitId?: string },
+  enabled = true,
+) {
   return useQuery({
+    enabled,
     queryKey: queryKeys.assignments(window),
     queryFn: () =>
       api.get<AssignmentsResponse>('/assignments', {
@@ -128,8 +132,12 @@ export function useAssignments(window: { from: number; to: number; unitId?: stri
   });
 }
 
-export function useAvailability(window: { from?: number; to?: number; status?: string }) {
+export function useAvailability(
+  window: { from?: number; to?: number; status?: string },
+  enabled = true,
+) {
   return useQuery({
+    enabled,
     queryKey: queryKeys.availability(window),
     queryFn: () => api.get<{ availability: Availability[] }>('/availability', window),
     select: (data) => data.availability,
@@ -223,8 +231,9 @@ export function useWorkloadReport(window: { from: number; to: number }) {
   });
 }
 
-export function useMySchedule() {
+export function useMySchedule(enabled = true) {
   return useQuery({
+    enabled,
     queryKey: queryKeys.mySchedule,
     queryFn: () =>
       api.get<{
@@ -279,10 +288,49 @@ export function useAssignPersonnel() {
 export function useUnassignPersonnel() {
   const invalidate = useScheduleInvalidation();
   return useMutation({
-    mutationFn: (input: { assignmentId: string; personnelId: string }) =>
-      api.post(`/assignments/${input.assignmentId}/unassign`, {
+    /** `scope: 'day'` clears the person from every shift that starts that day. */
+    mutationFn: (input: { assignmentId: string; personnelId: string; scope?: 'shift' | 'day' }) =>
+      api.post<{ removed: number }>(`/assignments/${input.assignmentId}/unassign`, {
         personnelId: input.personnelId,
+        scope: input.scope ?? 'shift',
       }),
+    onSuccess: invalidate,
+  });
+}
+
+/** Lay out every standing post across a period, in one action. */
+export function useStandingRoster() {
+  const invalidate = useScheduleInvalidation();
+  return useMutation({
+    mutationFn: (input: { fromDate: string; toDate: string }) =>
+      api.post<{ created: number; skipped: number; posts: number }>('/assignments/standing', input),
+    onSuccess: invalidate,
+  });
+}
+
+export function useUpdateAssignment() {
+  const invalidate = useScheduleInvalidation();
+  return useMutation({
+    mutationFn: (input: {
+      id: string;
+      startAt?: number;
+      endAt?: number;
+      requiredHeadcount?: number;
+      title?: string | null;
+      notes?: string | null;
+    }) => {
+      const { id, ...body } = input;
+      return api.patch<{ id: string }>(`/assignments/${id}`, body);
+    },
+    onSuccess: invalidate,
+  });
+}
+
+/** Cancels the shift. The row and its history are kept, never deleted. */
+export function useCancelAssignment() {
+  const invalidate = useScheduleInvalidation();
+  return useMutation({
+    mutationFn: (id: string) => api.delete<{ id: string }>(`/assignments/${id}`),
     onSuccess: invalidate,
   });
 }

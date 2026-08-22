@@ -32,7 +32,7 @@ Cloudflare D1 (SQLite). One migration, `migrations/0001_init.sql`, applied with
 | `organizations` | Name, IANA timezone, week start day |
 | `units` | Self-referencing tree: company → platoon → team |
 | `personnel` | Roster entry; `UNIQUE(org_id, external_id)` |
-| `qualifications` | Generic authorisation tags; `UNIQUE(org_id, code)` |
+| `qualifications` | Generic authorisation tags and marks; `UNIQUE(org_id, code)`. `exclusive` narrows its holder to the posts that require it; `blocks_scheduling` takes them out of the rotation entirely |
 | `personnel_qualifications` | Holdings, with an optional expiry |
 
 ### Scheduling
@@ -40,8 +40,9 @@ Cloudflare D1 (SQLite). One migration, `migrations/0001_init.sql`, applied with
 | Table | Purpose |
 | --- | --- |
 | `availability` | Absence or availability window with an approval status; `CHECK (end_at > start_at)` |
-| `assignment_types` | Reusable definition: default duration, headcount, priority, colour |
-| `assignment_type_qualifications` | Qualifications a type requires |
+| `assignment_types` | Reusable definition: default duration, headcount, priority, colour. `standing` + `shift_hours` + `shift_start_hour` describe a post covered round the clock, which is what the fixed roster is generated from |
+| `assignment_type_qualifications` | Qualifications a type requires; `min_count` 0 binds every seat, N binds N of them |
+| `assignment_type_exclusions` | Marks a type refuses — the mirror image of the row above |
 | `schedules` | Named date range with a status and a version counter |
 | `schedule_versions` | Immutable JSON snapshot written on each publication |
 | `assignment_instances` | A concrete occurrence, with `status` and `publication_state` |
@@ -58,7 +59,8 @@ organizations
   ├── units ──┬── units (children)
   │           └── personnel ──┬── personnel_qualifications ── qualifications
   │                           └── availability
-  ├── assignment_types ── assignment_type_qualifications ── qualifications
+  ├── assignment_types ─┬─ assignment_type_qualifications ── qualifications
+  │                     └─ assignment_type_exclusions ────── qualifications
   ├── scheduling_rules
   └── schedules ──┬── schedule_versions
                   └── assignment_instances ── assignment_personnel ── personnel

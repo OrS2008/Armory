@@ -152,9 +152,8 @@ describe('auto-fill', () => {
 });
 
 describe('when the day asks more of the roster than it has', () => {
-  const eightHours = DEFAULT_RULES.map((rule) =>
-    rule.code === 'MAX_CONTINUOUS' ? { ...rule, config: { minutes: 480 } } : rule,
-  );
+  // The company's own shape: an eight-hour shift, then sixteen hours off.
+  const eightHours = DEFAULT_RULES;
 
   const shift = (id: string, from: number, to: number): EngineAssignment => ({
     id,
@@ -181,12 +180,13 @@ describe('when the day asks more of the roster than it has', () => {
       rules: eightHours,
     });
 
-    // The two shifts that are not adjacent are staffed — eight hours on, eight
-    // off, eight on. The middle one would make a sixteen-hour run either side
-    // of it, so it is left empty instead.
-    expect(proposal.proposed).toHaveLength(4);
-    expect(proposal.gaps.reduce((total, gap) => total + gap.missing, 0)).toBe(2);
-    expect(proposal.gaps[0]?.assignmentId).toBe('b');
+    // A day needs three crews, and two people are one crew. Sixteen hours of
+    // rest is what makes that arithmetic rather than an opinion: whoever stands
+    // 00:00–08:00 is not available again until the next morning, so the other
+    // two shifts are reported as gaps instead of quietly handed back to them.
+    expect(proposal.proposed).toHaveLength(2);
+    expect(proposal.gaps.reduce((total, gap) => total + gap.missing, 0)).toBe(4);
+    expect(proposal.gaps.map((gap) => gap.assignmentId).sort()).toEqual(['b', 'c']);
   });
 
   it('reports the arithmetic behind the gaps', () => {
@@ -269,5 +269,95 @@ describe('auto-fill repair pass', () => {
     ]);
 
     expect(proposal.proposed.length).toBeGreaterThanOrEqual(3);
+  });
+});
+
+/*
+ * The marks the company actually uses.
+ *
+ * Auto-fill is the place these have to hold: a scheduler reading a proposal
+ * cannot be expected to re-check every name against a rule the machine already
+ * knows. If a proposal can name somebody the post excludes, the rule is
+ * decoration.
+ */
+describe('who auto-fill will not propose', () => {
+  const withMarks = [
+    ...roster,
+    person('p7', 'רן', ['q_ops']),
+    person('p8', 'טל', ['q_ops', 'q_drive']),
+    person('p9', 'משה', ['q_maflag']),
+  ];
+
+  const marked = (assignments: EngineAssignment[], extra = {}) =>
+    buildAutofillProposal({
+      assignments,
+      personnel: withMarks,
+      absences: [],
+      rules: DEFAULT_RULES,
+      qualificationNames: { q_drive: 'נהג', q_cmd: 'מפקד', q_ops: 'מבצעים', q_maflag: 'מפלג' },
+      blockingQualificationIds: ['q_maflag'],
+      timezone: TZ,
+      ...extra,
+    });
+
+  it('never fills a seat with somebody the post excludes', () => {
+    const proposal = marked([
+      {
+        ...post('siur', 'סיור', '08:00', '16:00', 8),
+        excludedQualificationIds: ['q_ops'],
+      },
+    ]);
+    const names = proposal.proposed.map((item) => item.personnelId);
+    expect(names).not.toContain('p7');
+    expect(names).not.toContain('p8');
+    // …and it did fill the seats it could, rather than giving up on the post.
+    expect(proposal.proposed.length).toBe(6);
+  });
+
+  it('leaves a named seat open rather than filling it from the excluded list', () => {
+    // The only other driver is already out on the morning patrol, so the
+    // excluded driver is the sole remaining candidate for the seat.
+    const proposal = marked([
+      post(
+        'a',
+        'סיור בוקר',
+        '08:00',
+        '16:00',
+        2,
+        [{ qualificationId: 'q_drive', minCount: 1 }],
+        ['p1', 'p2'],
+      ),
+      {
+        ...post('b', 'סיור ערב', '16:00', '23:00', 1, [
+          { qualificationId: 'q_drive', minCount: 1 },
+        ]),
+        excludedQualificationIds: ['q_ops'],
+      },
+    ]);
+    expect(proposal.proposed.map((item) => item.personnelId)).not.toContain('p8');
+    expect(proposal.gaps.some((gap) => gap.assignmentId === 'b')).toBe(true);
+
+    // The control: without the exclusion that seat is filled, and filled by
+    // exactly the person the exclusion keeps out. Otherwise the gap above
+    // would prove nothing.
+    const allowed = marked([
+      post(
+        'a',
+        'סיור בוקר',
+        '08:00',
+        '16:00',
+        2,
+        [{ qualificationId: 'q_drive', minCount: 1 }],
+        ['p1', 'p2'],
+      ),
+      post('b', 'סיור ערב', '16:00', '23:00', 1, [{ qualificationId: 'q_drive', minCount: 1 }]),
+    ]);
+    expect(allowed.proposed.map((item) => item.personnelId)).toContain('p8');
+    expect(allowed.gaps).toHaveLength(0);
+  });
+
+  it('never proposes somebody marked מפלג, whatever the post', () => {
+    const proposal = marked([post('a', 'ש״ג', '08:00', '16:00', 9)]);
+    expect(proposal.proposed.map((item) => item.personnelId)).not.toContain('p9');
   });
 });

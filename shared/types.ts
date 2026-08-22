@@ -58,6 +58,11 @@ export interface Qualification {
    * חמ״ל is scheduled for חמ״ל and nothing else.
    */
   exclusive: boolean;
+  /**
+   * Takes its holder out of the rotation entirely: whoever is marked מפלג has
+   * a job, not a shift.
+   */
+  blocksScheduling: boolean;
 }
 
 export interface Personnel {
@@ -96,6 +101,16 @@ export interface AssignmentType {
   instructions: string | null;
   active: boolean;
   requiredQualifications: { qualificationId: string; minCount: number }[];
+  /** Marks that disqualify their holder from this post. */
+  excludedQualificationIds: string[];
+  /**
+   * A post that is covered without a break: `24 / shiftHours` shifts a day,
+   * every day, starting at `shiftStartHour`. This is what the fixed roster is
+   * generated from, so a whole period is laid out in one action.
+   */
+  standing: boolean;
+  shiftHours: number;
+  shiftStartHour: number;
 }
 
 export interface AssignmentAssignee {
@@ -125,6 +140,8 @@ export interface Assignment {
   notes: string | null;
   assignees: AssignmentAssignee[];
   requiredQualifications: { qualificationId: string; minCount: number }[];
+  /** Marks that disqualify their holder from this post. */
+  excludedQualificationIds: string[];
   /** Standing orders from the assignment type — the sheet's הערות column. */
   instructions: string | null;
   updatedAt: number;

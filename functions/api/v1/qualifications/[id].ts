@@ -15,15 +15,17 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env, params 
   const input = await readBody(request, qualificationSchema.partial());
   if (input instanceof Response) return input;
 
-  const existing = await env.DB.prepare('SELECT active FROM qualifications WHERE id = ?')
+  const existing = await env.DB.prepare(
+    'SELECT active, exclusive, blocks_scheduling FROM qualifications WHERE id = ?',
+  )
     .bind(id)
-    .first<{ active: number }>();
+    .first<{ active: number; exclusive: number; blocks_scheduling: number }>();
   if (!existing) return fail(404, ErrorCodes.NOT_FOUND);
 
   await env.DB.prepare(
     `UPDATE qualifications
         SET code = COALESCE(?, code), name = COALESCE(?, name), description = COALESCE(?, description),
-            active = ?, updated_at = ?
+            active = ?, exclusive = ?, blocks_scheduling = ?, updated_at = ?
       WHERE id = ?`,
   )
     .bind(
@@ -31,6 +33,8 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env, params 
       input.name ?? null,
       input.description ?? null,
       boolToInt(input.active, existing.active),
+      boolToInt(input.exclusive, existing.exclusive),
+      boolToInt(input.blocksScheduling, existing.blocks_scheduling),
       now(),
       id,
     )

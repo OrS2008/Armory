@@ -20,13 +20,18 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     orgTimezone(env),
   ]);
 
-  // Draft assignments are invisible until the schedule is published.
-  const published = assignments.filter((assignment) => assignment.publicationState !== 'draft');
-
+  /*
+   * Everything the soldier is on, whatever its publication state.
+   *
+   * There is no publication step any more — the sheet goes out as a PDF in the
+   * group chat — so filtering drafts out left this screen permanently empty
+   * while the board showed the same soldier three shifts. A shift somebody has
+   * been put on is a shift they are on.
+   */
   return ok({
     personnelId: user.personnelId,
     timezone,
-    assignments: published.map((assignment) => ({
+    assignments: assignments.map((assignment) => ({
       ...assignment,
       assignees: assignment.assignees.filter(
         (assignee) => assignee.personnelId === user.personnelId,

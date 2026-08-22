@@ -2,6 +2,7 @@
 import { z } from 'zod';
 import { validationMessages as v } from './messages.he';
 import { isDayKey } from './time';
+import { MAX_STANDING_DAYS, isStandingShiftHours } from './standing';
 
 const trimmed = (max: number) => z.string().trim().max(max, v.tooLong);
 const optionalText = (max: number) =>
@@ -66,6 +67,8 @@ export const qualificationSchema = z.object({
    * is scheduled for the assignments that require it and for nothing else.
    */
   exclusive: z.boolean().optional(),
+  /** Takes its holder out of the rotation entirely — מפלג has a job, not a shift. */
+  blocksScheduling: z.boolean().optional(),
 });
 export type QualificationInput = z.infer<typeof qualificationSchema>;
 
@@ -122,6 +125,12 @@ export const assignmentTypeSchema = z.object({
     .array(z.object({ qualificationId: idSchema, minCount: z.number().int().min(0).max(500) }))
     .max(50)
     .optional(),
+  /** Marks that disqualify their holder from this post. */
+  excludedQualificationIds: z.array(idSchema).max(50).optional(),
+  /** A post covered round the clock, handed over every `shiftHours`. */
+  standing: z.boolean().optional(),
+  shiftHours: z.number().int().min(1).max(24).refine(isStandingShiftHours, v.shiftHours).optional(),
+  shiftStartHour: z.number().int().min(0).max(23).optional(),
 });
 export type AssignmentTypeInput = z.infer<typeof assignmentTypeSchema>;
 
@@ -179,6 +188,45 @@ export const assignPersonnelSchema = z.object({
   role: optionalId(),
   overrideReason: optionalText(300),
 });
+
+/**
+ * Taking somebody off a post. `scope: 'day'` removes them from every shift
+ * that starts on the same local day — "הסרת שיבוץ כולל לאותו היום" — because
+ * clearing one shift at a time is how a person ends up half-removed.
+ */
+export const unassignPersonnelSchema = z.object({
+  personnelId: idSchema,
+  scope: z.enum(['shift', 'day']).optional(),
+});
+
+/**
+ * Lay out every standing post across a period. The manager states the period
+ * once; the posts carry their own rhythm.
+ */
+export const standingRosterSchema = z
+  .object({
+    fromDate: dayKeySchema,
+    toDate: dayKeySchema,
+    /** Defaults to every standing post. */
+    assignmentTypeIds: z.array(idSchema).max(50).optional(),
+  })
+  .refine((value) => value.toDate >= value.fromDate, {
+    message: v.endBeforeStart,
+    path: ['toDate'],
+  })
+  .refine((value) => daysBetweenKeys(value.fromDate, value.toDate) <= MAX_STANDING_DAYS, {
+    message: v.rangeTooLong,
+    path: ['toDate'],
+  });
+export type StandingRosterInput = z.infer<typeof standingRosterSchema>;
+
+function daysBetweenKeys(from: string, to: string): number {
+  const parse = (key: string) => {
+    const [year, month, day] = key.split('-').map(Number) as [number, number, number];
+    return Date.UTC(year, month - 1, day);
+  };
+  return Math.round((parse(to) - parse(from)) / 86_400_000);
+}
 
 export const bulkAssignSchema = z.object({
   assignments: z

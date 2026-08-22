@@ -6,6 +6,7 @@ import type { EngineAbsence, EngineAssignment, EnginePerson } from '@shared/conf
 import type { Assignment, Availability, Personnel, Qualification } from '@shared/types';
 import type { SchedulingRule } from '@shared/conflicts';
 import { formatHours, formatRange } from '@shared/format';
+import { DAY } from '@shared/time';
 import { t } from '@/i18n';
 import { ApiError, api } from '@/lib/api';
 import { Badge } from '@/components/ui/Badge';
@@ -14,23 +15,36 @@ import { Dialog } from '@/components/ui/Dialog';
 import { IconButton } from '@/components/ui/IconButton';
 import { EmptyState } from '@/components/ui/States';
 import { useToast } from '@/components/ui/toast-context';
-import { useScheduleInvalidation } from '@/hooks/queries';
+import { useAssignments, useAvailability, useScheduleInvalidation } from '@/hooks/queries';
 
 interface Props {
   open: boolean;
   onClose: () => void;
+  /** The assignments to fill — whatever the board is showing. */
   assignments: Assignment[];
+  /** The board's own window, widened below so rest is judged across its edges. */
+  window: { from: number; to: number };
   personnel: Personnel[];
-  availability: Availability[];
   qualifications: Qualification[];
   rules: SchedulingRule[];
   timezone: string;
 }
 
+/**
+ * How far past the board's window the proposal has to see.
+ *
+ * Sixteen hours of rest reaches into the previous evening and the next
+ * morning, and a proposal that only knows about today would hand somebody the
+ * 00:00 patrol straight off last night's 16:00 one. Two days each way covers
+ * every rule the engine measures across a boundary.
+ */
+const CONTEXT_DAYS = 2;
+
 const toEngineAssignment = (assignment: Assignment): EngineAssignment => ({
   id: assignment.id,
   assignmentTypeId: assignment.assignmentTypeId,
   title: assignment.title ?? assignment.assignmentTypeName,
+  excludedQualificationIds: assignment.excludedQualificationIds,
   startAt: assignment.startAt,
   endAt: assignment.endAt,
   requiredHeadcount: assignment.requiredHeadcount,
@@ -69,8 +83,8 @@ export function AutofillDialog({
   open,
   onClose,
   assignments,
+  window,
   personnel,
-  availability,
   qualifications,
   rules,
   timezone,
@@ -79,22 +93,46 @@ export function AutofillDialog({
   const invalidate = useScheduleInvalidation();
   const [dropped, setDropped] = useState<Set<string>>(new Set());
 
+  // Fetched only while the dialog is open: the board polls its own window every
+  // 45 seconds, and a second standing poll behind a closed dialog is waste.
+  const context = { from: window.from - CONTEXT_DAYS * DAY, to: window.to + CONTEXT_DAYS * DAY };
+  const around = useAssignments(context, open);
+  const availability = useAvailability({ ...context, status: 'approved' }, open);
+
   const proposal = useMemo(() => {
     if (!open) return null;
+    const targets = assignments.map((assignment) => assignment.id);
+    const known = around.data?.assignments ?? assignments;
+    // The board's own rows always take part, even if the wider fetch has not
+    // arrived yet: a proposal over a stale list would place the same person twice.
+    const merged = [...known.filter((item) => !targets.includes(item.id)), ...assignments];
     return buildAutofillProposal({
-      assignments: assignments.map(toEngineAssignment),
+      assignments: merged.map(toEngineAssignment),
       personnel: personnel.filter((person) => person.status === 'active').map(toEnginePerson),
-      absences: toAbsences(availability),
+      absences: toAbsences(availability.data ?? []),
       rules,
+      assignmentIds: targets,
       qualificationNames: Object.fromEntries(
         qualifications.map((qualification) => [qualification.id, qualification.name]),
       ),
       exclusiveQualificationIds: qualifications
         .filter((qualification) => qualification.exclusive)
         .map((qualification) => qualification.id),
+      blockingQualificationIds: qualifications
+        .filter((qualification) => qualification.blocksScheduling)
+        .map((qualification) => qualification.id),
       timezone,
     });
-  }, [open, assignments, personnel, availability, qualifications, rules, timezone]);
+  }, [
+    open,
+    assignments,
+    around.data,
+    personnel,
+    availability.data,
+    qualifications,
+    rules,
+    timezone,
+  ]);
 
   // The limit the demand is measured against, in hours.
   const continuousLimitHours =

@@ -57,6 +57,11 @@ export function QualificationsPanel() {
               {t('settings.exclusiveBadge')}
             </Badge>
           ) : null}
+          {item.blocksScheduling ? (
+            <Badge className="ms-2" tone="danger">
+              {t('settings.blocksSchedulingBadge')}
+            </Badge>
+          ) : null}
         </>
       ),
     },
@@ -140,6 +145,15 @@ export function QualificationsPanel() {
             <span>
               <span className="block font-medium">{t('settings.exclusive')}</span>
               <span className="block text-xs text-ink-muted">{t('settings.exclusiveHint')}</span>
+            </span>
+          </label>
+          <label className="flex items-start gap-2 rounded-[var(--radius-control)] border border-border-subtle p-3 text-sm">
+            <input type="checkbox" className="mt-1" {...form.register('blocksScheduling')} />
+            <span>
+              <span className="block font-medium">{t('settings.blocksScheduling')}</span>
+              <span className="block text-xs text-ink-muted">
+                {t('settings.blocksSchedulingHint')}
+              </span>
             </span>
           </label>
         </div>

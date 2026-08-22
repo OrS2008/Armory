@@ -7,7 +7,7 @@ import { AuditActions, auditStatement } from '../../../_lib/audit';
 import { requireUser } from '../../../_lib/auth';
 import {
   evaluateWindow,
-  loadQualifications,
+  engineQualifications,
   toEngineAbsences,
   toEngineAssignment,
   toEnginePerson,
@@ -45,7 +45,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const from = Math.min(...targets.map((row) => row.start_at)) - 8 * DAY;
   const to = Math.max(...targets.map((row) => row.end_at)) + 8 * DAY;
   const evaluation = await evaluateWindow(env, { from, to });
-  const qualifications = await loadQualifications(env);
+  const qualifications = await engineQualifications(env);
 
   const activeIds = new Set(
     evaluation.personnel.filter((person) => person.status === 'active').map((person) => person.id),
@@ -108,12 +108,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     personnel: evaluation.personnel.map(toEnginePerson),
     absences: toEngineAbsences(evaluation.availability),
     rules: evaluation.rules,
-    qualificationNames: Object.fromEntries(
-      qualifications.map((qualification) => [qualification.id, qualification.name]),
-    ),
-    exclusiveQualificationIds: qualifications
-      .filter((qualification) => qualification.exclusive)
-      .map((qualification) => qualification.id),
+    ...qualifications,
     timezone: evaluation.timezone,
   });
 

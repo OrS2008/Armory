@@ -41,6 +41,81 @@ function run(assignments: EngineAssignment[], rules: SchedulingRule[] = DEFAULT_
   });
 }
 
+/*
+ * Marks that disqualify.
+ *
+ * A post can already say what it needs; these say who it will not take. The two
+ * are not the same statement and neither can be written as the other: "אי אפשר
+ * לשבץ חייל מהמבצעים" is a fact about מבצעים, not a qualification anybody else
+ * holds.
+ */
+describe('marks that disqualify', () => {
+  const ops: EnginePerson = { id: 'p3', displayName: 'רן', qualificationIds: ['q_ops'] };
+  const maflag: EnginePerson = { id: 'p4', displayName: 'משה', qualificationIds: ['q_maflag'] };
+
+  const withPeople = (assignments: EngineAssignment[], extra = {}) =>
+    detectConflicts({
+      assignments,
+      personnel: [dan, noa, ops, maflag],
+      absences: [],
+      rules: DEFAULT_RULES,
+      qualificationNames: { q_ops: 'מבצעים', q_maflag: 'מפלג' },
+      timezone: TZ,
+      ...extra,
+    });
+
+  it('blocks somebody the post excludes', () => {
+    const conflicts = withPeople([
+      assignment({ assigneeIds: ['p3'], excludedQualificationIds: ['q_ops'] }),
+    ]);
+    const blocked = conflicts.find((conflict) => conflict.code === 'EXCLUDED_QUALIFICATION');
+    expect(blocked?.severity).toBe('blocking');
+    expect(blocked?.personnelId).toBe('p3');
+    expect(blocked?.message).toContain('מבצעים');
+    // Overridable: a commander can still say yes, and it is recorded.
+    expect(blocked?.overridable).toBe(true);
+  });
+
+  it('leaves the same post alone for somebody who does not hold the mark', () => {
+    const conflicts = withPeople([
+      assignment({ assigneeIds: ['p2'], excludedQualificationIds: ['q_ops'] }),
+    ]);
+    expect(conflicts.some((conflict) => conflict.code === 'EXCLUDED_QUALIFICATION')).toBe(false);
+  });
+
+  it('says nothing when the post excludes nobody', () => {
+    const conflicts = withPeople([assignment({ assigneeIds: ['p3'] })]);
+    expect(conflicts.some((conflict) => conflict.code === 'EXCLUDED_QUALIFICATION')).toBe(false);
+  });
+
+  it('takes מפלג out of the rotation on every post, not one', () => {
+    const conflicts = withPeople([assignment({ assigneeIds: ['p4'] })], {
+      blockingQualificationIds: ['q_maflag'],
+    });
+    const blocked = conflicts.find((conflict) => conflict.code === 'NOT_SCHEDULABLE');
+    expect(blocked?.severity).toBe('blocking');
+    expect(blocked?.message).toContain('מפלג');
+  });
+
+  it('does not invent a NOT_SCHEDULABLE for anybody else', () => {
+    const conflicts = withPeople([assignment({ assigneeIds: ['p1'] })], {
+      blockingQualificationIds: ['q_maflag'],
+    });
+    expect(conflicts.some((conflict) => conflict.code === 'NOT_SCHEDULABLE')).toBe(false);
+  });
+
+  it('holds its peace once a commander has overridden it', () => {
+    const conflicts = withPeople([
+      assignment({
+        assigneeIds: ['p3'],
+        excludedQualificationIds: ['q_ops'],
+        overriddenBy: ['p3'],
+      }),
+    ]);
+    expect(conflicts.some((conflict) => conflict.code === 'EXCLUDED_QUALIFICATION')).toBe(false);
+  });
+});
+
 describe('overlap detection', () => {
   it('blocks a person assigned to two overlapping assignments', () => {
     const conflicts = run([
@@ -139,7 +214,9 @@ describe('qualifications', () => {
 });
 
 describe('rest and duration rules', () => {
-  it('warns when rest between assignments is below the configured minimum', () => {
+  // Eight hours on, sixteen off. Blocking rather than advisory — a warning is a
+  // note nothing acts on — but overridable, so a commander can still say yes.
+  it('blocks an assignment that leaves less rest than the minimum', () => {
     const conflicts = run([
       assignment(),
       assignment({
@@ -149,7 +226,8 @@ describe('rest and duration rules', () => {
       }),
     ]);
     const conflict = conflicts.find((item) => item.code === 'MIN_REST');
-    expect(conflict?.severity).toBe('warning');
+    expect(conflict?.severity).toBe('blocking');
+    expect(conflict?.overridable).toBe(true);
     expect(conflict?.message).toContain('2');
   });
 
@@ -197,8 +275,21 @@ describe('staffing', () => {
     expect(conflicts.find((item) => item.code === 'OVERSTAFFED')?.severity).toBe('info');
   });
 
-  it('flags assignments that have not been published', () => {
+  // The sheet goes out as a PDF in the group chat, so there is nothing to
+  // publish and nothing to be behind on. The rule is kept for units that do run
+  // a publication step, but it is off unless somebody turns it on.
+  it('says nothing about publication by default', () => {
     const conflicts = run([assignment({ publicationState: 'draft' })]);
+    expect(conflicts.some((item) => item.code === 'UNPUBLISHED_CHANGES')).toBe(false);
+  });
+
+  it('flags unpublished changes when a unit turns the rule back on', () => {
+    const conflicts = run(
+      [assignment({ publicationState: 'draft' })],
+      DEFAULT_RULES.map((rule) =>
+        rule.code === 'UNPUBLISHED_CHANGES' ? { ...rule, enabled: true } : rule,
+      ),
+    );
     expect(conflicts.some((item) => item.code === 'UNPUBLISHED_CHANGES')).toBe(true);
   });
 });

@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { Pencil, Plus } from 'lucide-react';
-import { useForm } from 'react-hook-form';
+import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation } from '@tanstack/react-query';
 import { assignmentTypeSchema, type AssignmentTypeInput } from '@shared/schemas';
 import { Permissions } from '@shared/rbac';
 import { formatHours } from '@shared/format';
+import { STANDING_SHIFT_HOURS } from '@shared/standing';
 import type { AssignmentType } from '@shared/types';
 import { t } from '@/i18n';
 import { ApiError, api } from '@/lib/api';
@@ -34,6 +35,7 @@ export function AssignmentTypesPage() {
   // Shifts are spoken about in hours — "רביעייה", "משמרת שמונה". Minutes stay
   // the stored unit because they divide cleanly; nobody has to read them.
   const [hours, setHours] = useState(8);
+  const [excluded, setExcluded] = useState<string[]>([]);
 
   const form = useForm<AssignmentTypeInput>({
     resolver: zodResolver(assignmentTypeSchema),
@@ -45,12 +47,15 @@ export function AssignmentTypesPage() {
     },
   });
 
+  const standing = useWatch({ control: form.control, name: 'standing' });
+
   const save = useMutation({
     mutationFn: (values: AssignmentTypeInput) => {
       const payload = {
         ...values,
         defaultDurationMinutes: Math.round(hours * 60),
         requiredQualifications: requirements,
+        excludedQualificationIds: excluded,
       };
       return editing
         ? api.patch(`/assignment-types/${editing.id}`, payload)
@@ -69,6 +74,7 @@ export function AssignmentTypesPage() {
   const openDialog = (type: AssignmentType | null) => {
     setEditing(type);
     setRequirements(type ? type.requiredQualifications : []);
+    setExcluded(type ? type.excludedQualificationIds : []);
     setHours(type ? type.defaultDurationMinutes / 60 : 8);
     form.reset(
       type
@@ -81,12 +87,20 @@ export function AssignmentTypesPage() {
             instructions: type.instructions,
             active: type.active,
             requiredQualifications: type.requiredQualifications,
+            excludedQualificationIds: type.excludedQualificationIds,
+            standing: type.standing,
+            shiftHours: type.shiftHours,
+            shiftStartHour: type.shiftStartHour,
           }
         : {
             name: '',
             defaultDurationMinutes: 480,
             requiredHeadcount: 1,
             requiredQualifications: [],
+            excludedQualificationIds: [],
+            standing: false,
+            shiftHours: 8,
+            shiftStartHour: 0,
           },
     );
     setOpen(true);
@@ -101,7 +115,16 @@ export function AssignmentTypesPage() {
       key: 'name',
       header: t('assignments.name'),
       placement: 'title',
-      cell: (type) => type.name,
+      cell: (type) => (
+        <>
+          {type.name}
+          {type.standing ? (
+            <Badge className="ms-2" tone="brand">
+              {t('assignments.standingBadge')}
+            </Badge>
+          ) : null}
+        </>
+      ),
     },
     {
       key: 'active',
@@ -133,6 +156,20 @@ export function AssignmentTypesPage() {
                 {requirement.minCount > 0
                   ? `${qualificationName(requirement.qualificationId)} ×${requirement.minCount}`
                   : qualificationName(requirement.qualificationId)}
+              </Badge>
+            ))}
+          </div>
+        ),
+    },
+    {
+      key: 'excluded',
+      header: t('assignments.excludedQualifications'),
+      cell: (type) =>
+        type.excludedQualificationIds.length === 0 ? null : (
+          <div className="flex flex-wrap gap-1">
+            {type.excludedQualificationIds.map((qualificationId) => (
+              <Badge key={qualificationId} tone="danger">
+                {qualificationName(qualificationId)}
               </Badge>
             ))}
           </div>
@@ -249,6 +286,44 @@ export function AssignmentTypesPage() {
           </Field>
 
           <fieldset className="sm:col-span-2">
+            <label className="flex items-start gap-2 rounded-[var(--radius-control)] border border-border-subtle p-3 text-sm">
+              <input type="checkbox" className="mt-1" {...form.register('standing')} />
+              <span>
+                <span className="block font-medium">{t('assignments.standing')}</span>
+                <span className="block text-xs text-ink-muted">
+                  {t('assignments.standingHint')}
+                </span>
+              </span>
+            </label>
+            {standing ? (
+              <div className="mt-3 grid gap-4 sm:grid-cols-2">
+                <Field label={t('assignments.shiftHours')}>
+                  {({ id }) => (
+                    <Select id={id} {...form.register('shiftHours', { valueAsNumber: true })}>
+                      {STANDING_SHIFT_HOURS.map((option) => (
+                        <option key={option} value={option}>
+                          {t('assignments.shiftHoursOption', { hours: option })}
+                        </option>
+                      ))}
+                    </Select>
+                  )}
+                </Field>
+                <Field label={t('assignments.shiftStartHour')}>
+                  {({ id }) => (
+                    <Select id={id} {...form.register('shiftStartHour', { valueAsNumber: true })}>
+                      {Array.from({ length: 24 }, (_unused, hour) => (
+                        <option key={hour} value={hour}>
+                          {`${String(hour).padStart(2, '0')}:00`}
+                        </option>
+                      ))}
+                    </Select>
+                  )}
+                </Field>
+              </div>
+            ) : null}
+          </fieldset>
+
+          <fieldset className="sm:col-span-2">
             <legend className="mb-1 text-sm font-medium">
               {t('assignments.requiredQualifications')}
             </legend>
@@ -308,6 +383,34 @@ export function AssignmentTypesPage() {
                   </div>
                 );
               })}
+            </div>
+          </fieldset>
+
+          <fieldset className="sm:col-span-2">
+            <legend className="mb-1 text-sm font-medium">
+              {t('assignments.excludedQualifications')}
+            </legend>
+            <p className="mb-2 text-xs text-ink-faint">{t('assignments.excludedHint')}</p>
+            <div className="flex flex-wrap gap-2">
+              {(qualifications.data ?? []).map((qualification) => (
+                <label
+                  key={qualification.id}
+                  className="flex items-center gap-1.5 rounded-[var(--radius-control)] border border-border-subtle px-2.5 py-1.5 text-sm"
+                >
+                  <input
+                    type="checkbox"
+                    checked={excluded.includes(qualification.id)}
+                    onChange={(event) =>
+                      setExcluded(
+                        event.target.checked
+                          ? [...excluded, qualification.id]
+                          : excluded.filter((item) => item !== qualification.id),
+                      )
+                    }
+                  />
+                  {qualification.name}
+                </label>
+              ))}
             </div>
           </fieldset>
 

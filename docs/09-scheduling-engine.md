@@ -41,16 +41,80 @@ config. Changing a rule changes behaviour without a deployment.
 | `NO_OVERLAP` | blocking | — | One person on two overlapping assignments |
 | `AVAILABILITY_REQUIRED` | blocking | — | Assignment overlaps an approved absence |
 | `QUALIFICATION_REQUIRED` | blocking | per-qualification `minCount` | A qualification the crew lacks — see below |
-| `MIN_REST` | warning | `minutes: 480` | Gap before the assignment is too short |
-| `MAX_CONTINUOUS` | warning | `minutes: 720` | A single assignment runs too long |
+| `MIN_REST` | blocking | `minutes: 960` | Gap before the assignment is too short |
+| `MAX_CONTINUOUS` | blocking | `minutes: 480` | A run of touching shifts is too long |
 | `MAX_ASSIGNMENTS_PER_DAY` | warning | `count: 2` | Too many assignments on one local day |
 | `MAX_HOURS_IN_WINDOW` | warning | `hours: 60, windowDays: 7` | Rolling-window hour cap |
 | `UNDERSTAFFED` | warning | — | Fewer assignees than the required headcount |
 | `OVERSTAFFED` | info | — | More assignees than required |
-| `UNPUBLISHED_CHANGES` | info | — | Assignment not in the published state |
+| `EXCLUDED_QUALIFICATION` | blocking | — | A mark the post refuses — see below |
+| `NOT_SCHEDULABLE` | blocking | — | A mark that takes its holder out of the rotation |
+| `UNPUBLISHED_CHANGES` | off | — | Assignment not in the published state (see below) |
 
 Expired qualifications are filtered out when personnel are loaded, so a lapsed
 certification blocks an assignment exactly like a missing one.
+
+### Eight on, sixteen off
+
+The company's aim is an eight-hour shift followed by sixteen hours of rest, so
+`MIN_REST` is 960 minutes and `MAX_CONTINUOUS` is 480. Both are **blocking and
+overridable**: auto-fill will never break them, and a commander still can, with
+a reason that is recorded as its own audit event. A warning would have been the
+wrong shape — nothing acts on a warning, and the schedule went on handing people
+sixteen straight hours while dutifully reporting that it had.
+
+### `UNPUBLISHED_CHANGES` is off
+
+There is no publication step: the duty sheet goes out as a PDF in the group
+chat, so exporting it *is* publishing it. The rule is kept for a unit that wants
+to run one, and can be switched back on in הגדרות ← כללי שיבוץ.
+
+### Marks that disqualify
+
+A post can say what it requires. It also has to be able to say who it will not
+take, and that is not expressible as a requirement on anybody else: "אי אפשר
+לשבץ חייל מהמבצעים" is a fact about מבצעים.
+
+| Where | Meaning |
+| --- | --- |
+| `assignment_type_exclusions` | Holding this mark disqualifies you from **this post** |
+| `qualifications.blocks_scheduling` | Holding this mark takes you out of the rotation **entirely** |
+| `qualifications.exclusive` | Holding this mark narrows you to the posts that require it |
+
+The company's marks, as seeded:
+
+| Mark | Kind | Effect |
+| --- | --- | --- |
+| נהג | requirement | One among the four on סיור and on כרמל |
+| מפקד | requirement, and an exclusion | One among the four on סיור and on כרמל; barred from ש״ג |
+| מבצעים | exclusion | Barred from סיור, כרמל, נחל שכם and ש״ג |
+| מפלג | `blocks_scheduling` | Never scheduled — מפלג is a job, not a shift |
+| קצין מוצב | `exclusive` | Stands קצין מוצב and nothing else |
+
+All three are blocking and overridable, so a commander who has to can still say
+yes and the reason is recorded.
+
+## The fixed roster
+
+ש״ג, סיור, נחל שכם and כרמל are not decided each morning: they run round the
+clock for months. Asking for them a day at a time is asking somebody to retype a
+fact that never changes, so a post carries its own rhythm —
+
+| Column | Meaning |
+| --- | --- |
+| `standing` | Covered without a break, 24 hours a day |
+| `shift_hours` | Length of one handover; must divide 24 exactly |
+| `shift_start_hour` | Wall-clock hour of the day's first handover |
+
+— and `planStandingShifts` turns a date range plus those posts into the exact
+list of shifts the period needs. It is a pure function: `POST
+/api/v1/assignments/standing` decides which of them already exist and writes
+only the rest, which is what makes running it twice harmless. A shift that was
+deliberately cancelled counts as existing, so re-running never resurrects it.
+
+Shifts are pinned to the wall clock, so a 16:00 handover stays at 16:00 across a
+daylight-saving change; the handover either side of it is then an hour shorter
+or longer, which is what happens on the ground.
 
 ### Two ways to need a qualification
 
@@ -156,8 +220,10 @@ The commander reviews the proposal and can strike any line before approving —
 automation assists the scheduler, it does not decide who stands at a gate.
 
 Measured on a real company: 40 people, four standing posts on 8-hour rotation,
-33 seats in a day. Filled in 492 ms with no gaps, using 33 distinct people at
-one shift each.
+33 seats in a day, three of the forty marked מבצעים and therefore barred from
+every one of those posts. Filled in about half a second with no gaps, using 33
+distinct people at one shift each — which is what sixteen hours of rest forces,
+and what the repair pass (six swaps here) is needed to reach.
 
 ## Auto-fill: greedy, then repair
 

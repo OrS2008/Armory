@@ -15,9 +15,11 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env, params 
   const input = await readBody(request, assignmentTypeSchema.partial());
   if (input instanceof Response) return input;
 
-  const existing = await env.DB.prepare('SELECT active FROM assignment_types WHERE id = ?')
+  const existing = await env.DB.prepare(
+    'SELECT active, standing FROM assignment_types WHERE id = ?',
+  )
     .bind(id)
-    .first<{ active: number }>();
+    .first<{ active: number; standing: number }>();
   if (!existing) return fail(404, ErrorCodes.NOT_FOUND);
 
   const statements = [
@@ -27,7 +29,9 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env, params 
               default_duration_minutes = COALESCE(?, default_duration_minutes),
               required_headcount = COALESCE(?, required_headcount),
               priority = COALESCE(?, priority), color = COALESCE(?, color),
-              instructions = COALESCE(?, instructions), active = ?, updated_at = ?
+              instructions = COALESCE(?, instructions), active = ?, standing = ?,
+              shift_hours = COALESCE(?, shift_hours),
+              shift_start_hour = COALESCE(?, shift_start_hour), updated_at = ?
         WHERE id = ?`,
     ).bind(
       input.name ?? null,
@@ -38,6 +42,9 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env, params 
       input.color ?? null,
       input.instructions ?? null,
       boolToInt(input.active, existing.active),
+      boolToInt(input.standing, existing.standing),
+      input.shiftHours ?? null,
+      input.shiftStartHour ?? null,
       now(),
       id,
     ),
@@ -54,6 +61,20 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env, params 
              (assignment_type_id, qualification_id, min_count)
            VALUES (?, ?, ?)`,
         ).bind(id, requirement.qualificationId, requirement.minCount),
+      ),
+    );
+  }
+
+  if (input.excludedQualificationIds) {
+    statements.push(
+      env.DB.prepare('DELETE FROM assignment_type_exclusions WHERE assignment_type_id = ?').bind(
+        id,
+      ),
+      ...input.excludedQualificationIds.map((qualificationId) =>
+        env.DB.prepare(
+          `INSERT OR IGNORE INTO assignment_type_exclusions (assignment_type_id, qualification_id)
+           VALUES (?, ?)`,
+        ).bind(id, qualificationId),
       ),
     );
   }

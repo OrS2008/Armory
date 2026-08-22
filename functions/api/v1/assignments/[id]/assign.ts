@@ -13,7 +13,7 @@ import {
 import { requireScope, requireUser } from '../../../../_lib/auth';
 import {
   evaluateWindow,
-  loadQualifications,
+  engineQualifications,
   toEngineAssignment,
   toEngineAbsences,
   toEnginePerson,
@@ -76,7 +76,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }
   }
 
   // Re-run the engine with the person added — the same code the board uses.
-  const qualifications = await loadQualifications(env);
+  const qualifications = await engineQualifications(env);
   const engineAssignments = evaluation.assignments.map((assignment) => {
     const engine = toEngineAssignment(assignment);
     return assignment.id === assignmentId
@@ -95,12 +95,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }
       (absence) => absence.personnelId === input.personnelId,
     ),
     rules: evaluation.rules,
-    qualificationNames: Object.fromEntries(
-      qualifications.map((qualification) => [qualification.id, qualification.name]),
-    ),
-    exclusiveQualificationIds: qualifications
-      .filter((qualification) => qualification.exclusive)
-      .map((qualification) => qualification.id),
+    ...qualifications,
     timezone: evaluation.timezone,
   }).filter(
     (conflict) =>
@@ -144,7 +139,9 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }
 
   const recipients = await usersForPersonnel(env, [input.personnelId]);
   const recipient = recipients.get(input.personnelId);
-  if (recipient && row.publication_state !== 'draft') {
+  // Being put on a shift is news the moment it happens: there is no
+  // publication step left to wait for.
+  if (recipient) {
     statements.push(
       notificationStatement(
         env,

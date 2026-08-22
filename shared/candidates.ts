@@ -30,6 +30,8 @@ export interface CandidateInput {
   qualificationNames?: Record<string, string>;
   /** Qualifications that restrict their holder rather than permitting them. */
   exclusiveQualificationIds?: string[];
+  /** Qualifications that take their holder out of the rotation entirely. */
+  blockingQualificationIds?: string[];
   weights?: FairnessWeights;
   timezone?: string;
   /** Workload look-back window; defaults to 14 days before the assignment. */
@@ -82,6 +84,9 @@ export function rankCandidates(input: CandidateInput): Candidate[] {
       ...(input.qualificationNames ? { qualificationNames: input.qualificationNames } : {}),
       ...(input.exclusiveQualificationIds
         ? { exclusiveQualificationIds: input.exclusiveQualificationIds }
+        : {}),
+      ...(input.blockingQualificationIds
+        ? { blockingQualificationIds: input.blockingQualificationIds }
         : {}),
       timezone,
     }).filter((conflict) => conflict.personnelId === person.id);

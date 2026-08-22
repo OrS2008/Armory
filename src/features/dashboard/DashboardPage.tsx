@@ -74,11 +74,13 @@ export function DashboardPage() {
                   data.conflictSummary.blocking > 0 ? 'danger' : issues > 0 ? 'warning' : 'neutral'
                 }
               />
+              {/* There is no publication step to be behind on, so the number
+                  that matters is how many seats are still empty today. */}
               <MetricCard
-                label={t('dashboard.unpublished')}
-                value={data.stats.unpublishedCount}
+                label={t('dashboard.openSeats')}
+                value={data.stats.openSeatCount}
                 hint={`${t('dashboard.understaffed')}: ${data.stats.understaffedCount}`}
-                tone={data.stats.unpublishedCount > 0 ? 'warning' : 'neutral'}
+                tone={data.stats.openSeatCount > 0 ? 'warning' : 'success'}
               />
             </div>
 

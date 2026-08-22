@@ -61,7 +61,9 @@ test.describe('navigation and screen states', () => {
     await page.goto('/settings');
     const rule = page.locator('li', { hasText: 'משך שיבוץ רצוף מרבי' }).first();
     await expect(rule.getByText('שעות', { exact: true })).toBeVisible();
-    await expect(rule.getByRole('spinbutton')).toHaveValue('12');
+    // Eight hours on: the company's shift, and the limit a run of them may not
+    // exceed.
+    await expect(rule.getByRole('spinbutton')).toHaveValue('8');
   });
 
   test('remembers a dark-mode choice across a reload', async ({ page }) => {
@@ -173,16 +175,28 @@ test.describe('navigation and screen states', () => {
     });
   }
 
-  test('asks which schedule to publish instead of a bare confirm box', async ({ page }) => {
+  /*
+   * "אין צורך בכפתור פרסום, המנהל שולח את הקובץ pdf בווצאפ הקבוצתי."
+   *
+   * Exporting the sheet is the act of publishing it, so the board offers that
+   * and the period layout — and nothing that claims to publish.
+   */
+  test('offers the period layout where publishing used to be', async ({ page }) => {
     await login(page);
     await page.goto('/schedule');
 
-    // Publishing is rare, so it lives behind the overflow menu rather than
-    // competing with the two buttons used every day.
     await page.getByRole('button', { name: 'עוד' }).click();
-    await page.getByRole('menuitem', { name: /פרסום שבצ״ק/ }).click();
+    await expect(page.getByRole('menuitem', { name: 'פריסת תקופה' })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: 'ייצוא PDF' })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: /פרסום/ })).toHaveCount(0);
+  });
 
-    await expect(page.getByRole('heading', { name: 'פרסום שבצ״ק' })).toBeVisible();
-    await expect(page.getByText('הפרסום הופך את השבצ״ק לרשמי')).toBeVisible();
+  // An administrator is not a soldier, so this screen has nothing personal to
+  // show them — and used to say so with "הפריט המבוקש לא נמצא".
+  test('explains an empty personal schedule instead of reporting a failure', async ({ page }) => {
+    await login(page);
+    await page.goto('/me');
+    await expect(page.getByText(/אינו מקושר לחייל במאגר כוח האדם/)).toBeVisible();
+    await expect(page.getByText('לא הצלחנו לטעון את המסך')).toHaveCount(0);
   });
 });

@@ -1,8 +1,8 @@
 # שבצ״ק — SHABATZAK
 
 A Hebrew, right-to-left workforce scheduling system for a company-sized unit:
-personnel, availability, qualifications, assignments, conflict detection,
-schedule publication and an immutable audit trail.
+personnel, availability, qualifications, standing posts laid out for a whole
+period, conflict detection and an immutable audit trail.
 
 Built for Cloudflare: a Vite + React SPA on Cloudflare Pages, a REST API in
 Pages Functions, and D1 for storage.
@@ -54,6 +54,30 @@ Migrations are never run by the Cloudflare build. Apply them with
 migrations** workflow in GitHub Actions, which applies them and then verifies
 the live site reports `"schema":"ready"`.
 
+## Standing posts
+
+ש״ג, סיור, נחל שכם and כרמל run round the clock and are handed over every eight
+hours; קצין מוצב runs in 24-hour turns. None of them is a decision anybody makes
+in the morning, so a post carries its own rhythm and **שבצ״ק → עוד → פריסת
+תקופה** lays out every shift in a stated period at once. Running it again is
+harmless — shifts that already exist are counted and skipped.
+
+Who may stand a post is data, not code: a post can require a qualification
+(one driver and one commander among the four) and can refuse a mark (no מבצעים
+on a patrol, no commander at the gate). Two marks act on the person rather than
+the post — מפלג is never scheduled at all, and קצין מוצב is scheduled for
+nothing else. All of it is editable in הגדרות ← הכשירים and in סוגי משימות; see
+[`docs/09-scheduling-engine.md`](docs/09-scheduling-engine.md).
+
+The aim is eight hours on and sixteen off, enforced as a blocking rule that a
+commander can still override with a reason that is recorded.
+
+The duty sheet goes out as a PDF in the group chat, so there is no publication
+step: **ייצוא PDF** is how a day is published.
+
+`scripts/setup-company.sql` puts the posts and the marks back to these defaults
+if somebody edits them by hand.
+
 ## Bringing people in
 
 Three ways, in order of how much typing they save:
@@ -90,8 +114,8 @@ code — a warning on screen and a refusal from the server can never disagree.
 | `npm run typecheck` | `tsc` across app, shared and functions |
 | `npm run lint` | ESLint, type-aware, zero warnings |
 | `npm run format` / `format:write` | Prettier |
-| `npm test` | Vitest — 75 unit and component tests |
-| `npm run test:e2e` | Playwright — 11 scenarios, desktop and mobile |
+| `npm test` | Vitest — 194 unit and component tests |
+| `npm run test:e2e` | Playwright, desktop and mobile — scenarios plus a sweep that presses every button on every screen |
 | `npm run db:migrate:local` / `:remote` | Apply D1 migrations |
 | `npm run db:seed:local` | Demo data — local only |
 

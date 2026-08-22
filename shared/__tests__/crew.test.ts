@@ -92,6 +92,7 @@ const shift = (over: Partial<Assignment>): Assignment => ({
   notes: null,
   assignees: [],
   requiredQualifications: [],
+  excludedQualificationIds: [],
   instructions: null,
   updatedAt: 0,
   ...over,
