@@ -42,6 +42,10 @@ export const he = {
   'nav.mySchedule': 'השבצ״ק שלי',
   'nav.conflicts': 'התנגשויות',
   'nav.account': 'החשבון שלי',
+  'theme.toDark': 'מעבר למצב כהה',
+  'theme.toLight': 'מעבר למצב בהיר',
+  'theme.followDevice': 'לפי הגדרת המכשיר',
+  'theme.following': 'כרגע לפי המכשיר',
 
   'auth.title': 'כניסה למערכת',
   'auth.subtitle': 'הזינו את שם המשתמש והסיסמה שקיבלתם מהמפקד.',

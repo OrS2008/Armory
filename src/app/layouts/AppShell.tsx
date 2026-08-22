@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { Bell, KeyRound, LogOut, Menu, ShieldCheck, X } from 'lucide-react';
+import { Bell, KeyRound, LogOut, Menu, Moon, ShieldCheck, Sun, X } from 'lucide-react';
 import { t } from '@/i18n';
 import { cn } from '@/lib/cn';
 import { MenuButton } from '@/components/ui/MenuButton';
@@ -8,6 +8,7 @@ import { IconButton } from '@/components/ui/IconButton';
 import { navItems, personalNavItem, type NavItem } from '@/components/layout/navigation';
 import { useAuth } from '@/hooks/auth-context';
 import { useNotifications } from '@/hooks/queries';
+import { useTheme } from '@/hooks/useTheme';
 import { OfflineBanner } from '@/components/layout/OfflineBanner';
 import { PasswordDialog } from '@/features/auth/PasswordDialog';
 
@@ -15,6 +16,7 @@ export function AppShell() {
   const { user, logout, can } = useAuth();
   const navigate = useNavigate();
   const notifications = useNotifications();
+  const theme = useTheme();
   const [menuOpen, setMenuOpen] = useState(false);
   const [changingPassword, setChangingPassword] = useState(false);
 
@@ -74,6 +76,27 @@ export function AppShell() {
                   icon: <KeyRound className="size-4" />,
                   onSelect: () => setChangingPassword(true),
                 },
+                {
+                  key: 'theme',
+                  label: theme.resolved === 'dark' ? t('theme.toLight') : t('theme.toDark'),
+                  ...(theme.choice === 'system' ? { hint: t('theme.following') } : {}),
+                  icon:
+                    theme.resolved === 'dark' ? (
+                      <Sun className="size-4" />
+                    ) : (
+                      <Moon className="size-4" />
+                    ),
+                  onSelect: () => theme.select(theme.resolved === 'dark' ? 'light' : 'dark'),
+                },
+                ...(theme.choice === 'system'
+                  ? []
+                  : [
+                      {
+                        key: 'theme-system',
+                        label: t('theme.followDevice'),
+                        onSelect: () => theme.select('system'),
+                      },
+                    ]),
                 {
                   key: 'logout',
                   label: t('auth.logout'),

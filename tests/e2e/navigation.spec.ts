@@ -63,6 +63,28 @@ test.describe('navigation and screen states', () => {
     await expect(rule.getByRole('spinbutton')).toHaveValue('12');
   });
 
+  test('remembers a dark-mode choice across a reload', async ({ page }) => {
+    await login(page);
+    await page.getByRole('button', { name: 'החשבון שלי' }).click();
+    await page.getByRole('menuitem', { name: 'מעבר למצב כהה' }).click();
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+
+    await page.reload();
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+
+    // And a printed sheet is on paper, which is white whatever the screen is.
+    await page.emulateMedia({ media: 'print' });
+    const printedBackground = await page.evaluate(
+      () => getComputedStyle(document.body).backgroundColor,
+    );
+    expect(printedBackground).toBe('rgb(255, 255, 255)');
+    await page.emulateMedia({ media: 'screen' });
+
+    await page.getByRole('button', { name: 'החשבון שלי' }).click();
+    await page.getByRole('menuitem', { name: 'מעבר למצב בהיר' }).click();
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+  });
+
   // A title alone ("זמינות", "דוחות") does not tell a first-time reader what the
   // screen is for. Every main screen answers that in its own words.
   const screens = [

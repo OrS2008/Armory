@@ -50,6 +50,121 @@
   --breakpoint-xs: 26rem;
 }
 
+/*
+ * Dark palette. The values live once, under their own names; the two rules
+ * below only alias them onto the semantic tokens. Both rules are needed and
+ * neither is redundant: the media query covers the moment before the app's
+ * JavaScript has read the saved preference, and the attribute rule covers a
+ * reader who chose dark on a device set to light (and must lose to
+ * `data-theme="light"`, which is why the media query excludes it).
+ */
+:root {
+  --dark-surface: oklch(19% 0.012 260);
+  --dark-surface-raised: oklch(23% 0.014 260);
+  --dark-surface-sunken: oklch(27% 0.016 260);
+  --dark-border-subtle: oklch(32% 0.016 260);
+  --dark-border-strong: oklch(43% 0.02 260);
+
+  --dark-ink: oklch(95% 0.005 250);
+  --dark-ink-muted: oklch(76% 0.012 255);
+  --dark-ink-faint: oklch(63% 0.012 255);
+  --dark-ink-inverse: oklch(19% 0.012 260);
+
+  --dark-brand-50: oklch(29% 0.045 265);
+  --dark-brand-100: oklch(34% 0.06 265);
+  --dark-brand-200: oklch(40% 0.08 265);
+  --dark-brand-500: oklch(66% 0.15 265);
+  --dark-brand-600: oklch(61% 0.16 265);
+  --dark-brand-700: oklch(80% 0.1 265);
+
+  --dark-success: oklch(76% 0.13 155);
+  --dark-success-soft: oklch(29% 0.05 155);
+  --dark-warning: oklch(80% 0.13 80);
+  --dark-warning-soft: oklch(31% 0.05 80);
+  --dark-danger: oklch(72% 0.15 25);
+  --dark-danger-soft: oklch(31% 0.06 25);
+  --dark-info: oklch(75% 0.1 235);
+  --dark-info-soft: oklch(29% 0.04 235);
+  --dark-neutral-soft: oklch(31% 0.008 250);
+
+  --dark-state-unavailable: oklch(72% 0.06 40);
+  --dark-state-draft: oklch(62% 0.02 260);
+  --dark-state-published: oklch(72% 0.12 155);
+
+  --dark-shadow-card: 0 1px 2px oklch(0% 0 0 / 0.4), 0 8px 24px oklch(0% 0 0 / 0.35);
+  --dark-shadow-popover: 0 12px 40px oklch(0% 0 0 / 0.55);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+
+    --color-surface: var(--dark-surface);
+    --color-surface-raised: var(--dark-surface-raised);
+    --color-surface-sunken: var(--dark-surface-sunken);
+    --color-border-subtle: var(--dark-border-subtle);
+    --color-border-strong: var(--dark-border-strong);
+    --color-ink: var(--dark-ink);
+    --color-ink-muted: var(--dark-ink-muted);
+    --color-ink-faint: var(--dark-ink-faint);
+    --color-ink-inverse: var(--dark-ink-inverse);
+    --color-brand-50: var(--dark-brand-50);
+    --color-brand-100: var(--dark-brand-100);
+    --color-brand-200: var(--dark-brand-200);
+    --color-brand-500: var(--dark-brand-500);
+    --color-brand-600: var(--dark-brand-600);
+    --color-brand-700: var(--dark-brand-700);
+    --color-success: var(--dark-success);
+    --color-success-soft: var(--dark-success-soft);
+    --color-warning: var(--dark-warning);
+    --color-warning-soft: var(--dark-warning-soft);
+    --color-danger: var(--dark-danger);
+    --color-danger-soft: var(--dark-danger-soft);
+    --color-info: var(--dark-info);
+    --color-info-soft: var(--dark-info-soft);
+    --color-neutral-soft: var(--dark-neutral-soft);
+    --color-state-unavailable: var(--dark-state-unavailable);
+    --color-state-draft: var(--dark-state-draft);
+    --color-state-published: var(--dark-state-published);
+    --shadow-card: var(--dark-shadow-card);
+    --shadow-popover: var(--dark-shadow-popover);
+  }
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --color-surface: var(--dark-surface);
+  --color-surface-raised: var(--dark-surface-raised);
+  --color-surface-sunken: var(--dark-surface-sunken);
+  --color-border-subtle: var(--dark-border-subtle);
+  --color-border-strong: var(--dark-border-strong);
+  --color-ink: var(--dark-ink);
+  --color-ink-muted: var(--dark-ink-muted);
+  --color-ink-faint: var(--dark-ink-faint);
+  --color-ink-inverse: var(--dark-ink-inverse);
+  --color-brand-50: var(--dark-brand-50);
+  --color-brand-100: var(--dark-brand-100);
+  --color-brand-200: var(--dark-brand-200);
+  --color-brand-500: var(--dark-brand-500);
+  --color-brand-600: var(--dark-brand-600);
+  --color-brand-700: var(--dark-brand-700);
+  --color-success: var(--dark-success);
+  --color-success-soft: var(--dark-success-soft);
+  --color-warning: var(--dark-warning);
+  --color-warning-soft: var(--dark-warning-soft);
+  --color-danger: var(--dark-danger);
+  --color-danger-soft: var(--dark-danger-soft);
+  --color-info: var(--dark-info);
+  --color-info-soft: var(--dark-info-soft);
+  --color-neutral-soft: var(--dark-neutral-soft);
+  --color-state-unavailable: var(--dark-state-unavailable);
+  --color-state-draft: var(--dark-state-draft);
+  --color-state-published: var(--dark-state-published);
+  --shadow-card: var(--dark-shadow-card);
+  --shadow-popover: var(--dark-shadow-popover);
+}
+
 @layer base {
   html {
     color-scheme: light;
@@ -301,8 +416,24 @@
     margin: 10mm;
   }
 
-  :root {
+  /*
+   * Paper is white whatever the screen is. Forcing the tokens back to their
+   * light values is what keeps a card printed in dark mode from arriving as a
+   * black rectangle.
+   */
+  :root,
+  :root[data-theme='dark'] {
     color-scheme: light;
+
+    --color-surface: #fff;
+    --color-surface-raised: #fff;
+    --color-surface-sunken: #f4f5f7;
+    --color-border-subtle: #d0d5dd;
+    --color-border-strong: #98a2b3;
+    --color-ink: #000;
+    --color-ink-muted: #344054;
+    --color-ink-faint: #667085;
+    --color-ink-inverse: #fff;
   }
 
   body {

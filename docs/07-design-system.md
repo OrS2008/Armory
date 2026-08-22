@@ -70,6 +70,19 @@ plan's mobile (375–480), tablet (768–1024), desktop (1280+) and command-disp
 
 ## Not implemented
 
-Dark mode (tokens are structured for it, but no dark palette is defined),
-tooltips, a drawer/sheet primitive and a component gallery page. `MenuButton`
+Tooltips, a drawer/sheet primitive and a component gallery page. `MenuButton`
 covers the overflow menus the board and the page headers need.
+
+## Dark mode
+
+The palette lives once, as `--dark-*` values in `src/styles/index.css`; two
+rules alias it onto the semantic tokens. Both are needed: the
+`prefers-color-scheme` rule covers the moment before the app's JavaScript has
+read the saved preference — the Content-Security-Policy forbids the inline
+script that would otherwise settle it before first paint — and the
+`[data-theme='dark']` rule covers a reader who chose dark on a device set to
+light. The choice is stored per browser and offered from the account menu,
+with a way back to following the device.
+
+The print stylesheet forces the light values back, because paper is white
+whatever the screen is.
