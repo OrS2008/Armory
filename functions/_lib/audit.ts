@@ -1,5 +1,6 @@
 /** Append-only audit trail and in-app notifications. */
 import type { SessionUser } from '../../shared/types';
+import { chunked, placeholders } from './data';
 import { newId, now, type Env } from './http';
 
 export const AuditActions = {
@@ -106,17 +107,29 @@ export function notificationStatement(
   ).bind(newId('ntf'), userId, type, title, body, entityType, entityId, now());
 }
 
-/** Resolve the user accounts linked to a set of personnel records. */
+/**
+ * Resolve the user accounts linked to a set of personnel records.
+ *
+ * Chunked: today every caller passes a single id, but a set large enough to
+ * exceed D1's bound-variable limit must come back short of nobody. A missing
+ * recipient is a notification that silently never arrives.
+ */
 export async function usersForPersonnel(
   env: Env,
   personnelIds: string[],
 ): Promise<Map<string, string>> {
   if (personnelIds.length === 0) return new Map();
-  const placeholders = personnelIds.map(() => '?').join(',');
-  const rows = await env.DB.prepare(
-    `SELECT id, personnel_id FROM users WHERE active = 1 AND personnel_id IN (${placeholders})`,
-  )
-    .bind(...personnelIds)
-    .all<{ id: string; personnel_id: string }>();
-  return new Map((rows.results ?? []).map((row) => [row.personnel_id, row.id]));
+  const pages = await Promise.all(
+    chunked(personnelIds).map((slice) =>
+      env.DB.prepare(
+        `SELECT id, personnel_id FROM users
+          WHERE active = 1 AND personnel_id IN (${placeholders(slice)})`,
+      )
+        .bind(...slice)
+        .all<{ id: string; personnel_id: string }>(),
+    ),
+  );
+  return new Map(
+    pages.flatMap((page) => (page.results ?? []).map((row) => [row.personnel_id, row.id] as const)),
+  );
 }

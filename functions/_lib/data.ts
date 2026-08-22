@@ -25,6 +25,31 @@ import { now, type Env } from './http';
 
 export const DEFAULT_ORG_ID = 'org_default';
 
+/**
+ * D1 refuses a statement carrying more than a hundred bound variables, and an
+ * `IN (?, ?, …)` list spends one per id.
+ *
+ * That limit was unreachable while a fortnight held a handful of assignments.
+ * Laying out a whole period in one action put two hundred shifts in the same
+ * window, and the conflicts screen — which loads fourteen days — started
+ * answering 500 with "too many SQL variables". Ninety leaves room for the
+ * bindings a statement carries besides the list.
+ */
+const MAX_SQL_VARIABLES = 90;
+
+export function chunked<T>(items: T[], size = MAX_SQL_VARIABLES): T[][] {
+  const chunks: T[][] = [];
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size));
+  }
+  return chunks;
+}
+
+/** `IN (?, ?, …)` for one chunk. */
+export function placeholders(items: readonly unknown[]): string {
+  return items.map(() => '?').join(',');
+}
+
 /** Whether any account exists yet — the bootstrap only runs while none does. */
 export async function hasAnyUser(env: Env): Promise<boolean> {
   try {
@@ -226,9 +251,14 @@ export async function loadPersonnel(
   const filters = ['p.org_id = ?'];
   const bindings: unknown[] = [DEFAULT_ORG_ID];
   if (!options.includeInactive) filters.push("p.status = 'active'");
-  if (options.unitIds && options.unitIds.length > 0) {
-    filters.push(`p.unit_id IN (${options.unitIds.map(() => '?').join(',')})`);
-    bindings.push(...options.unitIds);
+  // A scope wider than the variable limit is filtered after loading rather than
+  // bound into the statement. Rare, and far better than a 500.
+  const unitFilterInSql = Boolean(
+    options.unitIds && options.unitIds.length > 0 && options.unitIds.length <= MAX_SQL_VARIABLES,
+  );
+  if (unitFilterInSql) {
+    filters.push(`p.unit_id IN (${placeholders(options.unitIds!)})`);
+    bindings.push(...options.unitIds!);
   } else if (options.unitIds && options.unitIds.length === 0) {
     return [];
   }
@@ -255,18 +285,23 @@ export async function loadPersonnel(
     }>();
 
   const qualifications = await loadPersonnelQualifications(env);
-  return (rows.results ?? []).map((row) => ({
-    id: row.id,
-    unitId: row.unit_id,
-    unitName: row.unit_name,
-    externalId: row.external_id,
-    displayName: row.display_name,
-    roleTitle: row.role_title,
-    phone: row.phone,
-    status: row.status,
-    notes: row.notes,
-    qualificationIds: qualifications.get(row.id) ?? [],
-  }));
+  // Null means "no unit restriction", which is not the same as an empty set —
+  // and an empty set here would have quietly returned nobody at all.
+  const scope = options.unitIds && !unitFilterInSql ? new Set(options.unitIds) : null;
+  return (rows.results ?? [])
+    .filter((row) => !scope || (row.unit_id !== null && scope.has(row.unit_id)))
+    .map((row) => ({
+      id: row.id,
+      unitId: row.unit_id,
+      unitName: row.unit_name,
+      externalId: row.external_id,
+      displayName: row.display_name,
+      roleTitle: row.role_title,
+      phone: row.phone,
+      status: row.status,
+      notes: row.notes,
+      qualificationIds: qualifications.get(row.id) ?? [],
+    }));
 }
 
 /** Held qualifications, excluding any that have expired. */
@@ -391,10 +426,13 @@ export async function loadAssignments(
     bindings.push(query.scheduleId);
   }
   if (!query.includeCancelled) filters.push("a.status = 'planned'");
-  if (query.unitIds) {
-    if (query.unitIds.length === 0) return [];
-    filters.push(`(a.unit_id IS NULL OR a.unit_id IN (${query.unitIds.map(() => '?').join(',')}))`);
-    bindings.push(...query.unitIds);
+  const unitFilterInSql = Boolean(
+    query.unitIds && query.unitIds.length > 0 && query.unitIds.length <= MAX_SQL_VARIABLES,
+  );
+  if (query.unitIds && query.unitIds.length === 0) return [];
+  if (unitFilterInSql) {
+    filters.push(`(a.unit_id IS NULL OR a.unit_id IN (${placeholders(query.unitIds!)}))`);
+    bindings.push(...query.unitIds!);
   }
   if (query.personnelId) {
     filters.push(
@@ -431,32 +469,42 @@ export async function loadAssignments(
       updated_at: number;
     }>();
 
-  const assignments = rows.results ?? [];
+  const scope = query.unitIds && !unitFilterInSql ? new Set(query.unitIds) : null;
+  const assignments = (rows.results ?? []).filter(
+    (row) => !scope || row.unit_id === null || scope.has(row.unit_id),
+  );
   if (assignments.length === 0) return [];
 
+  // Chunked by assignment id, so every row for one assignment stays in the same
+  // chunk and the per-assignment ordering the crew relies on survives.
   const ids = assignments.map((row) => row.id);
-  const assigneeRows = await env.DB.prepare(
-    `SELECT ap.assignment_id, ap.personnel_id, p.display_name, p.unit_id, ap.assigned_at,
-            ap.acknowledged_at, ap.override_reason, ap.role_qualification_id
-       FROM assignment_personnel ap
-       JOIN personnel p ON p.id = ap.personnel_id
-      WHERE ap.assignment_id IN (${ids.map(() => '?').join(',')})
-      ORDER BY p.display_name`,
-  )
-    .bind(...ids)
-    .all<{
-      assignment_id: string;
-      personnel_id: string;
-      display_name: string;
-      unit_id: string | null;
-      assigned_at: number;
-      acknowledged_at: number | null;
-      override_reason: string | null;
-      role_qualification_id: string | null;
-    }>();
+  const assigneePages = await Promise.all(
+    chunked(ids).map((slice) =>
+      env.DB.prepare(
+        `SELECT ap.assignment_id, ap.personnel_id, p.display_name, p.unit_id, ap.assigned_at,
+                ap.acknowledged_at, ap.override_reason, ap.role_qualification_id
+           FROM assignment_personnel ap
+           JOIN personnel p ON p.id = ap.personnel_id
+          WHERE ap.assignment_id IN (${placeholders(slice)})
+          ORDER BY p.display_name`,
+      )
+        .bind(...slice)
+        .all<{
+          assignment_id: string;
+          personnel_id: string;
+          display_name: string;
+          unit_id: string | null;
+          assigned_at: number;
+          acknowledged_at: number | null;
+          override_reason: string | null;
+          role_qualification_id: string | null;
+        }>(),
+    ),
+  );
+  const assigneeRows = assigneePages.flatMap((page) => page.results ?? []);
 
   const byAssignment = new Map<string, Assignment['assignees']>();
-  for (const row of assigneeRows.results ?? []) {
+  for (const row of assigneeRows) {
     const list = byAssignment.get(row.assignment_id) ?? [];
     list.push({
       personnelId: row.personnel_id,

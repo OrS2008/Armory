@@ -6,8 +6,10 @@ import { DAY } from '../../../../shared/time';
 import { AuditActions, auditStatement } from '../../../_lib/audit';
 import { requireUser } from '../../../_lib/auth';
 import {
+  chunked,
   evaluateWindow,
   engineQualifications,
+  placeholders,
   toEngineAbsences,
   toEngineAssignment,
   toEnginePerson,
@@ -31,15 +33,20 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   const input = await readBody(request, bulkAssignSchema);
   if (input instanceof Response) return input;
 
+  // A week's auto-fill proposal names far more assignments than D1 will bind
+  // into one statement.
   const ids = [...new Set(input.assignments.map((item) => item.assignmentId))];
-  const placeholders = ids.map(() => '?').join(',');
-  const rows = await env.DB.prepare(
-    `SELECT id, start_at, end_at, publication_state FROM assignment_instances
-      WHERE id IN (${placeholders}) AND status = 'planned'`,
-  )
-    .bind(...ids)
-    .all<{ id: string; start_at: number; end_at: number; publication_state: string }>();
-  const targets = rows.results ?? [];
+  const pages = await Promise.all(
+    chunked(ids).map((slice) =>
+      env.DB.prepare(
+        `SELECT id, start_at, end_at, publication_state FROM assignment_instances
+          WHERE id IN (${placeholders(slice)}) AND status = 'planned'`,
+      )
+        .bind(...slice)
+        .all<{ id: string; start_at: number; end_at: number; publication_state: string }>(),
+    ),
+  );
+  const targets = pages.flatMap((page) => page.results ?? []);
   if (targets.length === 0) return fail(404, ErrorCodes.NOT_FOUND);
 
   const from = Math.min(...targets.map((row) => row.start_at)) - 8 * DAY;
