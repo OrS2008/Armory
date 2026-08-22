@@ -4,6 +4,9 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   plugins: [react()],
+  // Supplied by vite.config.ts in a real build; components must not blow up
+  // reading it under the test runner.
+  define: { __BUILD_REF__: JSON.stringify('test') },
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),

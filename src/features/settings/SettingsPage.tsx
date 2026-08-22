@@ -56,6 +56,11 @@ export function SettingsPage() {
       {tab === 'units' ? <UnitsPanel /> : null}
       {tab === 'qualifications' ? <QualificationsPanel /> : null}
       {tab === 'audit' ? <AuditPanel /> : null}
+
+      {/* Which build is live, so "did my change reach the site?" has an answer. */}
+      <p className="ltr-inline mt-6 text-center text-xs text-ink-faint">
+        {t('settings.buildRef', { ref: __BUILD_REF__ })}
+      </p>
     </>
   );
 }

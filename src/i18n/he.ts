@@ -352,6 +352,7 @@ export const he = {
   'settings.configCount': 'כמות',
   'settings.configHours': 'שעות',
   'settings.configWindowDays': 'בתוך כמה ימים',
+  'settings.buildRef': 'גרסת המערכת: {ref}',
   'settings.rulesHint': 'הכללים ניתנים להגדרה — קבעו מה חוסם, מה מזהיר ומה רק מדווח.',
   'settings.ruleEnabled': 'פעיל',
   'settings.ruleSeverity': 'חומרה',
