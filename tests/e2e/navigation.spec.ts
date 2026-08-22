@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import { expect, test } from '@playwright/test';
 import { login } from './helpers';
 
@@ -83,6 +84,23 @@ test.describe('navigation and screen states', () => {
     await page.getByRole('button', { name: 'החשבון שלי' }).click();
     await page.getByRole('menuitem', { name: 'מעבר למצב בהיר' }).click();
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+  });
+
+  test('exports the workload report as a real workbook', async ({ page }) => {
+    await login(page);
+    await page.goto('/reports');
+    await page.getByRole('button', { name: 'ייצוא' }).click();
+
+    const [download] = await Promise.all([
+      page.waitForEvent('download'),
+      page.getByRole('menuitem', { name: 'קובץ Excel' }).click(),
+    ]);
+    expect(download.suggestedFilename()).toMatch(/^workload-.*\.xlsx$/);
+
+    // A .xlsx is a ZIP; anything else and Excel refuses the file outright.
+    const path = await download.path();
+    const head = (await readFile(path)).subarray(0, 4);
+    expect(Array.from(head)).toEqual([0x50, 0x4b, 0x03, 0x04]);
   });
 
   // A title alone ("זמינות", "דוחות") does not tell a first-time reader what the

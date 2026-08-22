@@ -4,6 +4,7 @@ import { FileUp, Upload } from 'lucide-react';
 import type { RowProblem } from '@shared/csv';
 import { t } from '@/i18n';
 import { ApiError, api } from '@/lib/api';
+import { downloadCsv } from '@/lib/download';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Dialog } from '@/components/ui/Dialog';
@@ -137,16 +138,7 @@ export function CsvImportDialog<TRow, TOutcome extends ImportOutcome>({
     reader.readAsText(file, 'utf-8');
   };
 
-  const downloadTemplate = () => {
-    const url = URL.createObjectURL(
-      new Blob([`\uFEFF${templateCsv}`], { type: 'text/csv;charset=utf-8' }),
-    );
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = templateFileName;
-    link.click();
-    URL.revokeObjectURL(url);
-  };
+  const downloadTemplate = () => downloadCsv(templateFileName, templateCsv);
 
   useEffect(
     () => () => {

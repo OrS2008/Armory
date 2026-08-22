@@ -1,10 +1,12 @@
 import { useMemo, useState } from 'react';
-import { Download } from 'lucide-react';
-import { formatDayKey, formatHours, formatRange } from '@shared/format';
+import { FileSpreadsheet, Printer, Table } from 'lucide-react';
+import { formatDate, formatDayKey, formatHours, formatRange } from '@shared/format';
+import { XLSX_MIME, buildXlsx } from '@shared/xlsx';
 import { DAY, startOfDay } from '@shared/time';
 import { t } from '@/i18n';
 import { todayKey } from '@/lib/datetime';
-import { Button } from '@/components/ui/Button';
+import { MenuButton } from '@/components/ui/MenuButton';
+import { downloadBlob, downloadCsv } from '@/lib/download';
 import { Card, CardHeader } from '@/components/ui/Card';
 import { Select } from '@/components/ui/Input';
 import { DataTable, type Column } from '@/components/ui/DataTable';
@@ -16,42 +18,74 @@ const RANGES = [7, 14, 30, 90] as const;
 
 export function ReportsPage() {
   const [rangeDays, setRangeDays] = useState<number>(30);
-  const window = useMemo(() => {
+  // Named `range`, not `window`: the global one is needed for printing.
+  const range = useMemo(() => {
     const to = startOfDay(todayKey()) + DAY;
     return { from: to - rangeDays * DAY, to };
   }, [rangeDays]);
 
-  const report = useWorkloadReport(window);
+  const report = useWorkloadReport(range);
   const rows = report.data?.workload ?? [];
   const gaps = report.data?.staffingGaps ?? [];
 
+  const stamp = formatDayKey(todayKey()).replace(/\//g, '-');
+
+  const workloadColumns = [
+    t('personnel.name'),
+    t('personnel.unit'),
+    t('reports.totalHours'),
+    t('reports.nightHours'),
+    t('reports.weekendHours'),
+    t('reports.assignmentCount'),
+    t('reports.fairnessScore'),
+  ];
+
+  const workloadRow = (row: WorkloadRow) => [
+    row.displayName,
+    row.unitName ?? '',
+    row.totalHours,
+    row.nightHours,
+    row.weekendHours,
+    row.assignmentCount,
+    row.score,
+  ];
+
   const exportCsv = () => {
-    const header = [
-      t('personnel.name'),
-      t('personnel.unit'),
-      t('reports.totalHours'),
-      t('reports.nightHours'),
-      t('reports.weekendHours'),
-      t('reports.assignmentCount'),
-      t('reports.fairnessScore'),
-    ];
-    const body = rows.map((row: WorkloadRow) => [
-      row.displayName,
-      row.unitName ?? '',
-      row.totalHours,
-      row.nightHours,
-      row.weekendHours,
-      row.assignmentCount,
-      row.score,
+    const body = rows.map(workloadRow);
+    const csv = [workloadColumns, ...body].map((line) => line.join(',')).join('\n');
+    downloadCsv(`workload-${stamp}.csv`, csv);
+  };
+
+  /**
+   * A workbook rather than a second CSV: the gaps are a different table, and a
+   * single flat file cannot hold both without the reader untangling them.
+   */
+  const exportExcel = () => {
+    const bytes = buildXlsx([
+      {
+        name: t('reports.sheetWorkload'),
+        columns: [
+          { header: workloadColumns[0] as string, width: 24 },
+          { header: workloadColumns[1] as string, width: 16 },
+          { header: workloadColumns[2] as string, width: 12 },
+          { header: workloadColumns[3] as string, width: 12 },
+          { header: workloadColumns[4] as string, width: 12 },
+          { header: workloadColumns[5] as string, width: 14 },
+          { header: workloadColumns[6] as string, width: 12 },
+        ],
+        rows: rows.map(workloadRow),
+      },
+      {
+        name: t('reports.sheetGaps'),
+        columns: [
+          { header: t('assignments.name'), width: 28 },
+          { header: t('availability.range'), width: 28 },
+          { header: t('reports.gapMissing'), width: 10 },
+        ],
+        rows: gaps.map((gap) => [gap.title, formatRange(gap.startAt, gap.endAt), gap.missing]),
+      },
     ]);
-    // UTF-8 BOM so Excel opens Hebrew columns correctly.
-    const csv = `\uFEFF${[header, ...body].map((line) => line.join(',')).join('\n')}`;
-    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `workload-${formatDayKey(todayKey()).replace(/\//g, '-')}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
+    downloadBlob(`workload-${stamp}.xlsx`, new Blob([bytes as BlobPart], { type: XLSX_MIME }));
   };
 
   const peakHours = rows.reduce((max, row) => Math.max(max, row.totalHours), 0);
@@ -73,7 +107,7 @@ export function ReportsPage() {
           {peakHours > 0 ? (
             <span
               aria-hidden
-              className="hidden h-1.5 w-20 overflow-hidden rounded-full bg-surface-sunken sm:block"
+              className="no-print hidden h-1.5 w-20 overflow-hidden rounded-full bg-surface-sunken sm:block"
             >
               <span
                 className="block h-full rounded-full bg-brand-500"
@@ -112,35 +146,63 @@ export function ReportsPage() {
 
   return (
     <>
-      <PageHeader
-        title={t('reports.title')}
-        description={t('reports.subtitle')}
-        actions={
-          <>
-            <Select
-              className="w-auto"
-              aria-label={t('reports.range')}
-              value={rangeDays}
-              onChange={(event) => setRangeDays(Number(event.target.value))}
-            >
-              {RANGES.map((days) => (
-                <option key={days} value={days}>
-                  {t('reports.rangeDays', { days })}
-                </option>
-              ))}
-            </Select>
-            <Button
-              variant="secondary"
-              size="sm"
-              icon={<Download className="size-4" />}
-              disabled={rows.length === 0}
-              onClick={exportCsv}
-            >
-              {t('reports.export')}
-            </Button>
-          </>
-        }
-      />
+      <div className="no-print">
+        <PageHeader
+          title={t('reports.title')}
+          description={t('reports.subtitle')}
+          actions={
+            <>
+              <Select
+                className="w-auto"
+                aria-label={t('reports.range')}
+                value={rangeDays}
+                onChange={(event) => setRangeDays(Number(event.target.value))}
+              >
+                {RANGES.map((days) => (
+                  <option key={days} value={days}>
+                    {t('reports.rangeDays', { days })}
+                  </option>
+                ))}
+              </Select>
+              <MenuButton
+                label={t('reports.export')}
+                actions={[
+                  {
+                    key: 'xlsx',
+                    label: t('reports.exportExcel'),
+                    hint: t('reports.exportExcelHint'),
+                    icon: <FileSpreadsheet className="size-4" />,
+                    disabled: rows.length === 0,
+                    onSelect: exportExcel,
+                  },
+                  {
+                    key: 'csv',
+                    label: t('reports.exportCsv'),
+                    icon: <Table className="size-4" />,
+                    disabled: rows.length === 0,
+                    onSelect: exportCsv,
+                  },
+                  {
+                    key: 'print',
+                    label: t('reports.exportPrint'),
+                    hint: t('reports.exportPrintHint'),
+                    icon: <Printer className="size-4" />,
+                    disabled: rows.length === 0,
+                    onSelect: () => window.print(),
+                  },
+                ]}
+              />
+            </>
+          }
+        />
+      </div>
+
+      <p className="print-title">
+        {t('reports.printTitle', {
+          from: formatDate(range.from),
+          to: formatDate(range.to - 1),
+        })}
+      </p>
 
       <QueryState
         isLoading={report.isLoading}

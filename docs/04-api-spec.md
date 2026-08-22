@@ -119,7 +119,7 @@ listed in `shared/errors.ts`, messages in `shared/messages.he.ts`.
 
 ## Not implemented
 
-No OpenAPI document is generated yet; this file is the specification. There is
-no PDF/Excel export — the reports screen exports CSV in the browser from data it
-already holds. `POST /personnel/import` and `POST /availability/import` both
+No OpenAPI document is generated yet; this file is the specification. Export is a client concern: the reports screen builds CSV and a real .xlsx
+workbook in the browser from data it already holds, and PDF is the browser's
+own print dialog over a print stylesheet. No endpoint renders a document. `POST /personnel/import` and `POST /availability/import` both
 take parsed CSV rows and both default to a dry run.
