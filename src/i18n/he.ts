@@ -197,6 +197,12 @@ export const he = {
   'schedule.unassignDay': 'הסרה מכל משימות היום',
   'schedule.unassignDayDone': 'הוסר מ־{count} משימות באותו היום.',
   'schedule.unassignDone': 'השיבוץ הוסר.',
+  'schedule.clearDay': 'ניקוי שיבוצי היום',
+  'schedule.clearDayHint': 'מסיר את כל האנשים ממשימות {date}. המשימות עצמן נשארות, ריקות.',
+  'schedule.clearDayConfirm':
+    'לנקות את כל השיבוצים של {date}? כל האנשים יוסרו מהמשימות של היום הזה. המשימות עצמן יישארו, ריקות ומוכנות לשיבוץ מחדש.',
+  'schedule.clearDayDone': 'הוסרו {removed} שיבוצים מ־{assignments} משימות בתאריך {date}.',
+  'schedule.clearDayEmpty': 'לא נמצאו שיבוצים לתאריך {date}.',
   'schedule.candidateSearch': 'חיפוש חייל ברשימה',
   'schedule.candidateSearchPlaceholder': 'שם החייל…',
   'schedule.candidatesShown': 'מוצגים {shown} מתוך {total} אנשים',

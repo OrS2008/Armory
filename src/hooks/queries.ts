@@ -316,6 +316,18 @@ export function useUnassignPersonnel() {
   });
 }
 
+/** Clears everyone off every shift that starts on one local day, in one action. */
+export function useUnassignDay() {
+  const invalidate = useScheduleInvalidation();
+  return useMutation({
+    mutationFn: (day: string) =>
+      api.post<{ day: string; assignments: number; removed: number }>('/assignments/unassign-day', {
+        day,
+      }),
+    onSuccess: invalidate,
+  });
+}
+
 /** Lay out every standing post across a period, in one action. */
 export function useStandingRoster() {
   const invalidate = useScheduleInvalidation();

@@ -201,6 +201,17 @@ export const unassignPersonnelSchema = z.object({
 });
 
 /**
+ * Clears everyone off every shift that starts on one local day, in one
+ * action — the group version of `scope: 'day'` above, for a commander
+ * restarting a whole day's staffing rather than one person's. The shifts
+ * themselves are untouched; only who is on them.
+ */
+export const unassignDaySchema = z.object({
+  day: dayKeySchema,
+});
+export type UnassignDayInput = z.infer<typeof unassignDaySchema>;
+
+/**
  * Lay out every standing post across a period. The manager states the period
  * once; the posts carry their own rhythm.
  */

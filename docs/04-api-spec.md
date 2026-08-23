@@ -78,6 +78,7 @@ listed in `shared/errors.ts`, messages in `shared/messages.he.ts`.
 | DELETE | `/assignments/:id` | `assignments.write` | Cancels |
 | POST | `/assignments/:id/assign` | `assignments.assign` | 409 on a blocking conflict unless a permitted `overrideReason` is supplied |
 | POST | `/assignments/:id/unassign` | `assignments.assign` | `scope: "day"` removes the person from every shift starting that local day |
+| POST | `/assignments/unassign-day` | `assignments.assign` | The group version of the row above: clears everyone off every shift starting on `day`; the shifts stay |
 | POST | `/assignments/standing` | `assignments.write` | Lays out every standing post across `fromDate`–`toDate`; idempotent, and answers `{created, skipped, posts}` |
 | GET | `/assignments/:id/candidates` | `assignments.assign` | Ranked, explained candidates |
 | POST | `/assignments/:id/acknowledge` | session + linked personnel | Soldier confirms their own assignment |

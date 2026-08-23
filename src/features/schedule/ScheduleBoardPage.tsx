@@ -5,6 +5,7 @@ import {
   CalendarRange,
   ChevronLeft,
   ChevronRight,
+  Eraser,
   Printer,
   Sparkles,
   TriangleAlert,
@@ -20,6 +21,7 @@ import { IconButton } from '@/components/ui/IconButton';
 import { Select } from '@/components/ui/Input';
 import { MenuButton, type MenuAction } from '@/components/ui/MenuButton';
 import { QueryState } from '@/components/ui/States';
+import { useToast } from '@/components/ui/toast-context';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { StepsHint } from '@/components/layout/StepsHint';
 import { DayTimeline } from '@/components/scheduling/DayTimeline';
@@ -31,9 +33,11 @@ import {
   usePersonnel,
   useQualifications,
   useRules,
+  useUnassignDay,
   useUnits,
 } from '@/hooks/queries';
 import { useAuth } from '@/hooks/auth-context';
+import { ApiError } from '@/lib/api';
 import { AssignmentDetailDialog } from './AssignmentDetailDialog';
 import { AssignmentEditDialog } from './AssignmentEditDialog';
 import { AssignmentFormDialog } from './AssignmentFormDialog';
@@ -56,6 +60,8 @@ export function ScheduleBoardPage() {
   const [autofilling, setAutofilling] = useState(false);
   const [layingOut, setLayingOut] = useState(false);
 
+  const toast = useToast();
+  const unassignDay = useUnassignDay();
   const units = useUnits();
   // Auto-fill judges people against the whole roster, so the unit filter
   // narrows what is *shown* and never who may be considered. Filtering the
@@ -120,6 +126,40 @@ export function ScheduleBoardPage() {
             hint: t('schedule.standingSubtitle'),
             icon: <CalendarRange className="size-4" />,
             onSelect: () => setLayingOut(true),
+          },
+        ]
+      : []),
+    ...(can(Permissions.assignmentsAssign)
+      ? [
+          {
+            key: 'clear-day',
+            label: t('schedule.clearDay'),
+            hint: t('schedule.clearDayHint', { date: formatDayKey(day) }),
+            icon: <Eraser className="size-4" />,
+            disabled: assignments.length === 0 || unassignDay.isPending,
+            onSelect: () => {
+              if (!window.confirm(t('schedule.clearDayConfirm', { date: formatDayKey(day) })))
+                return;
+              unassignDay.mutate(day, {
+                onSuccess: (result) => {
+                  toast.push(
+                    result.removed > 0 ? 'success' : 'info',
+                    result.removed > 0
+                      ? t('schedule.clearDayDone', {
+                          removed: result.removed,
+                          assignments: result.assignments,
+                          date: formatDayKey(day),
+                        })
+                      : t('schedule.clearDayEmpty', { date: formatDayKey(day) }),
+                  );
+                },
+                onError: (error) =>
+                  toast.push(
+                    'error',
+                    error instanceof ApiError ? error.message : t('state.errorBody'),
+                  ),
+              });
+            },
           },
         ]
       : []),

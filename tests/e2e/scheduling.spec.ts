@@ -251,6 +251,46 @@ test.describe('scheduling workflow', () => {
   });
 
   /*
+   * "כפתור שמנקה את כל השיבוצים לאותו יום" — the group version of the per-
+   * person day-unassign already covered above: one action clears the roster
+   * off every shift that day, so a commander can restart the day's staffing
+   * without touching each post by hand. The shifts themselves must survive —
+   * this only undoes who is on them.
+   */
+  test('clears every assignment on the day at once, without deleting the shifts', async ({
+    page,
+  }) => {
+    await page.goto('/schedule');
+    await page.getByRole('button', { name: 'משימה חדשה' }).click();
+    const form = page.locator('dialog[open]');
+    await form.getByRole('combobox', { name: 'סוג משימה' }).selectOption({ label: 'נחל שכם' });
+    await form.getByRole('textbox', { name: 'שעת התחלה' }).fill('22:00');
+    await form.getByRole('button', { name: 'יצירת משימה' }).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+
+    // A two-seat post prints a crew row named for the part of day, not the
+    // clock time — same as the 13:00 case above, here at night.
+    await page.getByRole('button', { name: /לילה/ }).first().click();
+    const dialog = page.locator('dialog[open]');
+    await expect(dialog.getByText('מועמדים מוצעים')).toBeVisible();
+    await dialog.getByRole('button', { name: 'שיבוץ', exact: true }).first().click();
+    await expect(dialog.getByRole('button', { name: /^הסרת שיבוץ — / }).first()).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+
+    page.once('dialog', (confirmation) => confirmation.accept());
+    await page.getByRole('button', { name: 'עוד' }).click();
+    await page.getByRole('menuitem', { name: 'ניקוי שיבוצי היום' }).click();
+    await expect(page.getByText(/הוסרו \d+ שיבוצים/)).toBeVisible({ timeout: 15_000 });
+
+    // The shift is still there, still open for the same seat — just empty.
+    await page.getByRole('button', { name: /לילה/ }).first().click();
+    const reopened = page.locator('dialog[open]');
+    await expect(reopened.getByText('טרם שובץ').first()).toBeVisible();
+    await expect(reopened.getByRole('button', { name: /^הסרת שיבוץ — / })).toHaveCount(0);
+  });
+
+  /*
    * "נראה שהשיבוץ אוטומטי לא באמת מסתכל על רשימת כוח אדם ועל ההכשירים שלהם."
    *
    * It does now, and this is what proves it: a real day of standing posts,
