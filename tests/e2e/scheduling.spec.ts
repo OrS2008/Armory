@@ -127,6 +127,31 @@ test.describe('scheduling workflow', () => {
   });
 
   /*
+   * A plain seat like ש״ג excludes almost nobody, so most of the roster is
+   * eligible for it — comfortably past the 12-name cap the list used to apply
+   * across the whole ranking. That flat cap silently dropped real, assignable
+   * candidates ranked 13th or lower; this checks that an eligible candidate is
+   * never one of them, without having to search for them first.
+   */
+  test('shows every eligible candidate for a seat with more than twelve of them', async ({
+    page,
+  }) => {
+    await page.goto('/schedule');
+    await page.getByRole('button', { name: 'משימה חדשה' }).click();
+    const form = page.locator('dialog[open]');
+    await form.getByRole('combobox', { name: 'סוג משימה' }).selectOption({ label: 'ש״ג' });
+    await form.getByRole('textbox', { name: 'שעת התחלה' }).fill('20:00');
+    await form.getByRole('button', { name: 'יצירת משימה' }).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+
+    await page.getByRole('button', { name: /20:00/ }).first().click();
+    const dialog = page.locator('dialog[open]');
+    await expect(dialog.getByText('מועמדים מוצעים')).toBeVisible();
+    await expect(dialog.getByText('זמין לשיבוץ').first()).toBeVisible();
+    expect(await dialog.getByText('זמין לשיבוץ').count()).toBeGreaterThan(12);
+  });
+
+  /*
    * "המשימות הם משימות קבועות לאורך כל הזמן ... אל תבקש ממני ליצור אותם כל יום
    * מחדש." The period is stated once and every shift in it is created.
    */

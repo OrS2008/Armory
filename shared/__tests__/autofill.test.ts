@@ -106,6 +106,46 @@ describe('auto-fill', () => {
     const proposal = run([post('a1', 'סיור', '08:00', '16:00', 20)]);
     expect(proposal.gaps).toHaveLength(1);
     expect(proposal.gaps[0]?.missing).toBe(20 - roster.length);
+    expect(proposal.gaps[0]?.reason).toBe('כל הסגל כבר משובץ למשימה הזו');
+  });
+
+  /*
+   * The gap reason used to be one fixed sentence regardless of cause — "no
+   * qualified, available people" whether the real story was nobody holds the
+   * qualification, everyone is already spoken for, or a rest rule is what is
+   * actually in the way. A reviewer reading "אי אפשר לשבץ" with no cause is the
+   * exact complaint this fixes: the reason has to name the actual obstacle.
+   */
+  it('names the missing qualification when nobody on the roster holds it', () => {
+    const proposal = run(
+      [post('a1', 'חבישה', '08:00', '16:00', 1, [{ qualificationId: 'q_medic', minCount: 1 }])],
+      { qualificationNames: { q_drive: 'נהג', q_cmd: 'מפקד', q_medic: 'חובש' } },
+    );
+    expect(proposal.gaps).toHaveLength(1);
+    expect(proposal.gaps[0]?.reason).toBe('אף אחד מהסגל אינו מוסמך חובש');
+  });
+
+  it('names the specific rule blocking the closest candidate, not a generic refusal', () => {
+    const one = [person('d1', 'א דן', ['q_drive'])];
+    const proposal = buildAutofillProposal({
+      assignments: [
+        post('a', 'סיור בוקר', '06:00', '14:00', 1, [{ qualificationId: 'q_drive', minCount: 1 }]),
+        post('b', 'סיור צהריים', '08:00', '16:00', 1, [
+          { qualificationId: 'q_drive', minCount: 1 },
+        ]),
+      ],
+      personnel: one,
+      absences: [],
+      rules: DEFAULT_RULES,
+      qualificationNames: { q_drive: 'נהג' },
+      timezone: TZ,
+    });
+    expect(proposal.gaps).toHaveLength(1);
+    // The one driver in reach is blocked by a real rule — here, the two posts
+    // back to back would run him past the continuous-duty limit — not a
+    // one-size-fits-all "nobody available" sentence.
+    expect(proposal.gaps[0]?.reason).toContain('שעות');
+    expect(proposal.gaps[0]?.reason).not.toBe('אין אנשים זמינים ומוכשרים שאינם מפרים כלל חוסם');
   });
 
   it('leaves people who are away out of the proposal', () => {

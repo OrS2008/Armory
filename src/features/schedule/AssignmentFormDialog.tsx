@@ -70,13 +70,17 @@ export function AssignmentFormDialog({ open, dayKey, timezone, scheduleId, onClo
     form.setValue('day', dayKey);
   }, [dayKey, form]);
 
-  // Selecting a type pre-fills its default duration and headcount.
+  // Selecting a type pre-fills its default duration and headcount, and
+  // re-fills it whenever the start time moves — otherwise a start time typed
+  // after the type stays paired with the old, default-relative end time and
+  // the shift is silently the wrong length.
   const selectedTypeId = useWatch({ control: form.control, name: 'assignmentTypeId' });
+  const startTime = useWatch({ control: form.control, name: 'startTime' });
   useEffect(() => {
     const type = types.data?.find((item) => item.id === selectedTypeId);
     if (!type) return;
     form.setValue('requiredHeadcount', type.requiredHeadcount);
-    const [hours, minutes] = (form.getValues('startTime') || '08:00').split(':').map(Number);
+    const [hours, minutes] = (startTime || '08:00').split(':').map(Number);
     const endMinutes = (hours ?? 8) * 60 + (minutes ?? 0) + type.defaultDurationMinutes;
     const endHour = Math.floor(endMinutes / 60);
     form.setValue(
@@ -84,7 +88,7 @@ export function AssignmentFormDialog({ open, dayKey, timezone, scheduleId, onClo
       `${String(endHour % 24).padStart(2, '0')}:${String(endMinutes % 60).padStart(2, '0')}`,
     );
     form.setValue('endsNextDay', endHour >= 24);
-  }, [selectedTypeId, types.data, form]);
+  }, [selectedTypeId, startTime, types.data, form]);
 
   const createAssignment = useMutation({
     mutationFn: (values: FormValues) => {
@@ -125,7 +129,6 @@ export function AssignmentFormDialog({ open, dayKey, timezone, scheduleId, onClo
 
   const frequency = useWatch({ control: form.control, name: 'frequency' });
   const day = useWatch({ control: form.control, name: 'day' });
-  const startTime = useWatch({ control: form.control, name: 'startTime' });
   const endTime = useWatch({ control: form.control, name: 'endTime' });
   const endsNextDay = useWatch({ control: form.control, name: 'endsNextDay' });
   const untilDate = useWatch({ control: form.control, name: 'untilDate' });

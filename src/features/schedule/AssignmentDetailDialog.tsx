@@ -7,6 +7,7 @@ import type { Candidate } from '@shared/candidates';
 import { formatRange } from '@shared/format';
 import { buildCrew, openSeatRoles } from '@shared/crew';
 import { Permissions } from '@shared/rbac';
+import { selectVisibleCandidates } from './candidateVisibility';
 import { t } from '@/i18n';
 import { ApiError, api } from '@/lib/api';
 import { Badge } from '@/components/ui/Badge';
@@ -34,7 +35,7 @@ interface Props {
   onEdit?: (assignment: Assignment) => void;
 }
 
-/** Beyond this the list is a wall of names; the search box is how you get past it. */
+/** Cap on the ineligible tail shown alongside the (always fully shown) eligible candidates. */
 const VISIBLE_CANDIDATES = 12;
 
 export function AssignmentDetailDialog({
@@ -69,16 +70,20 @@ export function AssignmentDetailDialog({
    * "במועמדים המוצעים לשיבוץ, תן לי אפשרות לחפש את החייל שאני רוצה."
    *
    * The ranking answers "who should stand here"; the search answers "I already
-   * know who, where is he". Both are legitimate, and a top-twelve list can only
-   * serve the first. Searching therefore looks at the whole list, not at the
-   * twelve currently on screen.
+   * know who, where is he". Both are legitimate, and a flat top-twelve list
+   * could not serve either: with a plain seat, most of the roster is eligible,
+   * so the cap silently dropped real candidates ranked 13th or lower — not
+   * "hidden behind a search box", just gone, with nothing on screen to say a
+   * search would even help. Eligible candidates are never capped now; only the
+   * ineligible ones (kept for their explanation, not for picking) are, and
+   * search still reaches the whole list regardless.
    */
   const filtered = useMemo(() => {
     const needle = search.trim().toLowerCase();
     if (!needle) return all;
     return all.filter((candidate) => candidate.displayName.toLowerCase().includes(needle));
   }, [all, search]);
-  const shown = filtered.slice(0, VISIBLE_CANDIDATES);
+  const shown = useMemo(() => selectVisibleCandidates(filtered, VISIBLE_CANDIDATES), [filtered]);
 
   if (!assignment) return null;
 

@@ -123,8 +123,44 @@ export function buildAutofillProposal(input: AutofillInput): AutofillProposal {
     assignment: Working;
     seat: string | null;
     resolved: boolean;
+    reason: string;
   }
   const openSeats: OpenSeat[] = [];
+
+  const FALLBACK_GAP_REASON = 'אין אנשים זמינים ומוכשרים שאינם מפרים כלל חוסם';
+
+  /**
+   * Why a seat has nobody, in the same terms the manual candidate list already
+   * uses — a name from `bestForSeat` only says "not this one"; a reviewer
+   * reading the gap list needs to know if it is a qualification nobody holds,
+   * an empty roster, or a rest rule everyone in reach happens to be tripping.
+   */
+  const explainGap = (assignment: Working, seat: string | null): string => {
+    const pool = roster.filter(
+      (person) => !assignment.assigneeIds.includes(person.id) && (!seat || holds(person.id, seat)),
+    );
+    if (pool.length === 0) {
+      return seat ? `אף אחד מהסגל אינו מוסמך ${roleLabel(seat)}` : 'כל הסגל כבר משובץ למשימה הזו';
+    }
+    const [closest] = rankCandidates({
+      assignment,
+      personnel: pool,
+      roster,
+      assignments: working,
+      absences: input.absences,
+      rules: input.rules,
+      ...(input.qualificationNames ? { qualificationNames: input.qualificationNames } : {}),
+      ...(input.exclusiveQualificationIds
+        ? { exclusiveQualificationIds: input.exclusiveQualificationIds }
+        : {}),
+      ...(input.blockingQualificationIds
+        ? { blockingQualificationIds: input.blockingQualificationIds }
+        : {}),
+      ...(input.weights ? { weights: input.weights } : {}),
+      timezone,
+    });
+    return closest?.blockers[0] ?? FALLBACK_GAP_REASON;
+  };
 
   /** The best eligible person for one seat, or nothing. */
   const bestForSeat = (
@@ -205,7 +241,12 @@ export function buildAutofillProposal(input: AutofillInput): AutofillProposal {
       // One unfillable seat does not condemn the rest of the crew: a post that
       // cannot find a driver can still be given its לוחם.
       if (!best) {
-        openSeats.push({ assignment: target, seat, resolved: false });
+        openSeats.push({
+          assignment: target,
+          seat,
+          resolved: false,
+          reason: explainGap(target, seat),
+        });
         continue;
       }
       take(target, seat, best);
@@ -268,11 +309,19 @@ export function buildAutofillProposal(input: AutofillInput): AutofillProposal {
     }
   }
 
-  const unresolved = new Map<string, { assignment: Working; missing: number }>();
+  const unresolved = new Map<
+    string,
+    { assignment: Working; missing: number; reasons: Set<string> }
+  >();
   for (const hole of openSeats) {
     if (hole.resolved) continue;
-    const entry = unresolved.get(hole.assignment.id) ?? { assignment: hole.assignment, missing: 0 };
+    const entry = unresolved.get(hole.assignment.id) ?? {
+      assignment: hole.assignment,
+      missing: 0,
+      reasons: new Set<string>(),
+    };
     entry.missing += 1;
+    entry.reasons.add(hole.reason);
     unresolved.set(hole.assignment.id, entry);
   }
   for (const entry of unresolved.values()) {
@@ -280,7 +329,9 @@ export function buildAutofillProposal(input: AutofillInput): AutofillProposal {
       assignmentId: entry.assignment.id,
       assignmentTitle: entry.assignment.title,
       missing: entry.missing,
-      reason: 'אין אנשים זמינים ומוכשרים שאינם מפרים כלל חוסם',
+      // Different open seats on the same post can fail for different reasons
+      // (no driver at all, the rest one לוחם is tripping) — say all of them.
+      reason: [...entry.reasons].join(' · ') || FALLBACK_GAP_REASON,
     });
   }
 
