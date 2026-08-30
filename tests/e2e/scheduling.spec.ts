@@ -91,6 +91,49 @@ test.describe('scheduling workflow', () => {
     await expect(list.getByText('חופשה').first()).toBeVisible();
   });
 
+  test('adds, edits and deletes an availability record', async ({ page }, testInfo) => {
+    const run = `${testInfo.project.name}-${Date.now()}`;
+    const name = `טוראי ${run}`;
+
+    await page.goto('/personnel');
+    await page.getByRole('button', { name: 'הוספת איש כוח אדם' }).click();
+    const personnelForm = page.locator('dialog[open]');
+    await personnelForm.getByRole('textbox', { name: 'שם', exact: true }).fill(name);
+    await personnelForm.getByRole('button', { name: 'שמירה' }).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+
+    await page.goto('/availability');
+    await page.getByRole('button', { name: 'רישום זמינות' }).click();
+    const form = page.locator('dialog[open]');
+    await form.getByLabel('אדם').selectOption({ label: name });
+    await form.getByLabel('סוג').selectOption({ label: 'חופשה' });
+    await form.getByLabel('סיבה').fill('שנתית מתוכננת');
+    await form.getByRole('button', { name: 'שמירה' }).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+
+    // A table row on a wide screen, a card on a phone — the desk clerk sees
+    // one, the same person in the field sees the other.
+    const row = page.locator('tr, li', { hasText: name });
+    await expect(row.getByText('חופשה', { exact: true })).toBeVisible();
+    await expect(row.getByText('שנתית מתוכננת')).toBeVisible();
+
+    // A correction, not a new request: the same record, a different kind and
+    // reason — the person field stays fixed since this is not a reassignment.
+    await row.getByRole('button', { name: 'עריכת הרישום' }).click();
+    const editor = page.locator('dialog[open]');
+    await expect(editor.getByLabel('אדם')).toBeDisabled();
+    await editor.getByLabel('סוג').selectOption({ label: 'גימלים' });
+    await editor.getByLabel('סיבה').fill('חום גבוה');
+    await editor.getByRole('button', { name: 'שמירה' }).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(row.getByText('גימלים')).toBeVisible();
+    await expect(row.getByText('חום גבוה')).toBeVisible();
+
+    page.once('dialog', (confirmation) => confirmation.accept());
+    await row.getByRole('button', { name: 'מחיקה' }).click();
+    await expect(row).toHaveCount(0);
+  });
+
   test('creates an assignment and reports it as understaffed', async ({ page }) => {
     await page.goto('/schedule');
     await page.getByRole('button', { name: 'משימה חדשה' }).click();

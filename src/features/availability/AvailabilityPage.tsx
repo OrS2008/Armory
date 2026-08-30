@@ -1,37 +1,25 @@
 import { useMemo, useState } from 'react';
-import { Check, FileUp, Plus, X } from 'lucide-react';
-import { useForm } from 'react-hook-form';
+import { Check, FileUp, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { useMutation } from '@tanstack/react-query';
 import { availabilityKindLabels } from '@shared/messages.he';
 import { Permissions } from '@shared/rbac';
 import { formatRange } from '@shared/format';
 import { DAY, startOfDay } from '@shared/time';
-import type { Availability, AvailabilityKind } from '@shared/types';
+import type { Availability } from '@shared/types';
 import { t } from '@/i18n';
 import { ApiError, api } from '@/lib/api';
-import { todayKey, toTimestamp } from '@/lib/datetime';
+import { todayKey } from '@/lib/datetime';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
-import { Dialog } from '@/components/ui/Dialog';
-import { Field } from '@/components/ui/Field';
-import { Input, Select } from '@/components/ui/Input';
+import { Select } from '@/components/ui/Input';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { QueryState } from '@/components/ui/States';
 import { useToast } from '@/components/ui/toast-context';
 import { PageHeader } from '@/components/layout/PageHeader';
-import { useAvailability, usePersonnel } from '@/hooks/queries';
+import { useAvailability } from '@/hooks/queries';
+import { AvailabilityFormDialog } from './AvailabilityFormDialog';
 import { AvailabilityImportDialog } from './AvailabilityImportDialog';
 import { useAuth } from '@/hooks/auth-context';
-
-interface FormValues {
-  personnelId: string;
-  kind: AvailabilityKind;
-  fromDay: string;
-  fromTime: string;
-  toDay: string;
-  toTime: string;
-  reason: string;
-}
 
 const RANGE_DAYS = 30;
 
@@ -45,29 +33,22 @@ export function AvailabilityPage() {
   const { user, can } = useAuth();
   const toast = useToast();
   const [creating, setCreating] = useState(false);
+  const [editing, setEditing] = useState<Availability | null>(null);
   const [importing, setImporting] = useState(false);
   const [status, setStatus] = useState('');
 
-  const window = useMemo(() => {
+  const dateWindow = useMemo(() => {
     const from = startOfDay(todayKey()) - 7 * DAY;
     return { from, to: from + RANGE_DAYS * DAY, ...(status ? { status } : {}) };
   }, [status]);
 
-  const availability = useAvailability(window);
-  const personnel = usePersonnel();
+  const availability = useAvailability(dateWindow);
   const mayManage = can(Permissions.availabilityWrite);
 
-  const form = useForm<FormValues>({
-    defaultValues: {
-      personnelId: user?.personnelId ?? '',
-      kind: 'leave',
-      fromDay: todayKey(),
-      fromTime: '00:00',
-      toDay: todayKey(),
-      toTime: '23:59',
-      reason: '',
-    },
-  });
+  // A soldier may still fix their own request while nobody has decided it yet;
+  // once it is approved or rejected, changing it is a scheduler's call.
+  const mayEdit = (entry: Availability) =>
+    mayManage || (entry.personnelId === user?.personnelId && entry.status === 'pending');
 
   const decide = useMutation({
     mutationFn: (input: { id: string; status: 'approved' | 'rejected' }) =>
@@ -80,19 +61,10 @@ export function AvailabilityPage() {
       toast.push('error', error instanceof ApiError ? error.message : t('state.errorBody')),
   });
 
-  const create = useMutation({
-    mutationFn: (values: FormValues) =>
-      api.post('/availability', {
-        personnelId: values.personnelId,
-        kind: values.kind,
-        startAt: toTimestamp(values.fromDay, values.fromTime),
-        endAt: toTimestamp(values.toDay, values.toTime),
-        reason: values.reason || null,
-      }),
+  const remove = useMutation({
+    mutationFn: (id: string) => api.delete(`/availability/${id}`),
     onSuccess: () => {
       toast.push('success', t('state.savedTitle'));
-      setCreating(false);
-      form.reset();
       void availability.refetch();
     },
     onError: (error) =>
@@ -142,27 +114,61 @@ export function AvailabilityPage() {
       key: 'actions',
       header: t('app.actions'),
       placement: 'actions',
-      cell: (entry) =>
-        can(Permissions.availabilityApprove) && entry.status === 'pending' ? (
-          <>
-            <Button
-              variant="secondary"
-              size="sm"
-              icon={<Check className="size-4" />}
-              onClick={() => decide.mutate({ id: entry.id, status: 'approved' })}
-            >
-              {t('availability.approve')}
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              icon={<X className="size-4" />}
-              onClick={() => decide.mutate({ id: entry.id, status: 'rejected' })}
-            >
-              {t('availability.reject')}
-            </Button>
-          </>
-        ) : null,
+      cell: (entry) => (
+        <>
+          {can(Permissions.availabilityApprove) && entry.status === 'pending' ? (
+            <>
+              <Button
+                variant="secondary"
+                size="sm"
+                icon={<Check className="size-4" />}
+                onClick={() => decide.mutate({ id: entry.id, status: 'approved' })}
+              >
+                {t('availability.approve')}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                icon={<X className="size-4" />}
+                onClick={() => decide.mutate({ id: entry.id, status: 'rejected' })}
+              >
+                {t('availability.reject')}
+              </Button>
+            </>
+          ) : null}
+          {mayEdit(entry) ? (
+            <>
+              <Button
+                variant="secondary"
+                size="sm"
+                icon={<Pencil className="size-4" />}
+                onClick={() => setEditing(entry)}
+              >
+                {t('availability.edit')}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                icon={<Trash2 className="size-4" />}
+                onClick={() => {
+                  if (
+                    window.confirm(
+                      t('availability.deleteConfirm', {
+                        kind: availabilityKindLabels[entry.kind],
+                        name: entry.personnelName ?? '',
+                      }),
+                    )
+                  ) {
+                    remove.mutate(entry.id);
+                  }
+                }}
+              >
+                {t('availability.delete')}
+              </Button>
+            </>
+          ) : null}
+        </>
+      ),
     },
   ];
 
@@ -226,73 +232,17 @@ export function AvailabilityPage() {
         />
       ) : null}
 
-      <Dialog
-        open={creating}
-        title={mayManage ? t('availability.add') : t('availability.request')}
-        onClose={() => setCreating(false)}
-        footer={
-          <>
-            <Button variant="secondary" onClick={() => setCreating(false)}>
-              {t('app.cancel')}
-            </Button>
-            <Button
-              loading={create.isPending}
-              onClick={() => void form.handleSubmit((values) => create.mutate(values))()}
-            >
-              {t('app.save')}
-            </Button>
-          </>
-        }
-      >
-        <form className="grid gap-4 sm:grid-cols-2" onSubmit={(event) => event.preventDefault()}>
-          <Field label={t('availability.person')} className="sm:col-span-2">
-            {({ id }) => (
-              <Select id={id} disabled={!mayManage} {...form.register('personnelId')}>
-                <option value="">{t('app.none')}</option>
-                {(personnel.data ?? []).map((person) => (
-                  <option key={person.id} value={person.id}>
-                    {person.displayName}
-                  </option>
-                ))}
-              </Select>
-            )}
-          </Field>
-
-          <Field label={t('availability.kind')}>
-            {({ id }) => (
-              <Select id={id} {...form.register('kind')}>
-                {Object.entries(availabilityKindLabels).map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </Select>
-            )}
-          </Field>
-
-          <Field label={t('availability.reason')}>
-            {({ id }) => <Input id={id} {...form.register('reason')} />}
-          </Field>
-
-          <Field label={t('availability.from')}>
-            {({ id }) => (
-              <div className="flex gap-2">
-                <Input id={id} type="date" dir="ltr" {...form.register('fromDay')} />
-                <Input type="time" dir="ltr" {...form.register('fromTime')} />
-              </div>
-            )}
-          </Field>
-
-          <Field label={t('availability.to')}>
-            {({ id }) => (
-              <div className="flex gap-2">
-                <Input id={id} type="date" dir="ltr" {...form.register('toDay')} />
-                <Input type="time" dir="ltr" {...form.register('toTime')} />
-              </div>
-            )}
-          </Field>
-        </form>
-      </Dialog>
+      <AvailabilityFormDialog
+        open={creating || editing !== null}
+        entry={editing}
+        defaultPersonnelId={user?.personnelId ?? ''}
+        mayManage={mayManage}
+        onClose={() => {
+          setCreating(false);
+          setEditing(null);
+        }}
+        onSaved={() => void availability.refetch()}
+      />
     </>
   );
 }

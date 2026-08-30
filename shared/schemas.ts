@@ -100,10 +100,27 @@ export const availabilitySchema = z
   });
 export type AvailabilityInput = z.infer<typeof availabilitySchema>;
 
-export const availabilityDecisionSchema = z.object({
-  status: z.enum(['approved', 'rejected']),
-  reason: optionalText(300),
-});
+/**
+ * A single endpoint carries two different edits: a manager's decision
+ * (`status`) and a correction to what was actually requested (`kind`, the
+ * dates, `reason`) — the same split, and the same reason for it, as
+ * `assignmentPatchSchema` below. The handler gates each half on its own
+ * permission rather than requiring both at once.
+ */
+export const availabilityPatchSchema = z
+  .object({
+    kind: z.enum(['available', 'leave', 'training', 'medical', 'home', 'other']).optional(),
+    startAt: timestampSchema.optional(),
+    endAt: timestampSchema.optional(),
+    reason: optionalText(300),
+    status: z.enum(['approved', 'rejected']).optional(),
+  })
+  .refine(
+    (value) =>
+      value.startAt === undefined || value.endAt === undefined || value.endAt > value.startAt,
+    { message: v.endBeforeStart, path: ['endAt'] },
+  );
+export type AvailabilityPatchInput = z.infer<typeof availabilityPatchSchema>;
 
 export const assignmentTypeSchema = z.object({
   name: trimmed(80).min(2, v.nameTooShort),
