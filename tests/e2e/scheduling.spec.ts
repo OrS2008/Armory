@@ -338,7 +338,26 @@ test.describe('scheduling workflow', () => {
     await expect(proposal.getByText('רן ביתן')).toHaveCount(0);
     await expect(proposal.getByText('טל זהבי')).toHaveCount(0);
 
-    await proposal.getByRole('button', { name: /אישור \d+ שיבוצים/ }).click();
+    /*
+     * כרמל runs a full 24-hour crew, which the continuous-duty limit does not
+     * bend for just because the company itself defined the post that way — so
+     * it always gaps, and a commander always has to say yes to it by hand.
+     * The gap is a link to exactly the seat that needs that decision, not a
+     * dead end the reader has to go find on the board themselves.
+     */
+    const carmelGap = proposal.getByRole('button', { name: 'כרמל' }).first();
+    await expect(carmelGap).toBeVisible();
+    await carmelGap.click();
+    const opened = page.locator('dialog[open]');
+    await expect(opened.getByText('מועמדים מוצעים')).toBeVisible();
+    await expect(opened).not.toContainText('שיבוצים מוצעים');
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+
+    await page.getByRole('button', { name: 'שיבוץ אוטומטי' }).click();
+    const reopened = page.locator('dialog[open]');
+    await expect(reopened.getByText(/שיבוצים מוצעים/)).toBeVisible({ timeout: 30_000 });
+    await reopened.getByRole('button', { name: /אישור \d+ שיבוצים/ }).click();
     await expect(page.getByText(/שובצו \d+ אנשים/)).toBeVisible({ timeout: 30_000 });
     await expect(page.getByRole('dialog')).toHaveCount(0);
 

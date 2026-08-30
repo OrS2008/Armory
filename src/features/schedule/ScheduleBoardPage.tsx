@@ -419,6 +419,7 @@ export function ScheduleBoardPage() {
         qualifications={qualifications.data ?? []}
         rules={rules.data ?? []}
         timezone={timezone}
+        onOpenAssignment={setOpenAssignmentId}
       />
 
       {/* Keyed on the day so the date it suggests follows the board, rather

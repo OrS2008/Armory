@@ -28,6 +28,14 @@ interface Props {
   qualifications: Qualification[];
   rules: SchedulingRule[];
   timezone: string;
+  /**
+   * A gap the algorithm cannot resolve on its own — a rule it will not
+   * silently break — still ends in a person's hands. This jumps straight to
+   * that assignment's own candidate list, where the blocked seat and the
+   * override are one click away, instead of leaving the reader to find it on
+   * the board themselves.
+   */
+  onOpenAssignment: (assignmentId: string) => void;
 }
 
 /**
@@ -88,6 +96,7 @@ export function AutofillDialog({
   qualifications,
   rules,
   timezone,
+  onOpenAssignment,
 }: Props) {
   const toast = useToast();
   const invalidate = useScheduleInvalidation();
@@ -277,8 +286,17 @@ export function AutofillDialog({
               <ul className="flex flex-col gap-1 text-sm text-ink-muted">
                 {proposal.gaps.map((gap) => (
                   <li key={gap.assignmentId}>
-                    {gap.assignmentTitle} — {t('schedule.missingPerson', { count: gap.missing })}:{' '}
-                    {gap.reason}
+                    <button
+                      type="button"
+                      className="font-medium text-ink underline-offset-2 hover:underline"
+                      onClick={() => {
+                        onClose();
+                        onOpenAssignment(gap.assignmentId);
+                      }}
+                    >
+                      {gap.assignmentTitle}
+                    </button>{' '}
+                    — {t('schedule.missingPerson', { count: gap.missing })}: {gap.reason}
                   </li>
                 ))}
               </ul>
