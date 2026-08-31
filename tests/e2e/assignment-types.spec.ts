@@ -51,7 +51,7 @@ test.describe('assignment types', () => {
   });
 
   test('refuses to delete a post that shifts have been created from', async ({ page }) => {
-    // Give סיור a day of shifts, so the refusal is about something real.
+    // Give עיט a day of shifts, so the refusal is about something real.
     await page.goto('/schedule');
     await page.getByRole('button', { name: 'עוד' }).click();
     await page.getByRole('menuitem', { name: 'פריסת תקופה' }).click();
@@ -65,8 +65,8 @@ test.describe('assignment types', () => {
     if (await page.locator('dialog[open]').count()) await page.keyboard.press('Escape');
 
     await page.goto('/assignment-types');
-    const row = page.locator('tr, li').filter({ hasText: 'סיור' }).first();
-    await row.getByRole('button', { name: 'עוד — סיור' }).click();
+    const row = page.locator('tr, li').filter({ hasText: 'עיט' }).first();
+    await row.getByRole('button', { name: 'עוד — עיט' }).click();
 
     // Offered but refused, and it says how many shifts stand in the way rather
     // than leaving the reader to guess why the option does nothing.

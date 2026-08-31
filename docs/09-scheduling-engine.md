@@ -85,20 +85,22 @@ The company's marks, as seeded:
 
 | Mark | Kind | Effect |
 | --- | --- | --- |
-| נהג | requirement | One among the four on סיור and on כרמל |
-| מפקד | requirement, and an exclusion | One among the four on סיור and on כרמל; barred from ש״ג |
-| מבצעים | exclusion | Barred from סיור, כרמל, נחל שכם and ש״ג |
+| נהג | requirement | One among the four on עיט, כיתת כוננות א׳ כרמל and חפ"ק |
+| מפקד | requirement, and an exclusion | One among the four on עיט, כיתת כוננות א׳ כרמל and חפ"ק; barred from ש״ג |
+| מבצעים | exclusion | Barred from every routine line post: עיט, כיתת כוננות א׳ כרמל, נחל שכם, ש״ג, חובש תורן, חפ"ק and חמ"ל |
 | מפלג | `blocks_scheduling` | Never scheduled — מפלג is a job, not a shift |
 | קצין מוצב | `exclusive` | Stands קצין מוצב and nothing else |
+| חובש | requirement | The one seat on חובש תורן |
 
 All three are blocking and overridable, so a commander who has to can still say
 yes and the reason is recorded.
 
 ## The fixed roster
 
-ש״ג, סיור, נחל שכם and כרמל are not decided each morning: they run round the
-clock for months. Asking for them a day at a time is asking somebody to retype a
-fact that never changes, so a post carries its own rhythm —
+The company's standing posts are not decided each morning: they run round the
+clock for months, each on its own rhythm. Asking for them a day at a time is
+asking somebody to retype a fact that never changes, so a post carries its own
+rhythm —
 
 | Column | Meaning |
 | --- | --- |

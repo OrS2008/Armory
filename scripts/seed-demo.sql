@@ -1,9 +1,10 @@
 -- Demo data for local development and the end-to-end suite. Never run this
 -- against production: it clears the roster and the posts before writing.
 --
--- The posts and the marks are the real ones — ש״ג, סיור, נחל שכם, כרמל,
--- קצין מוצב — because a demo roster that cannot express "אי אפשר לשבץ חייל
--- מהמבצעים" is not exercising the thing the company actually needs.
+-- The posts and the marks are the real ones — ש״ג, עיט, נחל שכם, כיתת כוננות
+-- א׳ כרמל, קצין מוצב, חובש תורן, חפ"ק, חמ"ל — because a demo roster that
+-- cannot express "אי אפשר לשבץ חייל מהמבצעים" is not exercising the thing the
+-- company actually needs.
 -- Usage: npm run db:seed:local
 DELETE FROM assignment_personnel;
 DELETE FROM assignment_instances;
@@ -82,11 +83,14 @@ INSERT INTO personnel_qualifications (personnel_id, qualification_id, granted_at
 INSERT INTO assignment_types
   (id, org_id, name, category, default_duration_minutes, required_headcount, priority, color,
    instructions, active, standing, shift_hours, shift_start_hour, created_at, updated_at) VALUES
-  ('atp_shag','org_default','ש״ג','תורנויות קבועות',240,1,1,'brand',NULL,1,1,4,0,0,0),
-  ('atp_siur','org_default','סיור','תורנויות קבועות',480,4,1,'amber',NULL,1,1,8,0,0,0),
-  ('atp_carmel','org_default','כרמל','תורנויות קבועות',1440,4,1,'info',NULL,1,1,24,0,0,0),
-  ('atp_nahalshechem','org_default','נחל שכם','תורנויות קבועות',480,2,2,'slate',NULL,1,1,8,0,0,0),
+  ('atp_shag','org_default','ש״ג','תורנויות קבועות',240,1,1,'brand',NULL,1,1,4,5,0,0),
+  ('atp_siur','org_default','עיט','תורנויות קבועות',480,4,1,'amber',NULL,1,1,8,5,0,0),
+  ('atp_carmel','org_default','כיתת כוננות א׳ כרמל','תורנויות קבועות',1440,4,1,'info',NULL,1,1,24,0,0,0),
+  ('atp_nahalshechem','org_default','נחל שכם','תורנויות קבועות',360,2,2,'slate',NULL,1,1,6,5,0,0),
   ('atp_post_officer','org_default','קצין מוצב','תורנויות קבועות',1440,1,1,'success',NULL,1,1,24,0,0,0),
+  ('atp_medic','org_default','חובש תורן','תורנויות קבועות',1440,1,1,'success',NULL,1,1,24,0,0,0),
+  ('atp_hafak','org_default','חפ"ק','תורנויות קבועות',1440,4,1,'slate',NULL,1,1,24,0,0,0),
+  ('atp_hamal','org_default','חמ"ל','תורנויות קבועות',480,1,1,'brand',NULL,1,1,8,6,0,0),
   ('atp_yezuma','org_default','יזומה','פעילות יזומה',240,2,3,'success','משימה חד־פעמית שנקבעת מעבר לתורנויות הקבועות.',1,0,8,0,0,0);
 
 INSERT INTO assignment_type_qualifications (assignment_type_id, qualification_id, min_count) VALUES
@@ -94,12 +98,18 @@ INSERT INTO assignment_type_qualifications (assignment_type_id, qualification_id
   ('atp_siur','qlf_commander',1),
   ('atp_carmel','qlf_driver',1),
   ('atp_carmel','qlf_commander',1),
-  ('atp_post_officer','qlf_post_officer',0);
+  ('atp_hafak','qlf_driver',1),
+  ('atp_hafak','qlf_commander',1),
+  ('atp_post_officer','qlf_post_officer',0),
+  ('atp_medic','qlf_medic',0);
 
 INSERT INTO assignment_type_exclusions (assignment_type_id, qualification_id) VALUES
   ('atp_siur','qlf_operations'),
   ('atp_carmel','qlf_operations'),
   ('atp_nahalshechem','qlf_operations'),
+  ('atp_medic','qlf_operations'),
+  ('atp_hafak','qlf_operations'),
+  ('atp_hamal','qlf_operations'),
   ('atp_shag','qlf_operations'),
   ('atp_shag','qlf_commander');
 

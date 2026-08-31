@@ -1,9 +1,10 @@
 /**
  * The fixed roster.
  *
- * ש״ג, סיור, נחל שכם and כרמל are not decisions anybody makes each morning:
- * they run continuously for months, handed over every eight hours. Asking a
- * manager to create today's three ש״ג shifts, every day, for eleven weeks, is
+ * The company's standing posts — ש״ג, עיט, נחל שכם, כיתת כוננות א׳ כרמל,
+ * קצין מוצב, חובש תורן, חפ"ק, חמ"ל — are not decisions anybody makes each
+ * morning: they run continuously for months, each on its own rhythm. Asking a
+ * manager to create today's six ש״ג shifts, every day, for eleven weeks, is
  * asking them to retype a fact that never changes.
  *
  * So a post carries its own rhythm — `shiftHours`, `shiftStartHour` — and this

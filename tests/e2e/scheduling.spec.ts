@@ -61,6 +61,16 @@ test.describe('scheduling workflow', () => {
     const run = `${testInfo.project.name}-${Date.now()}`;
     const known = `רס״ל ${run}`;
 
+    // Relative to today, not a fixed date: the availability page only shows a
+    // rolling window around today, and a date baked in at authoring time ages
+    // out of it as real time passes.
+    const fmt = (date: Date) =>
+      `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}/${date.getFullYear()}`;
+    const from = new Date();
+    from.setDate(from.getDate() - 3);
+    const to = new Date();
+    to.setDate(to.getDate() - 1);
+
     // Someone to be absent, plus a name the roster has never heard of.
     await page.goto('/personnel');
     await page.getByRole('button', { name: 'הוספת איש כוח אדם' }).click();
@@ -75,7 +85,7 @@ test.describe('scheduling workflow', () => {
     await importer
       .getByRole('textbox', { name: 'או הדביקו כאן את תוכן הקובץ' })
       .fill(
-        `שם,סוג,מתאריך,עד תאריך\n${known},חופשה,21/08/2026,23/08/2026\nרוח רפאים,חופשה,21/08/2026,`,
+        `שם,סוג,מתאריך,עד תאריך\n${known},חופשה,${fmt(from)},${fmt(to)}\nרוח רפאים,חופשה,${fmt(from)},`,
       );
 
     // The dry run explains the unknown name before anything is written.
@@ -216,9 +226,10 @@ test.describe('scheduling workflow', () => {
     await dialog.getByLabel('עד תאריך').fill(to);
     await dialog.getByRole('button', { name: 'פריסה' }).click();
 
-    // Two days: ש״ג every 4h (6), סיור and נחל שכם every 8h (3 each), כרמל and
-    // קצין מוצב full-day (1 each) — 14 shifts a day, 28 for the two.
-    await expect(page.getByText(/נוצרו 28 משמרות/)).toBeVisible({ timeout: 15_000 });
+    // Two days: ש״ג every 4h (6), עיט every 8h (3), נחל שכם every 6h (4),
+    // חמ"ל every 8h (3), and four full-day crews — כיתת כוננות א׳ כרמל, קצין
+    // מוצב, חובש תורן, חפ"ק — one each. 20 shifts a day, 40 for the two.
+    await expect(page.getByText(/נוצרו 40 משמרות/)).toBeVisible({ timeout: 15_000 });
     await expect(page.getByRole('dialog')).toHaveCount(0);
 
     // Running it a second time creates nothing rather than a second roster.
@@ -382,13 +393,14 @@ test.describe('scheduling workflow', () => {
     await expect(proposal.getByText('טל זהבי')).toHaveCount(0);
 
     /*
-     * כרמל runs a full 24-hour crew, which the continuous-duty limit does not
-     * bend for just because the company itself defined the post that way — so
-     * it always gaps, and a commander always has to say yes to it by hand.
-     * The gap is a link to exactly the seat that needs that decision, not a
-     * dead end the reader has to go find on the board themselves.
+     * כיתת כוננות א׳ כרמל runs a full 24-hour crew, which the continuous-duty
+     * limit does not bend for just because the company itself defined the
+     * post that way — so it always gaps, and a commander always has to say
+     * yes to it by hand. The gap is a link to exactly the seat that needs
+     * that decision, not a dead end the reader has to go find on the board
+     * themselves.
      */
-    const carmelGap = proposal.getByRole('button', { name: 'כרמל' }).first();
+    const carmelGap = proposal.getByRole('button', { name: 'כיתת כוננות א׳ כרמל' }).first();
     await expect(carmelGap).toBeVisible();
     await carmelGap.click();
     const opened = page.locator('dialog[open]');

@@ -21,7 +21,7 @@ interface Props {
 /**
  * Lay the fixed roster out across a period.
  *
- * ש״ג, סיור, נחל שכם and כרמל are not decided each morning — they run
+ * The company's standing posts are not decided each morning — they run
  * continuously for months. Asking for them a day at a time is asking somebody
  * to retype a fact that never changes, so the period is stated once and every
  * shift in it is created at once. Running it again is harmless: shifts that
