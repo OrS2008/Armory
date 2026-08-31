@@ -59,6 +59,25 @@ export function rankCandidates(input: CandidateInput): Candidate[] {
     [...(input.roster ?? []), ...input.personnel].map((person) => [person.id, person] as const),
   );
 
+  /*
+   * Every shift each person already stands, indexed once.
+   *
+   * Ranking asks the conflict engine the same question of every candidate —
+   * "what breaks if this one takes the seat" — and keeps only the answers about
+   * that person. Those answers depend on their own shifts and the trial seat and
+   * nothing else: a rest gap, a double booking, a day's worth of turns. Handing
+   * the engine the whole day instead made it re-read every other post's crew
+   * once per candidate, which is most of what auto-fill spent its time on.
+   */
+  const ownAssignments = new Map<string, EngineAssignment[]>();
+  for (const item of others) {
+    for (const personnelId of item.assigneeIds) {
+      const list = ownAssignments.get(personnelId);
+      if (list) list.push(item);
+      else ownAssignments.set(personnelId, [item]);
+    }
+  }
+
   const workloads = input.personnel.map((person) =>
     computeWorkload(person.id, others, {
       windowStart,
@@ -77,7 +96,7 @@ export function rankCandidates(input: CandidateInput): Candidate[] {
       overriddenBy: [],
     };
     const conflicts = detectConflicts({
-      assignments: [...others, trial],
+      assignments: [...(ownAssignments.get(person.id) ?? []), trial],
       personnel: [person],
       absences: input.absences.filter((absence) => absence.personnelId === person.id),
       rules: input.rules,

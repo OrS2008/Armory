@@ -106,6 +106,22 @@ export interface AssignmentType {
    * laid out, since the time itself moves with the shift.
    */
   briefingMinutesBefore: number | null;
+  /**
+   * The gate this post is stood at — שער הדוקטור, שער עתיד - חקלאים. A post
+   * with one is titled by its gate on the sheet and names its own shifts
+   * beneath it (משקיף בוקר), which is how the sheet is read out loud.
+   */
+  section: string | null;
+  /**
+   * What the sheet's title bar prints, when that differs from `name`. The name
+   * identifies the post everywhere else, so "קצין מוצב - 24 שעות" is a label
+   * rather than a rename.
+   */
+  sheetLabel: string | null;
+  /** Appended to every seat label here: 'סיור' makes מפקד read מפקד סיור. */
+  crewRoleSuffix: string | null;
+  /** Which of the sheet's three columns this post prints in, right to left. */
+  sheetColumn: number | null;
   requiredQualifications: { qualificationId: string; minCount: number }[];
   /** Marks that disqualify their holder from this post. */
   excludedQualificationIds: string[];
@@ -117,6 +133,8 @@ export interface AssignmentType {
   standing: boolean;
   shiftHours: number;
   shiftStartHour: number;
+  /** Minutes past `shiftStartHour` of the first handover: משקיף changes at 06:30. */
+  shiftStartMinute: number;
   /**
    * How many shifts have ever been created from this post. A post nobody has
    * used can be deleted outright; one that has been used can only be retired,
@@ -143,6 +161,11 @@ export interface Assignment {
   assignmentTypeName: string;
   /** The post's own display-order rank, lower first — see `groupByPost`. */
   priority: number;
+  /** The post's gate, sheet title override, seat-label suffix and column. */
+  section: string | null;
+  sheetLabel: string | null;
+  crewRoleSuffix: string | null;
+  sheetColumn: number | null;
   color: string;
   unitId: string | null;
   title: string | null;

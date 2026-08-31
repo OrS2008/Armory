@@ -159,9 +159,10 @@ test.describe('scheduling workflow', () => {
 
     await page.getByRole('button', { name: 'יצירת משימה' }).click();
 
-    // The board opens on the duty sheet, so the new shift appears under a post
-    // title bar with its crew listed seat by seat.
-    await expect(page.getByText('ש״ג', { exact: true }).first()).toBeVisible();
+    // The board opens on the duty sheet, so the new shift appears under the
+    // post's title bar — which prints the sheet's own label for it, not the
+    // name the dropdown offered — with its crew listed seat by seat.
+    await expect(page.getByText('ש.ג. - 4 שעות משמרת', { exact: true }).first()).toBeVisible();
     await expect(page.getByText('טרם שובץ').first()).toBeVisible();
 
     await page.goto('/schedule/conflicts');
@@ -185,10 +186,18 @@ test.describe('scheduling workflow', () => {
    * across the whole ranking. That flat cap silently dropped real, assignable
    * candidates ranked 13th or lower; this checks that an eligible candidate is
    * never one of them, without having to search for them first.
+   *
+   * Desktop only, and for a reason worth stating: the whole suite shares one
+   * database, and by the time the phone project runs, the auto-fill spec has
+   * staffed today. Most of the roster is then resting rather than ineligible,
+   * which is the rest rules working — `conflicts.test.ts` covers those — not
+   * the cap this test is about.
    */
   test('shows every eligible candidate for a seat with more than twelve of them', async ({
     page,
+    isMobile,
   }) => {
+    test.skip(isMobile, 'the day is already staffed by then; the cap is layout-independent');
     await page.goto('/schedule');
     await page.getByRole('button', { name: 'משימה חדשה' }).click();
     const form = page.locator('dialog[open]');
@@ -226,10 +235,10 @@ test.describe('scheduling workflow', () => {
     await dialog.getByLabel('עד תאריך').fill(to);
     await dialog.getByRole('button', { name: 'פריסה' }).click();
 
-    // Two days: ש״ג every 4h (6), עיט every 8h (3), נחל שכם every 6h (4),
-    // חמ"ל every 8h (3), and four full-day crews — כיתת כוננות א׳ כרמל, קצין
-    // מוצב, חובש תורן, חפ"ק — one each. 20 shifts a day, 40 for the two.
-    await expect(page.getByText(/נוצרו 40 משמרות/)).toBeVisible({ timeout: 15_000 });
+    // Two days: ש״ג every 4h (6), נחל שכם and בולם every 6h (4 each), עיט,
+    // משקיף and חמ"ל every 8h (3 each), and three full-day crews — כיתת
+    // כוננות א׳ כרמל, קצין מוצב, חובש תורן — one each. 26 a day, 52 for the two.
+    await expect(page.getByText(/נוצרו 52 משמרות/)).toBeVisible({ timeout: 15_000 });
     await expect(page.getByRole('dialog')).toHaveCount(0);
 
     // Running it a second time creates nothing rather than a second roster.
@@ -280,11 +289,9 @@ test.describe('scheduling workflow', () => {
     await form.getByRole('button', { name: 'יצירת משימה' }).click();
     await expect(page.getByRole('dialog')).toHaveCount(0);
 
-    // A two-seat post prints a crew, so its row is named for the part of day.
-    await page
-      .getByRole('button', { name: /צהריים/ })
-      .first()
-      .click();
+    // נחל שכם needs bodies rather than named seats, so it prints as a plain
+    // time/name list and the clock is the way into the shift.
+    await page.getByRole('button', { name: '13:00 - 19:00' }).first().click();
     await page.locator('dialog[open]').getByRole('button', { name: 'עריכת המשימה' }).click();
 
     const editor = page.locator('dialog[open]');
@@ -293,10 +300,7 @@ test.describe('scheduling workflow', () => {
     await expect(page.getByRole('dialog')).toHaveCount(0);
 
     // Calling it off takes it off the board without deleting what happened.
-    await page
-      .getByRole('button', { name: /צהריים/ })
-      .first()
-      .click();
+    await page.getByRole('button', { name: '13:00 - 19:00' }).first().click();
     await page.locator('dialog[open]').getByRole('button', { name: 'עריכת המשימה' }).click();
     const closing = page.locator('dialog[open]');
     await closing.getByRole('button', { name: 'ביטול המשימה' }).click();
@@ -322,9 +326,8 @@ test.describe('scheduling workflow', () => {
     await form.getByRole('button', { name: 'יצירת משימה' }).click();
     await expect(page.getByRole('dialog')).toHaveCount(0);
 
-    // A two-seat post prints a crew row named for the part of day, not the
-    // clock time — same as the 13:00 case above, here at night.
-    await page.getByRole('button', { name: /לילה/ }).first().click();
+    // Same plain time/name list as the 13:00 case above, here at night.
+    await page.getByRole('button', { name: '22:00 - 04:00' }).first().click();
     const dialog = page.locator('dialog[open]');
     await expect(dialog.getByText('מועמדים מוצעים')).toBeVisible();
     await dialog.getByRole('button', { name: 'שיבוץ', exact: true }).first().click();
@@ -338,7 +341,7 @@ test.describe('scheduling workflow', () => {
     await expect(page.getByText(/הוסרו \d+ שיבוצים/)).toBeVisible({ timeout: 15_000 });
 
     // The shift is still there, still open for the same seat — just empty.
-    await page.getByRole('button', { name: /לילה/ }).first().click();
+    await page.getByRole('button', { name: '22:00 - 04:00' }).first().click();
     const reopened = page.locator('dialog[open]');
     await expect(reopened.getByText('טרם שובץ').first()).toBeVisible();
     await expect(reopened.getByRole('button', { name: /^הסרת שיבוץ — / })).toHaveCount(0);

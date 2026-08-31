@@ -107,6 +107,7 @@ rhythm —
 | `standing` | Covered without a break, 24 hours a day |
 | `shift_hours` | Length of one handover; must divide 24 exactly |
 | `shift_start_hour` | Wall-clock hour of the day's first handover |
+| `shift_start_minute` | Minutes past that hour — משקיף hands over at 06:30 |
 
 — and `planStandingShifts` turns a date range plus those posts into the exact
 list of shifts the period needs. It is a pure function: `POST
@@ -127,12 +128,43 @@ minutes before whichever shift you're on" and "handover always happens at
 | Column | Fixed or per-shift | Example |
 | --- | --- | --- |
 | `instructions` | Fixed: the same line under the post's title every day | "החלפה בשעה 17:00" (כיתת כוננות א׳ כרמל) |
-| `briefing_minutes_before` | Per-shift: `planStandingShifts` stamps the actual time onto each shift's own `notes` when the roster is laid out, since the time moves with the shift | "תדריך עלייה לעיט בשעה 04:40" for the 05:00 shift (עיט) |
+| `briefing_minutes_before` | Per-shift: `planStandingShifts` stamps the actual time onto each shift's own `notes` when the roster is laid out, since the time moves with the shift | "תדריך עלייה לעיט בוקר בשעה 04:30" for the 05:00 shift (עיט) |
 
-`priority` also decides where a post's card lands on the sheet: cards are
-grouped by priority first, tallest-within-a-group second, so a manager can
-keep a handful of posts (חפ"ק, חובש תורן, קצין מוצב) printing next to each
-other regardless of how many shifts each one has that day.
+A post handed over more than once a day is briefed per turn, so the stamped note
+names the turn — עיט בוקר, עיט לילה. A 24-hour post has only the one, and naming
+it would say nothing.
+
+The board reads the note off the shift, falling back to the post's
+`instructions`, so a fixed rule and a computed time share one הערות column and
+the day's own edit to a shift always wins.
+
+## The printed page
+
+The sheet is not a packing problem. It is a fixed three-column page, read right
+to left, where each post sits in the place it always sits — and the people who
+use it find a post by where it is, not by reading every title. So the layout is
+stored on the post rather than derived from how much height the browser has:
+
+| Column | Meaning |
+| --- | --- |
+| `sheet_column` | Which of the three columns the post prints in, 1 = rightmost. `NULL` lets `sheetColumns` deal the post into the emptiest column, which is what an ad-hoc task wants |
+| `priority` | Where it sits within that column, top first |
+| `section` | The gate it is stood at — שער הדוקטור. A post with one is titled by its gate, and its shifts name the post instead (משקיף בוקר) |
+| `sheet_label` | What the title bar prints when that differs from `name` — "קצין מוצב - 24 שעות". The name still identifies the post in dropdowns, conflicts and reports |
+| `crew_role_suffix` | Appended to every seat label on this post: 'סיור' makes מפקד read מפקד סיור. It belongs to the post, not the mark — the same מפקד stands כיתת כוננות with no suffix |
+
+Two card shapes fall out of the post itself rather than from a flag:
+
+- A post whose crew has **named seats** — one מפקד and one נהג among the four —
+  prints a role beside every name, with the הערות column merged down the block.
+- A post that just needs **bodies** prints one line per turn: the clock, and
+  whoever stands it, joined with `+`. A column of לוחם beside them says nothing.
+
+A turn covering a **whole day** prints no clock at all — it is simply today — so
+קצין מוצב is a title bar and a name, and כיתת כוננות is a title bar and its crew.
+
+A narrower screen folds column three into two and then into one, which keeps the
+reading order the sheet was written in.
 
 ### Two ways to need a qualification
 
@@ -259,6 +291,26 @@ schedule was rearranged rather than merely filled.
 
 An unfillable seat no longer abandons the rest of its crew: a patrol that
 cannot find a commander still gets its driver and its לוחם.
+
+### What it costs
+
+Auto-fill runs in the browser, on the phone of whoever is on duty, and nothing
+moves on screen while it does — so how long it takes is part of the feature.
+Two facts keep it in reach for a whole day of the company's posts:
+
+- **Ranking asks about one person.** The conflicts that decide whether somebody
+  may take a seat — a rest gap, a double booking, a day's worth of turns —
+  depend on *their* shifts and the seat, and on nothing else. So the engine is
+  handed those, not the whole day; the crew-level conflicts it would also find
+  are about the assignment rather than the person, and ranking discards them.
+- **The repair pass asks about one person too.** A hole is empty because nobody
+  was eligible for it, and every decision taken since has only added shifts,
+  which never makes anyone *more* eligible. So releasing a donor can only make
+  that donor available: there is no one else to rank.
+
+`shared/__tests__/autofill-day.test.ts` fills a real day and holds the result
+to a budget, because the first version of the sheet's new posts pushed it to
+nine seconds and the end-to-end suite started timing out on the button.
 
 ## Not implemented
 

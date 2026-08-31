@@ -36,6 +36,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       requiredHeadcount: type.requiredHeadcount,
       shiftHours: type.shiftHours,
       shiftStartHour: type.shiftStartHour,
+      shiftStartMinute: type.shiftStartMinute,
       briefingMinutesBefore: type.briefingMinutesBefore,
     }));
 

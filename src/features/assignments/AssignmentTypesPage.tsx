@@ -3,7 +3,11 @@ import { Pencil, Plus, Power, Trash2 } from 'lucide-react';
 import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation } from '@tanstack/react-query';
-import { assignmentTypeSchema, type AssignmentTypeInput } from '@shared/schemas';
+import {
+  assignmentTypeSchema,
+  type AssignmentTypeFormValues,
+  type AssignmentTypeInput,
+} from '@shared/schemas';
 import { Permissions } from '@shared/rbac';
 import { formatHours } from '@shared/format';
 import { STANDING_SHIFT_HOURS } from '@shared/standing';
@@ -46,7 +50,7 @@ export function AssignmentTypesPage() {
   const remove = useDeleteAssignmentType();
   const setActive = useSetAssignmentTypeActive();
 
-  const form = useForm<AssignmentTypeInput>({
+  const form = useForm<AssignmentTypeFormValues, unknown, AssignmentTypeInput>({
     resolver: zodResolver(assignmentTypeSchema),
     defaultValues: {
       name: '',
@@ -100,7 +104,12 @@ export function AssignmentTypesPage() {
             standing: type.standing,
             shiftHours: type.shiftHours,
             shiftStartHour: type.shiftStartHour,
+            shiftStartMinute: type.shiftStartMinute,
             briefingMinutesBefore: type.briefingMinutesBefore,
+            section: type.section,
+            sheetLabel: type.sheetLabel,
+            crewRoleSuffix: type.crewRoleSuffix,
+            sheetColumn: type.sheetColumn,
           }
         : {
             name: '',
@@ -111,7 +120,12 @@ export function AssignmentTypesPage() {
             standing: false,
             shiftHours: 8,
             shiftStartHour: 0,
+            shiftStartMinute: 0,
             briefingMinutesBefore: null,
+            section: null,
+            sheetLabel: null,
+            crewRoleSuffix: null,
+            sheetColumn: null,
           },
     );
     setOpen(true);
@@ -421,6 +435,18 @@ export function AssignmentTypesPage() {
                     </Select>
                   )}
                 </Field>
+                {/* Not every handover is on the hour: משקיף changes at 06:30. */}
+                <Field label={t('assignments.shiftStartMinute')}>
+                  {({ id }) => (
+                    <Select id={id} {...form.register('shiftStartMinute', { valueAsNumber: true })}>
+                      {[0, 15, 30, 45].map((minute) => (
+                        <option key={minute} value={minute}>
+                          {`:${String(minute).padStart(2, '0')}`}
+                        </option>
+                      ))}
+                    </Select>
+                  )}
+                </Field>
                 <Field
                   label={t('assignments.briefingMinutesBefore')}
                   hint={t('assignments.briefingMinutesBeforeHint')}
@@ -443,6 +469,51 @@ export function AssignmentTypesPage() {
                 </Field>
               </div>
             ) : null}
+          </fieldset>
+
+          {/*
+           * Where the post prints. The sheet is a fixed page, not a packing
+           * problem: a post sits in the column it always sits in, under the
+           * gate it is stood at, titled the way the company titles it.
+           */}
+          <fieldset className="grid gap-4 sm:col-span-2 sm:grid-cols-2">
+            <legend className="mb-1 text-sm font-medium">{t('assignments.sheetSection')}</legend>
+            <Field
+              label={t('assignments.section')}
+              hint={t('assignments.sectionHint')}
+              error={form.formState.errors.section?.message}
+            >
+              {({ id }) => <Input id={id} {...form.register('section')} />}
+            </Field>
+            <Field
+              label={t('assignments.sheetLabel')}
+              hint={t('assignments.sheetLabelHint')}
+              error={form.formState.errors.sheetLabel?.message}
+            >
+              {({ id }) => <Input id={id} {...form.register('sheetLabel')} />}
+            </Field>
+            <Field
+              label={t('assignments.crewRoleSuffix')}
+              hint={t('assignments.crewRoleSuffixHint')}
+              error={form.formState.errors.crewRoleSuffix?.message}
+            >
+              {({ id }) => <Input id={id} {...form.register('crewRoleSuffix')} />}
+            </Field>
+            <Field
+              label={t('assignments.sheetColumn')}
+              error={form.formState.errors.sheetColumn?.message}
+            >
+              {({ id }) => (
+                <Select id={id} {...form.register('sheetColumn')}>
+                  <option value="">{t('assignments.sheetColumnAuto')}</option>
+                  {[1, 2, 3].map((column) => (
+                    <option key={column} value={column}>
+                      {t('assignments.sheetColumnOption', { column })}
+                    </option>
+                  ))}
+                </Select>
+              )}
+            </Field>
           </fieldset>
 
           <fieldset className="sm:col-span-2">

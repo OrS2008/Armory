@@ -280,6 +280,10 @@
   background: var(--color-surface-sunken);
   color: var(--color-ink);
 }
+.sheet-title-rose {
+  background: oklch(93% 0.045 20);
+  color: oklch(43% 0.13 20);
+}
 
 .sheet-subtitle {
   background: var(--color-surface-sunken);
@@ -374,41 +378,56 @@
 }
 
 /*
- * Posts sit side by side in a grid — deliberately not CSS multi-column.
- * Multicol with tables and merged cells overlaps and interleaves them when it
- * runs out of height, which on a portrait page turned the printed sheet into
- * collided text. A grid item is never split, so each post stays whole.
- */
-/*
- * A post must stack directly beneath the post before it, in reading order,
- * regardless of how many columns the viewport fits — grouping חפ"ק with
- * חובש תורן and קצין מוצב only means anything if the layout keeps them in
- * one column together. A CSS grid fills row-first, which would spread three
- * adjacent posts across a row instead of stacking them; multi-column text
- * flow fills one column top-to-bottom before starting the next, which is
- * exactly "below" and needs no row count, guessed or otherwise.
+ * The three columns of the sheet, read right to left.
+ *
+ * Which column a post prints in is decided in `sheetColumns`, not here: the
+ * page is laid out the way the company prints it, and "קצין מוצב at the top of
+ * the right-hand column" is a fact about the sheet rather than about how much
+ * height the browser happens to have. So each column is its own element and
+ * the posts inside it simply stack — deliberately not CSS multi-column, which
+ * reflows the cards by height and, with merged cells, interleaves them.
+ *
+ * A narrow screen drops to two columns and then to one; the third column falls
+ * below the first, which keeps the reading order the sheet was written in.
  */
 .roster-columns {
-  column-count: 1;
-  column-gap: 0.75rem;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+  align-items: start;
 }
 
 @media (min-width: 48rem) {
   .roster-columns {
-    column-count: 2;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
 @media (min-width: 80rem) {
   .roster-columns {
-    column-count: 3;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
+}
+
+.roster-column {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-width: 0;
 }
 
 .roster-card {
   width: 100%;
   break-inside: avoid;
-  margin-bottom: 0.75rem;
+}
+
+/*
+ * A full-day turn has no clock worth printing — it is simply today — so the
+ * name takes the whole line the time would otherwise have shared.
+ */
+.sheet-solo {
+  text-align: center;
+  font-weight: 600;
 }
 
 /*
@@ -493,16 +512,16 @@
   /*
    * Column count follows the paper rather than being assumed: a landscape A4
    * fits three, a portrait one fits two, and a phone that ignores @page still
-   * gets a sheet that is readable instead of crushed.
+   * gets a sheet that is readable instead of crushed. A column that does not
+   * fit wraps whole, below the first, so the reading order survives.
    */
   .roster-columns {
-    display: grid;
     grid-template-columns: repeat(auto-fill, minmax(78mm, 1fr));
     gap: 3mm;
   }
 
-  .roster-card {
-    margin-bottom: 0;
+  .roster-column {
+    gap: 3mm;
   }
 
   .sheet {
@@ -547,6 +566,9 @@
   .sheet-title-slate {
     background: #ededed !important;
   }
+  .sheet-title-rose {
+    background: #fbdad5 !important;
+  }
 
   .sheet-subtitle,
   .sheet-shift th {
@@ -566,6 +588,20 @@
   }
 }
 
+@media screen {
+  .print-title-hidden {
+    display: none;
+  }
+}
+
 .print-title {
-  display: none;
+  display: block;
+  margin-bottom: 0.75rem;
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-brand-100);
+  padding: 0.3rem;
+  text-align: center;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: var(--color-brand-700);
 }

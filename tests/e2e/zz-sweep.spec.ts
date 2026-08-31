@@ -28,10 +28,16 @@ const ROUTES = [
 ];
 
 /**
- * Buttons this sweep must not press: signing out ends the session for every
- * later click, and the print dialog is a native window Playwright cannot close.
+ * Buttons this sweep must not press.
+ *
+ * Signing out ends the session for every later click, and the print dialog is a
+ * native window Playwright cannot close. Retiring a post is the same kind of
+ * problem one step out: the whole suite shares one database, so a sweep that
+ * switches ש״ג off leaves every later spec — and the phone project, which runs
+ * after this one — with a roster that no longer offers it. Retiring is covered
+ * directly, and deliberately, by `assignment-types.spec.ts`.
  */
-const SKIP = /התנתקות|החשבון שלי|ייצוא PDF/;
+const SKIP = /התנתקות|החשבון שלי|ייצוא PDF|השבתת סוג המשימה/;
 
 /** A 401 on the login screen is the app asking who you are, not a failure. */
 const EXPECTED = /Failed to load resource/;

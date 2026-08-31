@@ -90,7 +90,7 @@ export function AssignmentDetailDialog({
   const missing = assignment.requiredHeadcount - assignment.assignees.length;
   const qualificationName = (id: string) =>
     qualifications.data?.find((item) => item.id === id)?.name ?? id;
-  const seats = buildCrew(assignment, qualificationName);
+  const seats = buildCrew(assignment, qualificationName, assignment.crewRoleSuffix);
   const openSeats = openSeatRoles({
     requiredHeadcount: assignment.requiredHeadcount,
     requiredQualifications: assignment.requiredQualifications,

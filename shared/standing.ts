@@ -12,6 +12,7 @@
  * period needs. It is pure: the caller decides which of them already exist and
  * writes only the rest, which is what makes running it twice harmless.
  */
+import { dayPartLabel } from './crew';
 import { formatTime } from './format';
 import { SHIFT_HOUR_OPTIONS, isShiftHours } from './recurrence';
 import { DEFAULT_TIMEZONE, addDays, isDayKey, wallClockToUtc } from './time';
@@ -24,6 +25,8 @@ export interface StandingPost {
   shiftHours: number;
   /** Wall-clock hour of the first handover of the day. */
   shiftStartHour: number;
+  /** Minutes past that hour: משקיף hands over at 06:30, not 06:00. */
+  shiftStartMinute?: number;
   /**
    * A briefing this many minutes before each shift's own start — "תדריך עלייה
    * לעיט בשעה 04:40" — is a fact about the post, not about one day's shift, so
@@ -88,12 +91,13 @@ export function planStandingShifts(
     for (const post of posts) {
       if (!isStandingShiftHours(post.shiftHours)) continue;
       const count = 24 / post.shiftHours;
+      const minute = post.shiftStartMinute ?? 0;
       for (let index = 0; index < count; index += 1) {
         const startHour = post.shiftStartHour + index * post.shiftHours;
         const endHour = startHour + post.shiftHours;
         const startAt = wallClockToUtc(
           addDays(day, Math.floor(startHour / 24)),
-          clock(startHour % 24),
+          clock(startHour % 24, minute),
           timezone,
         );
         shifts.push({
@@ -102,11 +106,14 @@ export function planStandingShifts(
           startAt,
           endAt: wallClockToUtc(
             addDays(day, Math.floor(endHour / 24)),
-            clock(endHour % 24),
+            clock(endHour % 24, minute),
             timezone,
           ),
+          // A post handed over more than once a day is briefed per turn — "עיט
+          // בוקר", "עיט לילה" — because that is what a person is told to be at.
+          // A 24-hour post has only the one, so naming the turn says nothing.
           notes: post.briefingMinutesBefore
-            ? `תדריך עלייה ל${post.name} בשעה ${formatTime(startAt - post.briefingMinutesBefore * 60_000, timezone)}`
+            ? `תדריך עלייה ל${post.name}${count > 1 ? ` ${dayPartLabel(startHour % 24)}` : ''} בשעה ${formatTime(startAt - post.briefingMinutesBefore * 60_000, timezone)}`
             : null,
         });
       }
@@ -124,4 +131,5 @@ export function shiftKey(shift: Pick<StandingShift, 'assignmentTypeId' | 'startA
   return `${shift.assignmentTypeId}:${shift.startAt}`;
 }
 
-const clock = (hour: number) => `${String(hour).padStart(2, '0')}:00`;
+const clock = (hour: number, minute = 0) =>
+  `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;

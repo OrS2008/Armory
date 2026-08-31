@@ -325,7 +325,8 @@ export async function loadAssignmentTypes(env: Env): Promise<AssignmentType[]> {
   const rows = await env.DB.prepare(
     `SELECT t.id, t.name, t.category, t.default_duration_minutes, t.required_headcount,
             t.priority, t.color, t.instructions, t.briefing_minutes_before, t.active, t.standing,
-            t.shift_hours, t.shift_start_hour,
+            t.shift_hours, t.shift_start_hour, t.shift_start_minute,
+            t.section, t.sheet_label, t.crew_role_suffix, t.sheet_column,
             (SELECT COUNT(*) FROM assignment_instances a WHERE a.assignment_type_id = t.id)
               AS usage_count
        FROM assignment_types t WHERE t.org_id = ? ORDER BY t.priority, t.name`,
@@ -345,6 +346,11 @@ export async function loadAssignmentTypes(env: Env): Promise<AssignmentType[]> {
       standing: number;
       shift_hours: number;
       shift_start_hour: number;
+      shift_start_minute: number;
+      section: string | null;
+      sheet_label: string | null;
+      crew_role_suffix: string | null;
+      sheet_column: number | null;
       usage_count: number;
     }>();
   const [links, exclusions] = await Promise.all([
@@ -367,6 +373,11 @@ export async function loadAssignmentTypes(env: Env): Promise<AssignmentType[]> {
     standing: row.standing === 1,
     shiftHours: row.shift_hours,
     shiftStartHour: row.shift_start_hour,
+    shiftStartMinute: row.shift_start_minute,
+    section: row.section,
+    sheetLabel: row.sheet_label,
+    crewRoleSuffix: row.crew_role_suffix,
+    sheetColumn: row.sheet_column,
     usageCount: row.usage_count,
   }));
 }
@@ -389,7 +400,9 @@ export async function loadTypeQualifications(
   env: Env,
 ): Promise<Map<string, RequiredQualification[]>> {
   const rows = await env.DB.prepare(
-    'SELECT assignment_type_id, qualification_id, min_count FROM assignment_type_qualifications',
+    `SELECT assignment_type_id, qualification_id, min_count
+       FROM assignment_type_qualifications
+      ORDER BY assignment_type_id, min_count DESC, qualification_id`,
   ).all<{ assignment_type_id: string; qualification_id: string; min_count: number }>();
   const map = new Map<string, RequiredQualification[]>();
   for (const row of rows.results ?? []) {
@@ -445,6 +458,7 @@ export async function loadAssignments(
 
   const rows = await env.DB.prepare(
     `SELECT a.id, a.schedule_id, a.assignment_type_id, t.name AS type_name, t.priority, t.color,
+            t.section, t.sheet_label, t.crew_role_suffix, t.sheet_column,
             a.unit_id, t.instructions, a.title, a.start_at, a.end_at, a.required_headcount,
             a.status, a.publication_state, a.notes, a.updated_at
        FROM assignment_instances a
@@ -460,6 +474,10 @@ export async function loadAssignments(
       type_name: string;
       priority: number;
       color: string;
+      section: string | null;
+      sheet_label: string | null;
+      crew_role_suffix: string | null;
+      sheet_column: number | null;
       unit_id: string | null;
       instructions: string | null;
       title: string | null;
@@ -532,6 +550,10 @@ export async function loadAssignments(
     assignmentTypeName: row.type_name,
     priority: row.priority,
     color: row.color,
+    section: row.section,
+    sheetLabel: row.sheet_label,
+    crewRoleSuffix: row.crew_role_suffix,
+    sheetColumn: row.sheet_column,
     unitId: row.unit_id,
     title: row.title,
     startAt: row.start_at,

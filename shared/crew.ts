@@ -24,19 +24,14 @@ interface CrewSource {
 }
 
 /**
- * Seats in the order they are read out: named roles first, plain seats after.
+ * The role each seat carries, in reading order: named roles first, plain seats
+ * after. The named ones keep the order the post lists them in, which is the
+ * order they are read out — מפקד before נהג before the plain seats.
  *
  * A qualification with `minCount > 0` contributes that many named seats — "a
  * driver among the four". One with `minCount === 0` binds every seat instead,
  * so it names them all rather than adding any: a חמ״ל shift is one חמ״ל seat,
  * not a חמ״ל plus a spare.
- */
-/**
- * The role each seat carries, in reading order: named roles first, plain seats
- * after. A qualification with `minCount > 0` contributes that many named seats
- * — "a driver among the four". One with `minCount === 0` binds every seat
- * instead, so it names them all rather than adding any: a חמ״ל shift is one
- * חמ״ל seat, not a חמ״ל plus a spare.
  */
 export function seatRoles(source: {
   requiredHeadcount: number;
@@ -73,19 +68,28 @@ export function openSeatRoles(source: {
   return open;
 }
 
-/** Seats in the order they are read out, each with whoever fills it. */
+/**
+ * Seats in the order they are read out, each with whoever fills it.
+ *
+ * `roleSuffix` names the post inside the seat — מפקד סיור rather than מפקד —
+ * which is how a sheet carrying two crewed posts keeps them apart when it is
+ * read aloud. It belongs to the post, not to the mark: the same מפקד stands
+ * כיתת כוננות with no suffix at all.
+ */
 export function buildCrew(
   assignment: CrewSource,
   qualificationName: (id: string) => string,
+  roleSuffix?: string | null,
 ): CrewSeat[] {
+  const suffixed = (label: string) => (roleSuffix ? `${label} ${roleSuffix}` : label);
   const bindsEveryone = assignment.requiredQualifications.find((item) => item.minCount <= 0);
-  const plainLabel = bindsEveryone
-    ? qualificationName(bindsEveryone.qualificationId)
-    : DEFAULT_CREW_ROLE;
+  const plainLabel = suffixed(
+    bindsEveryone ? qualificationName(bindsEveryone.qualificationId) : DEFAULT_CREW_ROLE,
+  );
 
   const seats: CrewSeat[] = seatRoles(assignment).map((role) => ({
     roleQualificationId: role,
-    label: role ? qualificationName(role) : plainLabel,
+    label: role ? suffixed(qualificationName(role)) : plainLabel,
     assignee: null,
   }));
 
@@ -105,7 +109,7 @@ export function buildCrew(
   for (const person of remaining) {
     seats.push({
       roleQualificationId: person.role,
-      label: person.role ? qualificationName(person.role) : plainLabel,
+      label: person.role ? suffixed(qualificationName(person.role)) : plainLabel,
       assignee: person,
     });
   }
@@ -126,7 +130,9 @@ export function dayPartLabel(startHour: number): string {
   if (startHour < 4) return 'לילה';
   if (startHour < 12) return 'בוקר';
   if (startHour < 18) return 'צהריים';
-  if (startHour < 22) return 'ערב';
+  // A post handed over three times a day changes at 21:00 or 22:00 into what
+  // everyone calls the night shift, so ערב stops before the last handover.
+  if (startHour < 21) return 'ערב';
   return 'לילה';
 }
 
@@ -134,10 +140,25 @@ export function dayPartLabel(startHour: number): string {
 export interface PostGroup {
   assignmentTypeId: string;
   name: string;
+  /** What the title bar prints: the gate, else the sheet label, else the name. */
+  title: string;
+  /** The gate the post is stood at, when it has one. */
+  section: string | null;
   color: string;
   instructions: string | null;
   priority: number;
+  /** Appended to every seat label here: מפקד becomes מפקד סיור. */
+  crewRoleSuffix: string | null;
+  /** The sheet column the post is printed in, or null to let the sheet place it. */
+  column: number | null;
   shifts: Assignment[];
+  /**
+   * Whether the post prints its seats by role. A post whose crew has named
+   * seats — one מפקד and one נהג among the four — prints a role beside every
+   * name; one that just needs bodies prints the names on the time's own line,
+   * because a column of לוחם beside them says nothing.
+   */
+  crewed: boolean;
 }
 
 export function groupByPost(assignments: Assignment[]): PostGroup[] {
@@ -147,27 +168,32 @@ export function groupByPost(assignments: Assignment[]): PostGroup[] {
     const existing = groups.get(assignment.assignmentTypeId);
     if (existing) {
       existing.shifts.push(assignment);
-    } else {
-      groups.set(assignment.assignmentTypeId, {
-        assignmentTypeId: assignment.assignmentTypeId,
-        name: assignment.assignmentTypeName,
-        color: assignment.color,
-        instructions: assignment.instructions ?? null,
-        priority: assignment.priority,
-        shifts: [assignment],
-      });
+      continue;
     }
+    const section = assignment.section ?? null;
+    groups.set(assignment.assignmentTypeId, {
+      assignmentTypeId: assignment.assignmentTypeId,
+      name: assignment.assignmentTypeName,
+      title: section ?? assignment.sheetLabel ?? assignment.assignmentTypeName,
+      section,
+      color: assignment.color,
+      instructions: assignment.instructions ?? null,
+      priority: assignment.priority,
+      crewRoleSuffix: assignment.crewRoleSuffix ?? null,
+      column: assignment.sheetColumn ?? null,
+      shifts: [assignment],
+      crewed: assignment.requiredQualifications.some((item) => item.minCount > 0),
+    });
   }
 
   for (const group of groups.values()) {
     group.shifts.sort((left, right) => left.startAt - right.startAt);
   }
 
-  // Grouped by priority first — a manager can pull a handful of posts together
-  // (חפ"ק, חובש תורן, קצין מוצב) regardless of how tall each card prints —
-  // then tallest cards first within a priority, since the sheet lays posts out
-  // in a grid that aligns the top of every card in a row, so a short post
-  // placed early leaves a hole beneath it for the whole row.
+  // Priority is the sheet's own reading order, set post by post: the page is
+  // laid out the way the company prints it, not the way the data happens to
+  // sort. Two posts sharing a priority fall back to the taller one first, so a
+  // short card does not leave a hole beneath it for the whole row.
   return [...groups.values()].sort(
     (left, right) =>
       left.priority - right.priority ||
@@ -176,11 +202,36 @@ export function groupByPost(assignments: Assignment[]): PostGroup[] {
   );
 }
 
+/**
+ * The posts of each printed column, right to left.
+ *
+ * A post that names its column goes there; the rest are dealt into whichever
+ * column is shortest so far, which is what keeps an ad-hoc task — and any post
+ * created before the sheet had columns — from piling onto the end of the page.
+ */
+export function sheetColumns(posts: PostGroup[], count = 3): PostGroup[][] {
+  const columns: PostGroup[][] = Array.from({ length: count }, () => []);
+  const heights = new Array<number>(count).fill(0);
+
+  for (const post of posts) {
+    const named = post.column === null ? -1 : Math.min(post.column, count) - 1;
+    const index = named >= 0 ? named : heights.indexOf(Math.min(...heights));
+    columns[index]!.push(post);
+    heights[index] = (heights[index] ?? 0) + printedRows(post);
+  }
+  return columns;
+}
+
 /** Roughly how many rows a post takes on the sheet, for packing the columns. */
 function printedRows(post: PostGroup): number {
   return post.shifts.reduce((total, shift) => {
     const seats = Math.max(shift.requiredHeadcount, shift.assignees.length);
-    // A one-seat post prints as a single time/name line, with no header row.
-    return total + (seats <= 1 ? 1 : 1 + seats);
+    // A crewless post prints one time/name line however many people stand it.
+    return total + (post.crewed ? 1 + seats : 1);
   }, 0);
+}
+
+/** A shift that covers the whole day prints its crew with no clock beside it. */
+export function isFullDay(shift: { startAt: number; endAt: number }): boolean {
+  return shift.endAt - shift.startAt >= 24 * 3600_000;
 }

@@ -339,7 +339,9 @@ export function ScheduleBoardPage() {
         ) : null}
       </div>
 
-      <p className="print-title">
+      {/* The sheet's own heading. On screen it belongs to the sheet view; the
+          PDF is always the duty sheet, so it prints whatever is on screen. */}
+      <p className={cn('print-title', view !== 'roster' && 'print-title-hidden')}>
         {t('schedule.sheetTitle', { date: formatDayKey(day), weekday: weekdayName(day) })}
       </p>
 

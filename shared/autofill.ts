@@ -162,16 +162,24 @@ export function buildAutofillProposal(input: AutofillInput): AutofillProposal {
     return closest?.blockers[0] ?? FALLBACK_GAP_REASON;
   };
 
-  /** The best eligible person for one seat, or nothing. */
+  /**
+   * The best eligible person for one seat, or nothing.
+   *
+   * `only` narrows the field to a named few. The repair pass below knows it is
+   * asking about exactly one person, and ranking the whole roster to answer a
+   * question about one of them is most of what the pass used to cost.
+   */
   const bestForSeat = (
     assignment: Working,
     seat: string | null,
     exclude: Set<string>,
+    only?: Set<string>,
   ): Pick | null => {
     const pool = roster.filter(
       (person) =>
         !assignment.assigneeIds.includes(person.id) &&
         !exclude.has(person.id) &&
+        (!only || only.has(person.id)) &&
         (!seat || holds(person.id, seat)),
     );
     if (pool.length === 0) return null;
@@ -287,15 +295,23 @@ export function buildAutofillProposal(input: AutofillInput): AutofillProposal {
       const released = release(donor, move.personnelId);
       if (!released) continue;
 
-      const forHole = bestForSeat(hole.assignment, hole.seat, new Set());
-      const backfill =
-        forHole?.personnelId === move.personnelId
-          ? bestForSeat(donor, move.seat, new Set([move.personnelId]))
-          : null;
+      /*
+       * Only this person can have become available: the seat was left empty
+       * because nobody was eligible for it, and every decision since has only
+       * added shifts, which never makes anyone more eligible. So the question
+       * is whether releasing them is enough, not who else the hole might pick.
+       */
+      const forHole = bestForSeat(
+        hole.assignment,
+        hole.seat,
+        new Set(),
+        new Set([move.personnelId]),
+      );
+      const backfill = forHole ? bestForSeat(donor, move.seat, new Set([move.personnelId])) : null;
 
-      // Either this person is not who the hole would choose — in which case the
-      // greedy pass would already have taken whoever is — or their own seat
-      // cannot be covered. Put them back.
+      // Either this person still cannot stand the seat — in which case the
+      // greedy pass was right to leave it — or their own seat cannot be
+      // covered by anybody else. Put them back.
       if (!forHole || !backfill) {
         take(donor, move.seat, released);
         continue;

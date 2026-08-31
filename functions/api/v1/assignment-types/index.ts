@@ -25,9 +25,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     env.DB.prepare(
       `INSERT INTO assignment_types (id, org_id, name, category, default_duration_minutes,
                                      required_headcount, priority, color, instructions,
-                                     briefing_minutes_before, active, standing, shift_hours,
-                                     shift_start_hour, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                                     briefing_minutes_before, section, sheet_label,
+                                     crew_role_suffix, sheet_column, active, standing, shift_hours,
+                                     shift_start_hour, shift_start_minute, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).bind(
       id,
       DEFAULT_ORG_ID,
@@ -39,10 +40,15 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       input.color ?? 'slate',
       input.instructions ?? null,
       input.briefingMinutesBefore ?? null,
+      input.section ?? null,
+      input.sheetLabel ?? null,
+      input.crewRoleSuffix ?? null,
+      input.sheetColumn ?? null,
       boolToInt(input.active, 1),
       boolToInt(input.standing, 0),
       input.shiftHours ?? 8,
       input.shiftStartHour ?? 0,
+      input.shiftStartMinute ?? 0,
       timestamp,
       timestamp,
     ),

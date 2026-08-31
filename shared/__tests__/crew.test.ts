@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { buildCrew, dayPartLabel, groupByPost, openSeatRoles, seatRoles } from '../crew';
+import {
+  buildCrew,
+  dayPartLabel,
+  groupByPost,
+  isFullDay,
+  openSeatRoles,
+  seatRoles,
+  sheetColumns,
+} from '../crew';
 import type { Assignment, AssignmentAssignee } from '../types';
 
 const name = (id: string) => ({ q_driver: 'נהג', q_cmd: 'מפקד', q_hamal: 'חמ״ל' })[id] ?? id;
@@ -62,6 +70,16 @@ describe('the printed crew', () => {
     ]);
   });
 
+  it('names the post inside the seat when the post asks for it', () => {
+    const crew = buildCrew({ ...patrol, assignees: [person('דנה', 'q_driver')] }, name, 'סיור');
+    expect(crew.map((seat) => seat.label)).toEqual([
+      'מפקד סיור',
+      'נהג סיור',
+      'לוחם סיור',
+      'לוחם סיור',
+    ]);
+  });
+
   it('keeps an extra person rather than dropping them from the sheet', () => {
     const crew = buildCrew(
       {
@@ -82,6 +100,10 @@ const shift = (over: Partial<Assignment>): Assignment => ({
   assignmentTypeId: 'atp',
   assignmentTypeName: 'סיור',
   priority: 2,
+  section: null,
+  sheetLabel: null,
+  crewRoleSuffix: null,
+  sheetColumn: null,
   color: 'amber',
   unitId: null,
   title: null,
@@ -109,6 +131,7 @@ describe('grouping into posts', () => {
         assignmentTypeId: 'siur',
         assignmentTypeName: 'סיור',
         requiredHeadcount: 4,
+        requiredQualifications: [{ qualificationId: 'q_cmd', minCount: 1 }],
       }),
     ]);
     // סיור prints a header plus four seats; ש״ג prints two single lines.
@@ -136,10 +159,69 @@ describe('grouping into posts', () => {
         assignmentTypeName: 'חפ"ק',
         requiredHeadcount: 4,
         priority: 1,
+        requiredQualifications: [{ qualificationId: 'q_cmd', minCount: 1 }],
       }),
     ]);
     // חפ"ק prints tallest within priority 1, so it still leads its group.
     expect(posts.map((post) => post.name)).toEqual(['חפ"ק', 'חובש תורן', 'כיתת כוננות א׳ כרמל']);
+  });
+});
+
+describe('the printed page', () => {
+  const post = (id: string, over: Partial<Assignment> = {}) =>
+    shift({ id, assignmentTypeId: id, assignmentTypeName: id, ...over });
+
+  it('prints a post in the column it says it belongs to', () => {
+    const columns = sheetColumns(
+      groupByPost([
+        post('a', { sheetColumn: 3, priority: 1 }),
+        post('b', { sheetColumn: 1, priority: 2 }),
+        post('c', { sheetColumn: 3, priority: 3 }),
+      ]),
+    );
+    expect(columns.map((column) => column.map((item) => item.name))).toEqual([
+      ['b'],
+      [],
+      ['a', 'c'],
+    ]);
+  });
+
+  it('deals a post with no column of its own into the emptiest one', () => {
+    const columns = sheetColumns(
+      groupByPost([post('a', { sheetColumn: 1 }), post('b'), post('c')]),
+    );
+    // Column 1 already carries a post, so the two loose ones fill 2 and 3.
+    expect(columns.map((column) => column.length)).toEqual([1, 1, 1]);
+  });
+
+  it('folds the third column into the second when the page is narrower', () => {
+    const columns = sheetColumns(groupByPost([post('a', { sheetColumn: 3 })]), 2);
+    expect(columns).toHaveLength(2);
+    expect(columns[1]?.map((item) => item.name)).toEqual(['a']);
+  });
+
+  it('calls a post crewed only when its seats carry names', () => {
+    const [named] = groupByPost([
+      post('siur', { requiredQualifications: [{ qualificationId: 'q_cmd', minCount: 1 }] }),
+    ]);
+    const [plain] = groupByPost([
+      post('shag', { requiredQualifications: [{ qualificationId: 'q_hamal', minCount: 0 }] }),
+    ]);
+    expect(named?.crewed).toBe(true);
+    // Binding every seat to one mark names nothing: it is still a plain list.
+    expect(plain?.crewed).toBe(false);
+  });
+
+  it('titles a card by its gate, and falls back to the sheet label', () => {
+    const [gated] = groupByPost([post('mashkif', { section: 'שער הדוקטור' })]);
+    const [labelled] = groupByPost([post('shag', { sheetLabel: 'ש.ג. - 4 שעות משמרת' })]);
+    expect(gated?.title).toBe('שער הדוקטור');
+    expect(labelled?.title).toBe('ש.ג. - 4 שעות משמרת');
+  });
+
+  it('reads a whole-day turn as one that needs no clock', () => {
+    expect(isFullDay({ startAt: 0, endAt: 24 * 3600_000 })).toBe(true);
+    expect(isFullDay({ startAt: 0, endAt: 8 * 3600_000 })).toBe(false);
   });
 });
 

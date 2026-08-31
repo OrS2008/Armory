@@ -1,8 +1,8 @@
 -- Demo data for local development and the end-to-end suite. Never run this
 -- against production: it clears the roster and the posts before writing.
 --
--- The posts and the marks are the real ones — ש״ג, עיט, נחל שכם, כיתת כוננות
--- א׳ כרמל, קצין מוצב, חובש תורן, חפ"ק, חמ"ל — because a demo roster that
+-- The posts and the marks are the real ones — קצין מוצב, משקיף, חמ"ל, חובש
+-- תורן, עיט, כיתת כוננות א׳ כרמל, ש״ג, בולם, נחל שכם — because a demo roster that
 -- cannot express "אי אפשר לשבץ חייל מהמבצעים" is not exercising the thing the
 -- company actually needs.
 -- Usage: npm run db:seed:local
@@ -79,29 +79,43 @@ INSERT INTO personnel_qualifications (personnel_id, qualification_id, granted_at
   ('per_23','qlf_post_officer',0);
 
 -- standing = 1 means the post runs round the clock, handed over every
--- shift_hours; that is what the "פריסת תקופה" action reads.
--- Priority groups חפ"ק, חובש תורן and קצין מוצב together on the sheet (1),
--- ahead of the other standing posts (2) and the ad-hoc יזומה type (3). עיט's
--- briefing_minutes_before stamps a per-shift note when the roster is laid
--- out; כיתת כוננות א׳ כרמל's handover time is fixed, so it is a static line
--- in instructions instead.
+-- shift_hours; that is what the "פריסת תקופה" action reads. priority and
+-- sheet_column place the post on the printed page — three columns read right
+-- to left — and section names the gate it is stood at. See setup-company.sql,
+-- which this mirrors.
 INSERT INTO assignment_types
   (id, org_id, name, category, default_duration_minutes, required_headcount, priority, color,
-   instructions, briefing_minutes_before, active, standing, shift_hours, shift_start_hour,
+   instructions, briefing_minutes_before, section, sheet_label, crew_role_suffix, sheet_column,
+   active, standing, shift_hours, shift_start_hour, shift_start_minute,
    created_at, updated_at) VALUES
-  ('atp_shag','org_default','ש״ג','תורנויות קבועות',240,1,2,'brand',NULL,NULL,1,1,4,5,0,0),
-  ('atp_siur','org_default','עיט','תורנויות קבועות',480,4,2,'amber',NULL,20,1,1,8,5,0,0),
-  ('atp_carmel','org_default','כיתת כוננות א׳ כרמל','תורנויות קבועות',1440,4,2,'info','החלפה בשעה 17:00',NULL,1,1,24,0,0,0),
-  ('atp_nahalshechem','org_default','נחל שכם','תורנויות קבועות',360,2,2,'slate',NULL,NULL,1,1,6,5,0,0),
-  ('atp_post_officer','org_default','קצין מוצב','תורנויות קבועות',1440,1,1,'success',NULL,NULL,1,1,24,0,0,0),
-  ('atp_medic','org_default','חובש תורן','תורנויות קבועות',1440,1,1,'success',NULL,NULL,1,1,24,0,0,0),
-  ('atp_hafak','org_default','חפ"ק','תורנויות קבועות',1440,4,1,'slate',NULL,NULL,1,1,24,0,0,0),
-  ('atp_hamal','org_default','חמ"ל','תורנויות קבועות',480,1,2,'brand',NULL,NULL,1,1,8,6,0,0),
-  ('atp_yezuma','org_default','יזומה','פעילות יזומה',240,2,3,'success','משימה חד־פעמית שנקבעת מעבר לתורנויות הקבועות.',NULL,1,0,8,0,0,0);
+  ('atp_post_officer','org_default','קצין מוצב','תורנויות קבועות',1440,1,1,'success',
+   NULL,NULL,NULL,'קצין מוצב - 24 שעות',NULL,1,1,1,24,0,0,0,0),
+  ('atp_mashkif','org_default','משקיף','תורנויות קבועות',480,4,2,'amber',
+   NULL,30,'שער הדוקטור',NULL,'סיור',1,1,1,8,6,30,0,0),
+  ('atp_hamal','org_default','חמ"ל','תורנויות קבועות',480,1,3,'rose',
+   NULL,NULL,NULL,NULL,NULL,1,1,1,8,6,0,0,0),
+  ('atp_medic','org_default','חובש תורן','תורנויות קבועות',1440,1,4,'success',
+   NULL,NULL,NULL,'חובש תורן - 24 שעות',NULL,2,1,1,24,0,0,0,0),
+  ('atp_siur','org_default','עיט','תורנויות קבועות',480,4,5,'brand',
+   NULL,30,'שער עתיד - חקלאים',NULL,'סיור',2,1,1,8,5,0,0,0),
+  ('atp_carmel','org_default','כיתת כוננות א׳ כרמל','תורנויות קבועות',1440,4,6,'info',
+   'החלפה בשעה 22:00',NULL,NULL,'כיתת כוננות - כרמל א׳ 24 ש',NULL,2,1,1,24,0,0,0,0),
+  ('atp_shag','org_default','ש״ג','תורנויות קבועות',240,1,7,'brand',
+   NULL,NULL,NULL,'ש.ג. - 4 שעות משמרת',NULL,3,1,1,4,5,0,0,0),
+  ('atp_bolem','org_default','בולם','תורנויות קבועות',360,1,8,'brand',
+   'תדריך 20 דק לפני משמרת, יציאה 10 דק לפני משמרת',NULL,NULL,NULL,NULL,3,1,1,6,6,0,0,0),
+  ('atp_nahalshechem','org_default','נחל שכם','תורנויות קבועות',360,2,9,'slate',
+   'תדריך 20 דק לפני משמרת, יציאה 10 דק לפני משמרת',NULL,NULL,NULL,NULL,3,1,1,6,5,0,0,0),
+  ('atp_yezuma','org_default','יזומה','פעילות יזומה',240,2,10,'success',
+   'משימה חד־פעמית שנקבעת מעבר לתורנויות הקבועות.',NULL,NULL,NULL,NULL,3,1,0,8,0,0,0,0),
+  ('atp_hafak','org_default','חפ"ק','תורנויות קבועות',1440,4,11,'slate',
+   NULL,NULL,NULL,NULL,NULL,NULL,0,0,24,0,0,0,0);
 
 INSERT INTO assignment_type_qualifications (assignment_type_id, qualification_id, min_count) VALUES
   ('atp_siur','qlf_driver',1),
   ('atp_siur','qlf_commander',1),
+  ('atp_mashkif','qlf_driver',1),
+  ('atp_mashkif','qlf_commander',1),
   ('atp_carmel','qlf_driver',1),
   ('atp_carmel','qlf_commander',1),
   ('atp_hafak','qlf_driver',1),
@@ -111,6 +125,8 @@ INSERT INTO assignment_type_qualifications (assignment_type_id, qualification_id
 
 INSERT INTO assignment_type_exclusions (assignment_type_id, qualification_id) VALUES
   ('atp_siur','qlf_operations'),
+  ('atp_mashkif','qlf_operations'),
+  ('atp_bolem','qlf_operations'),
   ('atp_carmel','qlf_operations'),
   ('atp_nahalshechem','qlf_operations'),
   ('atp_medic','qlf_operations'),

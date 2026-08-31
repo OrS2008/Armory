@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { daysInRange, planStandingShifts, shiftKey } from '../standing';
+import { formatTime } from '../format';
 import { HOUR, dayKey } from '../time';
 
 const TZ = 'Asia/Jerusalem';
@@ -99,8 +100,37 @@ describe('laying out a standing post', () => {
       '2026-08-27',
       TZ,
     );
-    // The first shift starts at 00:00 wall clock; the briefing is 20 minutes earlier.
-    expect(shifts[0]?.notes).toBe('תדריך עלייה לעיט בשעה 23:40');
+    // The first shift starts at 00:00 wall clock; the briefing is 20 minutes
+    // earlier, and the post is handed over three times a day, so the note has
+    // to say which of the three a person is being briefed for.
+    expect(shifts[0]?.notes).toBe('תדריך עלייה לעיט לילה בשעה 23:40');
+    expect(shifts[1]?.notes).toBe('תדריך עלייה לעיט בוקר בשעה 07:40');
+  });
+
+  it('does not name the turn on a post that has only one a day', () => {
+    const [first] = planStandingShifts(
+      [{ ...officer, name: 'קצין מוצב', briefingMinutesBefore: 30 }],
+      '2026-08-27',
+      '2026-08-27',
+      TZ,
+    );
+    expect(first?.notes).toBe('תדריך עלייה לקצין מוצב בשעה 23:30');
+  });
+
+  it('hands over on the half hour when the post does', () => {
+    const shifts = planStandingShifts(
+      [{ ...shag, name: 'משקיף', shiftStartHour: 6, shiftStartMinute: 30 }],
+      '2026-08-27',
+      '2026-08-27',
+      TZ,
+    );
+    expect(shifts.map((shift) => formatTime(shift.startAt, TZ))).toEqual([
+      '06:30',
+      '14:30',
+      '22:30',
+    ]);
+    // The last turn still finishes exactly where the next day's first begins.
+    expect(formatTime(shifts[2]!.endAt, TZ)).toBe('06:30');
   });
 
   it('leaves the note blank for a post with no briefing', () => {

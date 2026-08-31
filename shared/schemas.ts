@@ -6,6 +6,20 @@ import { isShiftHours } from './recurrence';
 import { MAX_STANDING_DAYS, isStandingShiftHours } from './standing';
 
 const trimmed = (max: number) => z.string().trim().max(max, v.tooLong);
+/**
+ * A number that may be left blank.
+ *
+ * An empty `<select>` or `<input type=number>` submits `''`, and JSON from any
+ * other caller may send `null` or leave the key out entirely. All three mean the
+ * same thing — nobody chose — so they are normalised here rather than in each
+ * form, where forgetting it fails validation with a message nobody can act on.
+ */
+const optionalNumber = <T extends z.ZodType<number>>(schema: T) =>
+  z
+    .union([z.literal(''), z.null(), schema])
+    .transform((value) => (value === '' ? null : value))
+    .optional();
+
 const optionalText = (max: number) =>
   trimmed(max)
     .transform((value) => (value === '' ? null : value))
@@ -135,7 +149,7 @@ export const assignmentTypeSchema = z.object({
   color: trimmed(20).optional(),
   instructions: optionalText(1000),
   /** Minutes before each shift's own start that its briefing is held. */
-  briefingMinutesBefore: z.number().int().min(0).max(120).nullable().optional(),
+  briefingMinutesBefore: optionalNumber(z.number().int().min(0).max(120)),
   active: z.boolean().optional(),
   /**
    * `minCount: 0` requires every assignee to hold the qualification; a positive
@@ -151,8 +165,20 @@ export const assignmentTypeSchema = z.object({
   standing: z.boolean().optional(),
   shiftHours: z.number().int().min(1).max(24).refine(isStandingShiftHours, v.shiftHours).optional(),
   shiftStartHour: z.number().int().min(0).max(23).optional(),
+  shiftStartMinute: z.number().int().min(0).max(59).optional(),
+  /** Where the post prints on the duty sheet, and how its title bar reads. */
+  section: optionalText(80),
+  sheetLabel: optionalText(120),
+  crewRoleSuffix: optionalText(40),
+  sheetColumn: optionalNumber(z.number().int().min(1).max(3)),
 });
 export type AssignmentTypeInput = z.infer<typeof assignmentTypeSchema>;
+/**
+ * What the form holds before the schema normalises it — a blank `<select>` is
+ * `''` until it has been parsed, so the form is typed on the way in and the
+ * API on the way out.
+ */
+export type AssignmentTypeFormValues = z.input<typeof assignmentTypeSchema>;
 
 export const recurrenceSchema = z
   .object({
