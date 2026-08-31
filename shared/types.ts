@@ -100,6 +100,12 @@ export interface AssignmentType {
   color: string;
   instructions: string | null;
   active: boolean;
+  /**
+   * A briefing this many minutes before each shift's own start — set once on
+   * the post, then stamped as a per-shift note when the standing roster is
+   * laid out, since the time itself moves with the shift.
+   */
+  briefingMinutesBefore: number | null;
   requiredQualifications: { qualificationId: string; minCount: number }[];
   /** Marks that disqualify their holder from this post. */
   excludedQualificationIds: string[];
@@ -135,6 +141,8 @@ export interface Assignment {
   scheduleId: string | null;
   assignmentTypeId: string;
   assignmentTypeName: string;
+  /** The post's own display-order rank, lower first — see `groupByPost`. */
+  priority: number;
   color: string;
   unitId: string | null;
   title: string | null;

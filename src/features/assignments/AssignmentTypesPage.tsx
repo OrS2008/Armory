@@ -100,6 +100,7 @@ export function AssignmentTypesPage() {
             standing: type.standing,
             shiftHours: type.shiftHours,
             shiftStartHour: type.shiftStartHour,
+            briefingMinutesBefore: type.briefingMinutesBefore,
           }
         : {
             name: '',
@@ -110,6 +111,7 @@ export function AssignmentTypesPage() {
             standing: false,
             shiftHours: 8,
             shiftStartHour: 0,
+            briefingMinutesBefore: null,
           },
     );
     setOpen(true);
@@ -414,6 +416,26 @@ export function AssignmentTypesPage() {
                       {Array.from({ length: 24 }, (_unused, hour) => (
                         <option key={hour} value={hour}>
                           {`${String(hour).padStart(2, '0')}:00`}
+                        </option>
+                      ))}
+                    </Select>
+                  )}
+                </Field>
+                <Field
+                  label={t('assignments.briefingMinutesBefore')}
+                  hint={t('assignments.briefingMinutesBeforeHint')}
+                >
+                  {({ id }) => (
+                    <Select
+                      id={id}
+                      {...form.register('briefingMinutesBefore', {
+                        setValueAs: (value) => (value === '' ? null : Number(value)),
+                      })}
+                    >
+                      <option value="">{t('assignments.briefingMinutesBeforeNone')}</option>
+                      {[10, 15, 20, 30, 45, 60].map((minutes) => (
+                        <option key={minutes} value={minutes}>
+                          {t('assignments.briefingMinutesBeforeOption', { minutes })}
                         </option>
                       ))}
                     </Select>

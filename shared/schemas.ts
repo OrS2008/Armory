@@ -134,6 +134,8 @@ export const assignmentTypeSchema = z.object({
   priority: z.number().int().min(1).max(5).optional(),
   color: trimmed(20).optional(),
   instructions: optionalText(1000),
+  /** Minutes before each shift's own start that its briefing is held. */
+  briefingMinutesBefore: z.number().int().min(0).max(120).nullable().optional(),
   active: z.boolean().optional(),
   /**
    * `minCount: 0` requires every assignee to hold the qualification; a positive

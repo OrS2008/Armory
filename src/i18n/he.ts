@@ -328,6 +328,11 @@ export const he = {
   'assignments.shiftHours': 'אורך משמרת',
   'assignments.shiftHoursOption': 'כל {hours} שעות',
   'assignments.shiftStartHour': 'שעת ההתחלפות הראשונה',
+  'assignments.briefingMinutesBefore': 'תדריך לפני כל משמרת',
+  'assignments.briefingMinutesBeforeHint':
+    'אם מוגדר, כל משמרת תוצג עם הערת תדריך בשעה המתאימה לפני תחילתה.',
+  'assignments.briefingMinutesBeforeNone': 'ללא תדריך',
+  'assignments.briefingMinutesBeforeOption': '{minutes} דקות לפני',
   'assignments.excludedQualifications': 'סימונים הפוסלים שיבוץ',
   'assignments.excludedHint':
     'מי שמסומן כך לא ישובץ למשימה הזאת. למשל: לסיור לא משבצים מי שמסומן מבצעים, ולש״ג לא משבצים מפקד.',

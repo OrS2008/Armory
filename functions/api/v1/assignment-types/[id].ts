@@ -29,8 +29,9 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env, params 
               default_duration_minutes = COALESCE(?, default_duration_minutes),
               required_headcount = COALESCE(?, required_headcount),
               priority = COALESCE(?, priority), color = COALESCE(?, color),
-              instructions = COALESCE(?, instructions), active = ?, standing = ?,
-              shift_hours = COALESCE(?, shift_hours),
+              instructions = COALESCE(?, instructions),
+              briefing_minutes_before = COALESCE(?, briefing_minutes_before), active = ?,
+              standing = ?, shift_hours = COALESCE(?, shift_hours),
               shift_start_hour = COALESCE(?, shift_start_hour), updated_at = ?
         WHERE id = ?`,
     ).bind(
@@ -41,6 +42,7 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env, params 
       input.priority ?? null,
       input.color ?? null,
       input.instructions ?? null,
+      input.briefingMinutesBefore ?? null,
       boolToInt(input.active, existing.active),
       boolToInt(input.standing, existing.standing),
       input.shiftHours ?? null,

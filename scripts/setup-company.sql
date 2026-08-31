@@ -21,20 +21,29 @@ INSERT OR REPLACE INTO qualifications
 
 -- standing = 1: covered without a break, handed over every shift_hours from
 -- shift_start_hour. This is what "פריסת תקופה" lays out across a period.
+--
+-- Priority groups חפ"ק, חובש תורן and קצין מוצב together on the sheet (1),
+-- ahead of the other standing posts (2) and the ad-hoc יזומה type (3).
+--
+-- עיט's briefing_minutes_before stamps a per-shift note ("תדריך עלייה לעיט
+-- בשעה 04:40") when the standing roster is laid out; כיתת כוננות א׳ כרמל's
+-- handover time is the same every day, so it is a static line in instructions
+-- instead.
 INSERT OR REPLACE INTO assignment_types
   (id, org_id, name, category, default_duration_minutes, required_headcount, priority, color,
-   instructions, active, standing, shift_hours, shift_start_hour, created_at, updated_at) VALUES
+   instructions, briefing_minutes_before, active, standing, shift_hours, shift_start_hour,
+   created_at, updated_at) VALUES
   -- ש״ג, עיט and נחל שכם start the day at 05:00; כיתת כוננות א׳ כרמל, קצין
   -- מוצב, חובש תורן and חפ"ק are full 24-hour crews.
-  ('atp_shag','org_default','ש״ג','תורנויות קבועות',240,1,1,'brand',NULL,1,1,4,5,0,0),
-  ('atp_siur','org_default','עיט','תורנויות קבועות',480,4,1,'amber',NULL,1,1,8,5,0,0),
-  ('atp_carmel','org_default','כיתת כוננות א׳ כרמל','תורנויות קבועות',1440,4,1,'info',NULL,1,1,24,0,0,0),
-  ('atp_nahalshechem','org_default','נחל שכם','תורנויות קבועות',360,2,2,'slate',NULL,1,1,6,5,0,0),
-  ('atp_post_officer','org_default','קצין מוצב','תורנויות קבועות',1440,1,1,'success',NULL,1,1,24,0,0,0),
-  ('atp_medic','org_default','חובש תורן','תורנויות קבועות',1440,1,1,'success',NULL,1,1,24,0,0,0),
-  ('atp_hafak','org_default','חפ"ק','תורנויות קבועות',1440,4,1,'slate',NULL,1,1,24,0,0,0),
-  ('atp_hamal','org_default','חמ"ל','תורנויות קבועות',480,1,1,'brand',NULL,1,1,8,6,0,0),
-  ('atp_yezuma','org_default','יזומה','פעילות יזומה',240,2,3,'success','משימה חד־פעמית שנקבעת מעבר לתורנויות הקבועות.',1,0,8,0,0,0);
+  ('atp_shag','org_default','ש״ג','תורנויות קבועות',240,1,2,'brand',NULL,NULL,1,1,4,5,0,0),
+  ('atp_siur','org_default','עיט','תורנויות קבועות',480,4,2,'amber',NULL,20,1,1,8,5,0,0),
+  ('atp_carmel','org_default','כיתת כוננות א׳ כרמל','תורנויות קבועות',1440,4,2,'info','החלפה בשעה 17:00',NULL,1,1,24,0,0,0),
+  ('atp_nahalshechem','org_default','נחל שכם','תורנויות קבועות',360,2,2,'slate',NULL,NULL,1,1,6,5,0,0),
+  ('atp_post_officer','org_default','קצין מוצב','תורנויות קבועות',1440,1,1,'success',NULL,NULL,1,1,24,0,0,0),
+  ('atp_medic','org_default','חובש תורן','תורנויות קבועות',1440,1,1,'success',NULL,NULL,1,1,24,0,0,0),
+  ('atp_hafak','org_default','חפ"ק','תורנויות קבועות',1440,4,1,'slate',NULL,NULL,1,1,24,0,0,0),
+  ('atp_hamal','org_default','חמ"ל','תורנויות קבועות',480,1,2,'brand',NULL,NULL,1,1,8,6,0,0),
+  ('atp_yezuma','org_default','יזומה','פעילות יזומה',240,2,3,'success','משימה חד־פעמית שנקבעת מעבר לתורנויות הקבועות.',NULL,1,0,8,0,0,0);
 
 -- עיט and כיתת כוננות א׳ כרמל each need one driver and one commander *among*
 -- their four — min_count 1, not 0, which would demand that all four hold

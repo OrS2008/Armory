@@ -136,6 +136,7 @@ export interface PostGroup {
   name: string;
   color: string;
   instructions: string | null;
+  priority: number;
   shifts: Assignment[];
 }
 
@@ -152,6 +153,7 @@ export function groupByPost(assignments: Assignment[]): PostGroup[] {
         name: assignment.assignmentTypeName,
         color: assignment.color,
         instructions: assignment.instructions ?? null,
+        priority: assignment.priority,
         shifts: [assignment],
       });
     }
@@ -161,12 +163,16 @@ export function groupByPost(assignments: Assignment[]): PostGroup[] {
     group.shifts.sort((left, right) => left.startAt - right.startAt);
   }
 
-  // Tallest cards first. The sheet lays posts out in a grid, which aligns the
-  // top of every card in a row, so a short post placed early leaves a hole
-  // beneath it for the whole row. Leading with the tall ones packs the page.
+  // Grouped by priority first — a manager can pull a handful of posts together
+  // (חפ"ק, חובש תורן, קצין מוצב) regardless of how tall each card prints —
+  // then tallest cards first within a priority, since the sheet lays posts out
+  // in a grid that aligns the top of every card in a row, so a short post
+  // placed early leaves a hole beneath it for the whole row.
   return [...groups.values()].sort(
     (left, right) =>
-      printedRows(right) - printedRows(left) || left.name.localeCompare(right.name, 'he'),
+      left.priority - right.priority ||
+      printedRows(right) - printedRows(left) ||
+      left.name.localeCompare(right.name, 'he'),
   );
 }
 

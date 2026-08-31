@@ -80,18 +80,24 @@ INSERT INTO personnel_qualifications (personnel_id, qualification_id, granted_at
 
 -- standing = 1 means the post runs round the clock, handed over every
 -- shift_hours; that is what the "פריסת תקופה" action reads.
+-- Priority groups חפ"ק, חובש תורן and קצין מוצב together on the sheet (1),
+-- ahead of the other standing posts (2) and the ad-hoc יזומה type (3). עיט's
+-- briefing_minutes_before stamps a per-shift note when the roster is laid
+-- out; כיתת כוננות א׳ כרמל's handover time is fixed, so it is a static line
+-- in instructions instead.
 INSERT INTO assignment_types
   (id, org_id, name, category, default_duration_minutes, required_headcount, priority, color,
-   instructions, active, standing, shift_hours, shift_start_hour, created_at, updated_at) VALUES
-  ('atp_shag','org_default','ש״ג','תורנויות קבועות',240,1,1,'brand',NULL,1,1,4,5,0,0),
-  ('atp_siur','org_default','עיט','תורנויות קבועות',480,4,1,'amber',NULL,1,1,8,5,0,0),
-  ('atp_carmel','org_default','כיתת כוננות א׳ כרמל','תורנויות קבועות',1440,4,1,'info',NULL,1,1,24,0,0,0),
-  ('atp_nahalshechem','org_default','נחל שכם','תורנויות קבועות',360,2,2,'slate',NULL,1,1,6,5,0,0),
-  ('atp_post_officer','org_default','קצין מוצב','תורנויות קבועות',1440,1,1,'success',NULL,1,1,24,0,0,0),
-  ('atp_medic','org_default','חובש תורן','תורנויות קבועות',1440,1,1,'success',NULL,1,1,24,0,0,0),
-  ('atp_hafak','org_default','חפ"ק','תורנויות קבועות',1440,4,1,'slate',NULL,1,1,24,0,0,0),
-  ('atp_hamal','org_default','חמ"ל','תורנויות קבועות',480,1,1,'brand',NULL,1,1,8,6,0,0),
-  ('atp_yezuma','org_default','יזומה','פעילות יזומה',240,2,3,'success','משימה חד־פעמית שנקבעת מעבר לתורנויות הקבועות.',1,0,8,0,0,0);
+   instructions, briefing_minutes_before, active, standing, shift_hours, shift_start_hour,
+   created_at, updated_at) VALUES
+  ('atp_shag','org_default','ש״ג','תורנויות קבועות',240,1,2,'brand',NULL,NULL,1,1,4,5,0,0),
+  ('atp_siur','org_default','עיט','תורנויות קבועות',480,4,2,'amber',NULL,20,1,1,8,5,0,0),
+  ('atp_carmel','org_default','כיתת כוננות א׳ כרמל','תורנויות קבועות',1440,4,2,'info','החלפה בשעה 17:00',NULL,1,1,24,0,0,0),
+  ('atp_nahalshechem','org_default','נחל שכם','תורנויות קבועות',360,2,2,'slate',NULL,NULL,1,1,6,5,0,0),
+  ('atp_post_officer','org_default','קצין מוצב','תורנויות קבועות',1440,1,1,'success',NULL,NULL,1,1,24,0,0,0),
+  ('atp_medic','org_default','חובש תורן','תורנויות קבועות',1440,1,1,'success',NULL,NULL,1,1,24,0,0,0),
+  ('atp_hafak','org_default','חפ"ק','תורנויות קבועות',1440,4,1,'slate',NULL,NULL,1,1,24,0,0,0),
+  ('atp_hamal','org_default','חמ"ל','תורנויות קבועות',480,1,2,'brand',NULL,NULL,1,1,8,6,0,0),
+  ('atp_yezuma','org_default','יזומה','פעילות יזומה',240,2,3,'success','משימה חד־פעמית שנקבעת מעבר לתורנויות הקבועות.',NULL,1,0,8,0,0,0);
 
 INSERT INTO assignment_type_qualifications (assignment_type_id, qualification_id, min_count) VALUES
   ('atp_siur','qlf_driver',1),

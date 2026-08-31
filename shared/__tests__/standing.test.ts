@@ -5,12 +5,14 @@ import { HOUR, dayKey } from '../time';
 const TZ = 'Asia/Jerusalem';
 const shag = {
   assignmentTypeId: 'atp_shag',
+  name: 'ש״ג',
   requiredHeadcount: 1,
   shiftHours: 8,
   shiftStartHour: 0,
 };
 const officer = {
   assignmentTypeId: 'atp_officer',
+  name: 'קצין מוצב',
   requiredHeadcount: 1,
   shiftHours: 24,
   shiftStartHour: 0,
@@ -90,12 +92,46 @@ describe('laying out a standing post', () => {
     expect(new Set(once).size).toBe(once.length);
   });
 
+  it('stamps a briefing note onto each shift when the post asks for one', () => {
+    const shifts = planStandingShifts(
+      [{ ...shag, name: 'עיט', briefingMinutesBefore: 20 }],
+      '2026-08-27',
+      '2026-08-27',
+      TZ,
+    );
+    // The first shift starts at 00:00 wall clock; the briefing is 20 minutes earlier.
+    expect(shifts[0]?.notes).toBe('תדריך עלייה לעיט בשעה 23:40');
+  });
+
+  it('leaves the note blank for a post with no briefing', () => {
+    const [first] = planStandingShifts([shag], '2026-08-27', '2026-08-27', TZ);
+    expect(first?.notes).toBeNull();
+  });
+
   it('lays out eleven weeks of the company’s posts in one pass', () => {
     const posts = [
       shag,
-      { assignmentTypeId: 'atp_siur', requiredHeadcount: 4, shiftHours: 8, shiftStartHour: 0 },
-      { assignmentTypeId: 'atp_nahal', requiredHeadcount: 2, shiftHours: 8, shiftStartHour: 0 },
-      { assignmentTypeId: 'atp_carmel', requiredHeadcount: 4, shiftHours: 8, shiftStartHour: 0 },
+      {
+        assignmentTypeId: 'atp_siur',
+        name: 'עיט',
+        requiredHeadcount: 4,
+        shiftHours: 8,
+        shiftStartHour: 0,
+      },
+      {
+        assignmentTypeId: 'atp_nahal',
+        name: 'נחל שכם',
+        requiredHeadcount: 2,
+        shiftHours: 8,
+        shiftStartHour: 0,
+      },
+      {
+        assignmentTypeId: 'atp_carmel',
+        name: 'כיתת כוננות א׳ כרמל',
+        requiredHeadcount: 4,
+        shiftHours: 8,
+        shiftStartHour: 0,
+      },
     ];
     const shifts = planStandingShifts(posts, '2026-08-27', '2026-11-11', TZ);
     expect(daysInRange('2026-08-27', '2026-11-11')).toHaveLength(77);

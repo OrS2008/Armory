@@ -32,9 +32,11 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     .filter((type) => !input.assignmentTypeIds || input.assignmentTypeIds.includes(type.id))
     .map((type) => ({
       assignmentTypeId: type.id,
+      name: type.name,
       requiredHeadcount: type.requiredHeadcount,
       shiftHours: type.shiftHours,
       shiftStartHour: type.shiftStartHour,
+      briefingMinutesBefore: type.briefingMinutesBefore,
     }));
 
   if (posts.length === 0) {
@@ -73,7 +75,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
                                          title, start_at, end_at, required_headcount, status,
                                          publication_state, notes, created_by, updated_by,
                                          created_at, updated_at)
-       VALUES (?, ?, NULL, ?, NULL, NULL, ?, ?, ?, 'planned', 'draft', NULL, ?, ?, ?, ?)`,
+       VALUES (?, ?, NULL, ?, NULL, NULL, ?, ?, ?, 'planned', 'draft', ?, ?, ?, ?, ?)`,
     ).bind(
       id,
       DEFAULT_ORG_ID,
@@ -81,6 +83,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       shift.startAt,
       shift.endAt,
       shift.requiredHeadcount,
+      shift.notes,
       user.id,
       user.id,
       timestamp,

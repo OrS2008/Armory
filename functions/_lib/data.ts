@@ -324,8 +324,8 @@ export async function loadPersonnelQualifications(env: Env): Promise<Map<string,
 export async function loadAssignmentTypes(env: Env): Promise<AssignmentType[]> {
   const rows = await env.DB.prepare(
     `SELECT t.id, t.name, t.category, t.default_duration_minutes, t.required_headcount,
-            t.priority, t.color, t.instructions, t.active, t.standing, t.shift_hours,
-            t.shift_start_hour,
+            t.priority, t.color, t.instructions, t.briefing_minutes_before, t.active, t.standing,
+            t.shift_hours, t.shift_start_hour,
             (SELECT COUNT(*) FROM assignment_instances a WHERE a.assignment_type_id = t.id)
               AS usage_count
        FROM assignment_types t WHERE t.org_id = ? ORDER BY t.priority, t.name`,
@@ -340,6 +340,7 @@ export async function loadAssignmentTypes(env: Env): Promise<AssignmentType[]> {
       priority: number;
       color: string;
       instructions: string | null;
+      briefing_minutes_before: number | null;
       active: number;
       standing: number;
       shift_hours: number;
@@ -359,6 +360,7 @@ export async function loadAssignmentTypes(env: Env): Promise<AssignmentType[]> {
     priority: row.priority,
     color: row.color,
     instructions: row.instructions,
+    briefingMinutesBefore: row.briefing_minutes_before,
     active: row.active === 1,
     requiredQualifications: links.get(row.id) ?? [],
     excludedQualificationIds: exclusions.get(row.id) ?? [],
@@ -442,9 +444,9 @@ export async function loadAssignments(
   }
 
   const rows = await env.DB.prepare(
-    `SELECT a.id, a.schedule_id, a.assignment_type_id, t.name AS type_name, t.color, a.unit_id,
-            t.instructions, a.title, a.start_at, a.end_at, a.required_headcount, a.status,
-            a.publication_state, a.notes, a.updated_at
+    `SELECT a.id, a.schedule_id, a.assignment_type_id, t.name AS type_name, t.priority, t.color,
+            a.unit_id, t.instructions, a.title, a.start_at, a.end_at, a.required_headcount,
+            a.status, a.publication_state, a.notes, a.updated_at
        FROM assignment_instances a
        JOIN assignment_types t ON t.id = a.assignment_type_id
       WHERE ${filters.join(' AND ')}
@@ -456,6 +458,7 @@ export async function loadAssignments(
       schedule_id: string | null;
       assignment_type_id: string;
       type_name: string;
+      priority: number;
       color: string;
       unit_id: string | null;
       instructions: string | null;
@@ -527,6 +530,7 @@ export async function loadAssignments(
     scheduleId: row.schedule_id,
     assignmentTypeId: row.assignment_type_id,
     assignmentTypeName: row.type_name,
+    priority: row.priority,
     color: row.color,
     unitId: row.unit_id,
     title: row.title,

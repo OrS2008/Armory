@@ -81,6 +81,7 @@ const shift = (over: Partial<Assignment>): Assignment => ({
   scheduleId: null,
   assignmentTypeId: 'atp',
   assignmentTypeName: 'סיור',
+  priority: 2,
   color: 'amber',
   unitId: null,
   title: null,
@@ -117,6 +118,28 @@ describe('grouping into posts', () => {
 
   it('leaves a cancelled shift off the sheet', () => {
     expect(groupByPost([shift({ status: 'cancelled' })])).toHaveLength(0);
+  });
+
+  it('groups a lower priority number first, even over a taller post', () => {
+    const posts = groupByPost([
+      shift({
+        id: 'a',
+        assignmentTypeId: 'carmel',
+        assignmentTypeName: 'כיתת כוננות א׳ כרמל',
+        requiredHeadcount: 4,
+        priority: 2,
+      }),
+      shift({ id: 'b', assignmentTypeId: 'medic', assignmentTypeName: 'חובש תורן', priority: 1 }),
+      shift({
+        id: 'c',
+        assignmentTypeId: 'hafak',
+        assignmentTypeName: 'חפ"ק',
+        requiredHeadcount: 4,
+        priority: 1,
+      }),
+    ]);
+    // חפ"ק prints tallest within priority 1, so it still leads its group.
+    expect(posts.map((post) => post.name)).toEqual(['חפ"ק', 'חובש תורן', 'כיתת כוננות א׳ כרמל']);
   });
 });
 

@@ -24,10 +24,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
   await env.DB.batch([
     env.DB.prepare(
       `INSERT INTO assignment_types (id, org_id, name, category, default_duration_minutes,
-                                     required_headcount, priority, color, instructions, active,
-                                     standing, shift_hours, shift_start_hour,
-                                     created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                                     required_headcount, priority, color, instructions,
+                                     briefing_minutes_before, active, standing, shift_hours,
+                                     shift_start_hour, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).bind(
       id,
       DEFAULT_ORG_ID,
@@ -38,6 +38,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       input.priority ?? 2,
       input.color ?? 'slate',
       input.instructions ?? null,
+      input.briefingMinutesBefore ?? null,
       boolToInt(input.active, 1),
       boolToInt(input.standing, 0),
       input.shiftHours ?? 8,

@@ -118,6 +118,22 @@ Shifts are pinned to the wall clock, so a 16:00 handover stays at 16:00 across a
 daylight-saving change; the handover either side of it is then an hour shorter
 or longer, which is what happens on the ground.
 
+### Two kinds of note on a post
+
+A post can carry a note in two different shapes, because "the briefing is 20
+minutes before whichever shift you're on" and "handover always happens at
+17:00" are different facts:
+
+| Column | Fixed or per-shift | Example |
+| --- | --- | --- |
+| `instructions` | Fixed: the same line under the post's title every day | "החלפה בשעה 17:00" (כיתת כוננות א׳ כרמל) |
+| `briefing_minutes_before` | Per-shift: `planStandingShifts` stamps the actual time onto each shift's own `notes` when the roster is laid out, since the time moves with the shift | "תדריך עלייה לעיט בשעה 04:40" for the 05:00 shift (עיט) |
+
+`priority` also decides where a post's card lands on the sheet: cards are
+grouped by priority first, tallest-within-a-group second, so a manager can
+keep a handful of posts (חפ"ק, חובש תורן, קצין מוצב) printing next to each
+other regardless of how many shifts each one has that day.
+
 ### Two ways to need a qualification
 
 An assignment type attaches qualifications with a `minCount`, because "everyone

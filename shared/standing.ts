@@ -12,16 +12,25 @@
  * period needs. It is pure: the caller decides which of them already exist and
  * writes only the rest, which is what makes running it twice harmless.
  */
+import { formatTime } from './format';
 import { SHIFT_HOUR_OPTIONS, isShiftHours } from './recurrence';
 import { DEFAULT_TIMEZONE, addDays, isDayKey, wallClockToUtc } from './time';
 
 export interface StandingPost {
   assignmentTypeId: string;
+  name: string;
   requiredHeadcount: number;
   /** 24 must divide by this: a post is covered without a gap or an overlap. */
   shiftHours: number;
   /** Wall-clock hour of the first handover of the day. */
   shiftStartHour: number;
+  /**
+   * A briefing this many minutes before each shift's own start — "תדריך עלייה
+   * לעיט בשעה 04:40" — is a fact about the post, not about one day's shift, so
+   * it is stated once here and computed fresh for every occurrence rather than
+   * typed onto each one by hand.
+   */
+  briefingMinutesBefore?: number | null;
 }
 
 export interface StandingShift {
@@ -29,6 +38,7 @@ export interface StandingShift {
   requiredHeadcount: number;
   startAt: number;
   endAt: number;
+  notes: string | null;
 }
 
 /** As long a period as one action may lay out. Eleven weeks fits comfortably. */
@@ -81,19 +91,23 @@ export function planStandingShifts(
       for (let index = 0; index < count; index += 1) {
         const startHour = post.shiftStartHour + index * post.shiftHours;
         const endHour = startHour + post.shiftHours;
+        const startAt = wallClockToUtc(
+          addDays(day, Math.floor(startHour / 24)),
+          clock(startHour % 24),
+          timezone,
+        );
         shifts.push({
           assignmentTypeId: post.assignmentTypeId,
           requiredHeadcount: post.requiredHeadcount,
-          startAt: wallClockToUtc(
-            addDays(day, Math.floor(startHour / 24)),
-            clock(startHour % 24),
-            timezone,
-          ),
+          startAt,
           endAt: wallClockToUtc(
             addDays(day, Math.floor(endHour / 24)),
             clock(endHour % 24),
             timezone,
           ),
+          notes: post.briefingMinutesBefore
+            ? `תדריך עלייה ל${post.name} בשעה ${formatTime(startAt - post.briefingMinutesBefore * 60_000, timezone)}`
+            : null,
         });
       }
     }
