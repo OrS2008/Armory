@@ -21,6 +21,10 @@ on:
         description: 'Only shifts starting on or before this day (YYYY-MM-DD). Empty means to the end.'
         type: string
         default: ''
+      post_name:
+        description: 'Only this post''s shifts, by name (for example: עיט). Empty means every post.'
+        type: string
+        default: ''
       confirm:
         description: Type CLEAR to go ahead. Leave empty to only report.
         type: string
@@ -44,6 +48,7 @@ jobs:
       DATABASE_NAME: ${{ inputs.database_name }}
       FROM_DATE: ${{ inputs.from_date }}
       TO_DATE: ${{ inputs.to_date }}
+      POST_NAME: ${{ inputs.post_name }}
 
     steps:
       - name: Check that the credentials are present
@@ -63,7 +68,9 @@ jobs:
       - run: npm clean-install
 
       # A date is either empty or YYYY-MM-DD. Anything else stops the run rather
-      # than being pasted into SQL.
+      # than being pasted into SQL. One post can be named instead of all of
+      # them, which is what a single post laid out twice on two different
+      # rhythms needs: clearing the board to fix one of nine is not a fix.
       - name: Build the range
         id: range
         run: |
@@ -76,8 +83,14 @@ jobs:
           WHERE=""
           [ -n "$FROM_DATE" ] && WHERE="$WHERE AND date(start_at/1000,'unixepoch') >= '$FROM_DATE'"
           [ -n "$TO_DATE" ] && WHERE="$WHERE AND date(start_at/1000,'unixepoch') <= '$TO_DATE'"
+          if [ -n "$POST_NAME" ]; then
+            # wrangler cannot bind a parameter, so the one character that could
+            # close the string literal early is doubled — how SQL escapes it.
+            SAFE=${POST_NAME//\'/\'\'}
+            WHERE="$WHERE AND assignment_type_id IN (SELECT id FROM assignment_types WHERE org_id = 'org_default' AND name = '$SAFE')"
+          fi
           echo "where=$WHERE" >> "$GITHUB_OUTPUT"
-          echo "Range: ${FROM_DATE:-beginning} to ${TO_DATE:-end}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Range: ${FROM_DATE:-beginning} to ${TO_DATE:-end}, post: ${POST_NAME:-all}" >> "$GITHUB_STEP_SUMMARY"
 
       # What is at stake, counted before anything is touched, broken down by post
       # so a surprise — a post with ten times the shifts it should have — is
@@ -101,6 +114,30 @@ jobs:
             echo '### Shifts that would go'
             echo '```json'
             cat counts.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # The handover times, per post, per day. A post that hands over three
+      # times a day and shows six rows here has been laid out twice on two
+      # rhythms, which is exactly what makes its card unreadable.
+      - name: Show the rhythm each post is actually running
+        run: |
+          set -euo pipefail
+          npx wrangler d1 execute "$DATABASE_NAME" --remote --json --command \
+            "SELECT t.name,
+                    strftime('%H:%M', a.start_at/1000, 'unixepoch', '+3 hours') AS starts_at,
+                    COUNT(*) AS turns,
+                    MIN(date(a.start_at/1000,'unixepoch')) AS first_day,
+                    MAX(date(a.start_at/1000,'unixepoch')) AS last_day
+               FROM assignment_instances a
+               JOIN assignment_types t ON t.id = a.assignment_type_id
+              WHERE a.org_id = 'org_default' ${{ steps.range.outputs.where }}
+              GROUP BY t.name, starts_at ORDER BY t.name, starts_at" \
+            | tee rhythm.json
+          {
+            echo '### Handover times per post'
+            echo '```json'
+            cat rhythm.json
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
