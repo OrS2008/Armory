@@ -431,6 +431,65 @@
 }
 
 /*
+ * Dragging on the sheet.
+ *
+ * A handle has to say it is one before it is pressed, and has to stop the page
+ * scrolling under a finger that is moving a card rather than reading — which is
+ * what `touch-action: none` buys, and the only reason the gesture works on a
+ * phone at all.
+ */
+.sheet-grab,
+.sheet-drag-name {
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.sheet-grab:active,
+.sheet-drag-name:active {
+  cursor: grabbing;
+}
+
+.sheet-grip {
+  display: inline-block;
+  margin-inline-end: 0.2rem;
+  vertical-align: -0.15em;
+  opacity: 0.5;
+}
+
+.sheet-drag-name {
+  border-radius: 0.2rem;
+  padding-inline: 0.15rem;
+  margin-inline: -0.15rem;
+}
+
+.sheet-drag-name:hover {
+  background: var(--color-surface-sunken);
+}
+
+/*
+ * What follows the finger. Offset from the pointer so it never sits under it —
+ * `elementFromPoint` would otherwise find the ghost instead of the seat being
+ * aimed at, and nothing would ever be droppable.
+ */
+.sheet-ghost {
+  position: fixed;
+  inset-block-start: 0;
+  inset-inline-start: 0;
+  z-index: 60;
+  margin-block-start: 0.75rem;
+  margin-inline-start: 0.75rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-control);
+  background: var(--color-surface-raised);
+  padding: 0.15rem 0.5rem;
+  box-shadow: var(--shadow-raised, 0 4px 12px rgb(0 0 0 / 0.18));
+  font-size: 0.8125rem;
+  font-weight: 600;
+  pointer-events: none;
+}
+
+/*
  * Print / PDF export (plan section 45).
  *
  * "Export PDF" is the browser's own print-to-PDF: no server-side renderer, no
@@ -574,6 +633,10 @@
   .sheet-shift th {
     background: #f2f4f7 !important;
     color: #000 !important;
+  }
+
+  .sheet-grip {
+    display: none !important;
   }
 
   .sheet-empty,

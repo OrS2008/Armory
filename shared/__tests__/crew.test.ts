@@ -2,11 +2,14 @@ import { describe, expect, it } from 'vitest';
 import {
   buildCrew,
   dayPartLabel,
+  turnLabels,
   groupByPost,
   isFullDay,
+  moveSheetCard,
   openSeatRoles,
   seatRoles,
   sheetColumns,
+  type SheetPlacement,
 } from '../crew';
 import type { Assignment, AssignmentAssignee } from '../types';
 
@@ -222,6 +225,113 @@ describe('the printed page', () => {
   it('reads a whole-day turn as one that needs no clock', () => {
     expect(isFullDay({ startAt: 0, endAt: 24 * 3600_000 })).toBe(true);
     expect(isFullDay({ startAt: 0, endAt: 8 * 3600_000 })).toBe(false);
+  });
+});
+
+describe('dragging a card to another place on the page', () => {
+  const post = (id: string, over: Partial<Assignment> = {}) =>
+    shift({ id, assignmentTypeId: id, assignmentTypeName: id, ...over });
+  const page = (...ids: string[][]) =>
+    sheetColumns(
+      groupByPost(
+        ids.flatMap((column, index) =>
+          column.map((id, at) => post(id, { sheetColumn: index + 1, priority: index * 10 + at })),
+        ),
+      ),
+    );
+  const shape = (placements: SheetPlacement[]) =>
+    placements
+      .slice()
+      .sort((left, right) => left.priority - right.priority)
+      .map((item) => `${item.column}:${item.assignmentTypeId}`);
+
+  it('drops a card above a named one, and closes the gap it left', () => {
+    const placements = moveSheetCard(page(['a', 'b'], ['c', 'd'], []), 'd', {
+      column: 0,
+      before: 'b',
+    });
+    expect(shape(placements)).toEqual(['1:a', '1:d', '1:b', '2:c']);
+  });
+
+  it('drops a card at the foot of a column when nothing is named', () => {
+    const placements = moveSheetCard(page(['a'], ['b', 'c'], []), 'a', {
+      column: 1,
+      before: null,
+    });
+    expect(shape(placements)).toEqual(['2:b', '2:c', '2:a']);
+  });
+
+  it('moves a card down its own column without landing one place short', () => {
+    // The card is lifted out before it lands, so "above c" is above c as the
+    // reader sees it, not above whatever c became once a was removed.
+    const placements = moveSheetCard(page(['a', 'b', 'c'], [], []), 'a', {
+      column: 0,
+      before: 'c',
+    });
+    expect(shape(placements)).toEqual(['1:b', '1:a', '1:c']);
+  });
+
+  it('fills an empty column', () => {
+    const placements = moveSheetCard(page(['a', 'b'], [], []), 'b', {
+      column: 2,
+      before: null,
+    });
+    expect(shape(placements)).toEqual(['1:a', '3:b']);
+  });
+
+  it('numbers the page from one, so the order stored is the order seen', () => {
+    const placements = moveSheetCard(page(['a', 'b'], ['c'], []), 'c', {
+      column: 0,
+      before: 'a',
+    });
+    expect(placements.map((item) => item.priority)).toEqual([1, 2, 3]);
+  });
+
+  it('says nothing about a card that is not on the page', () => {
+    expect(moveSheetCard(page(['a'], [], []), 'ghost', { column: 0, before: null })).toEqual([]);
+  });
+});
+
+describe('naming the turns of a post', () => {
+  it('reads down the card בוקר, צהריים, ערב however early the post hands over', () => {
+    expect(turnLabels(3)).toEqual(['בוקר', 'צהריים', 'ערב']);
+    expect(turnLabels(2)).toEqual(['בוקר', 'ערב']);
+    expect(turnLabels(4)).toEqual(['בוקר', 'צהריים', 'ערב', 'לילה']);
+  });
+
+  it('has no names for a rhythm nobody says out loud', () => {
+    // ש״ג changes every four hours and prints as a list of times instead.
+    expect(turnLabels(6)).toBeNull();
+    expect(turnLabels(1)).toBeNull();
+  });
+});
+
+describe('the day a turn belongs to', () => {
+  const DAY = 24 * 3600_000;
+  const window = { from: DAY, to: 2 * DAY - 1 };
+
+  it('keeps last night off this morning’s sheet', () => {
+    const posts = groupByPost(
+      [
+        // Yesterday's evening turn, still running at midnight.
+        shift({ id: 'yesterday', startAt: DAY - 3 * 3600_000, endAt: DAY + 5 * 3600_000 }),
+        shift({ id: 'today', startAt: DAY + 5 * 3600_000, endAt: DAY + 13 * 3600_000 }),
+      ],
+      window,
+    );
+    expect(posts[0]?.shifts.map((item) => item.id)).toEqual(['today']);
+  });
+
+  it('keeps a turn that runs past midnight on the day it starts', () => {
+    const posts = groupByPost(
+      [shift({ id: 'tonight', startAt: DAY + 21 * 3600_000, endAt: 2 * DAY + 5 * 3600_000 })],
+      window,
+    );
+    expect(posts[0]?.shifts.map((item) => item.id)).toEqual(['tonight']);
+  });
+
+  it('shows everything in progress when no day is named', () => {
+    expect(groupByPost([shift({ startAt: 0, endAt: DAY })])).toHaveLength(1);
   });
 });
 

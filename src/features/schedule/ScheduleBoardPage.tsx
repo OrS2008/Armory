@@ -9,8 +9,10 @@ import {
   Printer,
   Sparkles,
   TriangleAlert,
+  Undo2,
 } from 'lucide-react';
 import { formatDayKey, weekdayName } from '@shared/format';
+import type { SheetPlacement } from '@shared/crew';
 import { Permissions } from '@shared/rbac';
 import { addDays, endOfDay, startOfDay, weekDays } from '@shared/time';
 import { t } from '@/i18n';
@@ -25,15 +27,18 @@ import { useToast } from '@/components/ui/toast-context';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { StepsHint } from '@/components/layout/StepsHint';
 import { DayTimeline } from '@/components/scheduling/DayTimeline';
-import { RosterBoard } from '@/components/scheduling/RosterBoard';
+import { RosterBoard, type PersonMove } from '@/components/scheduling/RosterBoard';
 import { PersonnelTimeline } from '@/components/scheduling/PersonnelTimeline';
 import { WeekGrid } from '@/components/scheduling/WeekGrid';
 import {
+  useAssignPersonnel,
   useAssignments,
   usePersonnel,
   useQualifications,
   useRules,
+  useSaveSheetLayout,
   useUnassignDay,
+  useUnassignPersonnel,
   useUnits,
 } from '@/hooks/queries';
 import { useAuth } from '@/hooks/auth-context';
@@ -82,6 +87,18 @@ export function ScheduleBoardPage() {
     };
   }, [view, days, day, unitId]);
 
+  const saveLayout = useSaveSheetLayout();
+  const assign = useAssignPersonnel();
+  const unassign = useUnassignPersonnel();
+  /*
+   * One step back.
+   *
+   * Rearranging by hand is a series of small guesses, and a guess needs a way
+   * out — especially a drag, which can land somewhere nobody intended. One
+   * level is enough: the next drag is itself the way back from the one before.
+   */
+  const [undo, setUndo] = useState<{ label: string; run: () => Promise<void> } | null>(null);
+
   const board = useAssignments(boardWindow);
   const timezone = board.data?.timezone ?? 'Asia/Jerusalem';
   const assignments = board.data?.assignments ?? [];
@@ -89,6 +106,114 @@ export function ScheduleBoardPage() {
   const blockingCount = conflicts.filter((conflict) => conflict.severity === 'blocking').length;
   const openAssignment = assignments.find((item) => item.id === openAssignmentId) ?? null;
   const editingAssignment = assignments.find((item) => item.id === editingId) ?? null;
+  /*
+   * Moving somebody is two acts, not one: a seat is taken once, so whoever is
+   * in the target has to stand up before anybody sits down. If the second half
+   * fails — a rule that will not bend, a seat taken in the meantime — everyone
+   * is put back where they were, because a half-finished swap is worse than a
+   * refused one.
+   */
+  const runMove = async (move: PersonMove) => {
+    const seat = (assignmentId: string, personnelId: string, role: string | null) =>
+      assign.mutateAsync({ assignmentId, personnelId, role });
+    const lift = (assignmentId: string, personnelId: string) =>
+      unassign.mutateAsync({ assignmentId, personnelId });
+
+    await lift(move.from.assignmentId, move.personnelId);
+    if (move.displaced) await lift(move.to.assignmentId, move.displaced.personnelId);
+    try {
+      await seat(move.to.assignmentId, move.personnelId, move.to.role);
+      if (move.displaced) {
+        await seat(move.from.assignmentId, move.displaced.personnelId, move.from.role);
+      }
+    } catch (error) {
+      await seat(move.from.assignmentId, move.personnelId, move.from.role).catch(() => undefined);
+      if (move.displaced) {
+        await seat(move.to.assignmentId, move.displaced.personnelId, move.to.role).catch(
+          () => undefined,
+        );
+      }
+      throw error;
+    }
+  };
+
+  const movePerson = (move: PersonMove) => {
+    void (async () => {
+      try {
+        await runMove(move);
+        toast.push(
+          'success',
+          move.displaced
+            ? t('schedule.swapped', {
+                name: move.personnelName,
+                other: move.displaced.personnelName,
+              })
+            : t('schedule.moved', { name: move.personnelName }),
+        );
+        setUndo({
+          label: move.personnelName,
+          run: () =>
+            runMove({
+              ...move,
+              from: move.to,
+              to: move.from,
+              ...(move.displaced
+                ? {
+                    displaced: {
+                      personnelId: move.displaced.personnelId,
+                      personnelName: move.displaced.personnelName,
+                    },
+                  }
+                : {}),
+            }),
+        });
+      } catch (error) {
+        toast.push(
+          'error',
+          error instanceof ApiError
+            ? error.message
+            : t('schedule.moveFailed', { name: move.personnelName }),
+        );
+      }
+    })();
+  };
+
+  const moveCard = (placements: SheetPlacement[], previous: SheetPlacement[]) => {
+    void (async () => {
+      try {
+        await saveLayout.mutateAsync(placements);
+        toast.push('success', t('schedule.layoutSaved'));
+        setUndo({
+          label: t('schedule.layoutSaved'),
+          run: async () => {
+            await saveLayout.mutateAsync(previous);
+          },
+        });
+      } catch (error) {
+        toast.push('error', error instanceof ApiError ? error.message : t('schedule.layoutFailed'));
+      }
+    })();
+  };
+
+  const undoLast = () => {
+    if (!undo) return;
+    const step = undo;
+    setUndo(null);
+    void (async () => {
+      try {
+        await step.run();
+        toast.push('success', t('schedule.undone'));
+      } catch (error) {
+        toast.push(
+          'error',
+          error instanceof ApiError
+            ? error.message
+            : t('schedule.moveFailed', { name: step.label }),
+        );
+      }
+    })();
+  };
+
   const shownPersonnel = (personnel.data ?? []).filter(
     (person) => !unitId || person.unitId === unitId,
   );
@@ -339,6 +464,15 @@ export function ScheduleBoardPage() {
         ) : null}
       </div>
 
+      {undo ? (
+        <div className="no-print mb-2 flex justify-end">
+          <Button variant="secondary" onClick={undoLast} title={t('schedule.undoHint')}>
+            <Undo2 className="size-4" aria-hidden />
+            {t('schedule.undo')}
+          </Button>
+        </div>
+      ) : null}
+
       {/* The sheet's own heading. On screen it belongs to the sheet view; the
           PDF is always the duty sheet, so it prints whatever is on screen. */}
       <p className={cn('print-title', view !== 'roster' && 'print-title-hidden')}>
@@ -362,7 +496,10 @@ export function ScheduleBoardPage() {
               conflicts={conflicts}
               qualifications={qualifications.data ?? []}
               timezone={timezone}
+              window={{ from: boardWindow.from, to: boardWindow.to }}
               onOpen={setOpenAssignmentId}
+              {...(can(Permissions.assignmentTypesWrite) ? { onMoveCard: moveCard } : {})}
+              {...(can(Permissions.assignmentsAssign) ? { onMovePerson: movePerson } : {})}
             />
           ) : null}
           {/* Whatever is on screen, the PDF is the duty sheet. */}
@@ -373,6 +510,7 @@ export function ScheduleBoardPage() {
                 conflicts={conflicts}
                 qualifications={qualifications.data ?? []}
                 timezone={timezone}
+                window={{ from: boardWindow.from, to: boardWindow.to }}
                 onOpen={setOpenAssignmentId}
               />
             </div>

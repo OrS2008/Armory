@@ -124,6 +124,33 @@ export function buildCrew(
  * names its shifts by the part of day they cover — בוקר, צהריים, לילה — which
  * is how people refer to them out loud.
  */
+/**
+ * What a post's turns are called, in the order it hands them over.
+ *
+ * A turn is named by its place in the post's own day, not by the clock: the
+ * first one out is בוקר whether the post changes at 05:00 or at 06:30, and the
+ * sheet reads בוקר, צהריים, ערב down the card every time. Naming them by the
+ * hour instead made the same turn read differently on two posts that do the
+ * same job an hour and a half apart.
+ *
+ * Only the shapes a person actually says out loud are listed. A post handed
+ * over more often than four times a day — ש״ג every four hours — has no such
+ * names, and prints as a plain list of times anyway.
+ */
+const TURN_NAMES: Record<number, string[]> = {
+  2: ['בוקר', 'ערב'],
+  3: ['בוקר', 'צהריים', 'ערב'],
+  4: ['בוקר', 'צהריים', 'ערב', 'לילה'],
+};
+
+export function turnLabels(count: number): string[] | null {
+  return TURN_NAMES[count] ?? null;
+}
+
+/**
+ * What to call a turn when the post's rhythm has no name for it — an ad-hoc
+ * task, or a post handed over more times a day than anyone names.
+ */
 export function dayPartLabel(startHour: number): string {
   // The small hours are tested first: they are night, and every later bound
   // would otherwise catch them on the way past.
@@ -161,10 +188,20 @@ export interface PostGroup {
   crewed: boolean;
 }
 
-export function groupByPost(assignments: Assignment[]): PostGroup[] {
+/**
+ * @param window The day the sheet is for. A turn belongs to the day it *starts*
+ * — 21:00–05:00 is the evening turn of the day it begins, not the first line of
+ * the next morning's sheet — so a window keeps last night off today's page. The
+ * timeline views want the opposite, everything in progress, and pass none.
+ */
+export function groupByPost(
+  assignments: Assignment[],
+  window?: { from: number; to: number },
+): PostGroup[] {
   const groups = new Map<string, PostGroup>();
   for (const assignment of assignments) {
     if (assignment.status === 'cancelled') continue;
+    if (window && (assignment.startAt < window.from || assignment.startAt > window.to)) continue;
     const existing = groups.get(assignment.assignmentTypeId);
     if (existing) {
       existing.shifts.push(assignment);
@@ -229,6 +266,67 @@ function printedRows(post: PostGroup): number {
     // A crewless post prints one time/name line however many people stand it.
     return total + (post.crewed ? 1 + seats : 1);
   }, 0);
+}
+
+/** Where one post sits on the page, as the sheet stores it. */
+export interface SheetPlacement {
+  assignmentTypeId: string;
+  column: number;
+  priority: number;
+}
+
+/**
+ * Where every post sits after one card is dropped somewhere else.
+ *
+ * Dragging a card is a statement about the whole page, not about one post: the
+ * cards below the gap close up and the ones below the landing spot move down.
+ * So the move is resolved against the columns as drawn and the result is the
+ * page in full, which is also what makes it undoable — the caller keeps the
+ * placements it had before and puts them back.
+ *
+ * Priorities are renumbered from one, in reading order, so the order a person
+ * sees is the order stored rather than a set of gaps that drift over time.
+ */
+export function moveSheetCard(
+  columns: PostGroup[][],
+  assignmentTypeId: string,
+  to: { column: number; before: string | null },
+): SheetPlacement[] {
+  const next = columns.map((column) =>
+    column.filter((post) => post.assignmentTypeId !== assignmentTypeId),
+  );
+  const moved = columns.flat().find((post) => post.assignmentTypeId === assignmentTypeId);
+  if (!moved) return [];
+
+  const target = next[Math.min(Math.max(to.column, 0), next.length - 1)];
+  if (!target) return [];
+  // The landing spot is named by the card it goes above, rather than by an
+  // index: the card being moved has already been lifted out, and an index
+  // measured before that would be one out whenever it came from higher up the
+  // same column. `null` is the foot of the column.
+  const before = to.before ? target.findIndex((post) => post.assignmentTypeId === to.before) : -1;
+  target.splice(before < 0 ? target.length : before, 0, moved);
+
+  return sheetPlacements(next);
+}
+
+/**
+ * The page as it stands, numbered from one in reading order.
+ *
+ * Renumbering rather than keeping the stored priorities means the order a
+ * person sees is the order stored, instead of a set of gaps that drift apart
+ * every time a card moves.
+ */
+export function sheetPlacements(columns: PostGroup[][]): SheetPlacement[] {
+  const placements: SheetPlacement[] = [];
+  let priority = 1;
+  columns.forEach((column, index) => {
+    for (const post of column) {
+      placements.push({ assignmentTypeId: post.assignmentTypeId, column: index + 1, priority });
+      priority += 1;
+    }
+  });
+  return placements;
 }
 
 /** A shift that covers the whole day prints its crew with no clock beside it. */

@@ -180,6 +180,21 @@ export type AssignmentTypeInput = z.infer<typeof assignmentTypeSchema>;
  */
 export type AssignmentTypeFormValues = z.input<typeof assignmentTypeSchema>;
 
+/** Where every post sits on the duty sheet, written in one action. */
+export const sheetLayoutSchema = z.object({
+  placements: z
+    .array(
+      z.object({
+        assignmentTypeId: idSchema,
+        column: z.number().int().min(1).max(3),
+        priority: z.number().int().min(1).max(999),
+      }),
+    )
+    .min(1)
+    .max(100),
+});
+export type SheetLayoutInput = z.infer<typeof sheetLayoutSchema>;
+
 export const recurrenceSchema = z
   .object({
     frequency: z.enum(['none', 'daily', 'weekdays', 'custom']).default('none'),

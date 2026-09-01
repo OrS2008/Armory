@@ -166,6 +166,43 @@ A turn covering a **whole day** prints no clock at all — it is simply today �
 A narrower screen folds column three into two and then into one, which keeps the
 reading order the sheet was written in.
 
+### Naming the turns
+
+A turn is named by its place in the post's own day rather than by the clock —
+בוקר, צהריים, ערב down the card — so the same turn reads the same on two posts
+that do the same job an hour and a half apart, and a post that hands over before
+dawn does not lead with לילה. A rhythm nobody says out loud, like ש״ג every four
+hours, has no such names and prints as a plain list of times.
+
+The day a turn belongs to is the day it *starts*: 21:00–05:00 is the evening
+turn of the day it begins, not the first line of the next morning's sheet. The
+timeline views want the opposite — everything in progress at a given hour — and
+so pass no day at all.
+
+### Arranging it by hand
+
+Both kinds of arrangement are made by dragging, on a phone as well as a desktop:
+pointer events rather than HTML5 drag-and-drop, which does not exist on touch. A
+press becomes a drag only once it has travelled, because a title bar is also the
+button that opens the post.
+
+- **A card** to another column or another place in one. `moveSheetCard` resolves
+  the drop against the page as drawn and returns the page in full, which is why
+  it is undoable: the caller keeps the placements it had and puts them back.
+  `PUT /api/v1/assignment-types/layout` writes them in one batch — a page
+  written a post at a time is a page that can be half written.
+- **A person** to another seat. Whoever is already there takes the seat being
+  vacated, so a drop onto a filled seat trades the two. A seat is addressed by
+  its place in the crew, not by the role it carries: two plain לוחם seats carry
+  the same role, and who sits in the מפקד seat is decided by `buildCrew` rather
+  than stored. Moving between two plain seats of one crew is refused before
+  anything is written, because the roster cannot express it and the move would
+  quietly undo itself on the next read.
+
+A move is two acts — a seat is taken once, so whoever is in the target stands up
+before anybody sits down. If the second half is refused, everyone is put back:
+a half-finished swap is worse than a refused one.
+
 ### Two ways to need a qualification
 
 An assignment type attaches qualifications with a `minCount`, because "everyone

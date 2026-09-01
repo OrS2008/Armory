@@ -12,7 +12,7 @@
  * period needs. It is pure: the caller decides which of them already exist and
  * writes only the rest, which is what makes running it twice harmless.
  */
-import { dayPartLabel } from './crew';
+import { dayPartLabel, turnLabels } from './crew';
 import { formatTime } from './format';
 import { SHIFT_HOUR_OPTIONS, isShiftHours } from './recurrence';
 import { DEFAULT_TIMEZONE, addDays, isDayKey, wallClockToUtc } from './time';
@@ -92,6 +92,9 @@ export function planStandingShifts(
       if (!isStandingShiftHours(post.shiftHours)) continue;
       const count = 24 / post.shiftHours;
       const minute = post.shiftStartMinute ?? 0;
+      // The briefing note names the turn the way the sheet does, or the person
+      // reading it is being told to be at a shift that is not on the page.
+      const turns = turnLabels(count);
       for (let index = 0; index < count; index += 1) {
         const startHour = post.shiftStartHour + index * post.shiftHours;
         const endHour = startHour + post.shiftHours;
@@ -113,7 +116,7 @@ export function planStandingShifts(
           // בוקר", "עיט לילה" — because that is what a person is told to be at.
           // A 24-hour post has only the one, so naming the turn says nothing.
           notes: post.briefingMinutesBefore
-            ? `תדריך עלייה ל${post.name}${count > 1 ? ` ${dayPartLabel(startHour % 24)}` : ''} בשעה ${formatTime(startAt - post.briefingMinutesBefore * 60_000, timezone)}`
+            ? `תדריך עלייה ל${post.name}${count > 1 ? ` ${turns?.[index] ?? dayPartLabel(startHour % 24)}` : ''} בשעה ${formatTime(startAt - post.briefingMinutesBefore * 60_000, timezone)}`
             : null,
         });
       }

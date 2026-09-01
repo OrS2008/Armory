@@ -1,6 +1,7 @@
 /** TanStack Query hooks — the single place server state is fetched. */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Conflict, SchedulingRule } from '@shared/conflicts';
+import type { SheetPlacement } from '@shared/crew';
 import type {
   AdminUser,
   Assignment,
@@ -114,6 +115,26 @@ export function useSetAssignmentTypeActive() {
     mutationFn: (input: { id: string; active: boolean }) =>
       api.patch<{ id: string }>(`/assignment-types/${input.id}`, { active: input.active }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.assignmentTypes }),
+  });
+}
+
+/**
+ * Where the posts sit on the duty sheet, after a card has been dragged.
+ *
+ * The whole page is sent, because moving one card moves every card below it —
+ * see `moveSheetCard`. The board reads the layout off the assignments it has
+ * already loaded, so both caches are dropped.
+ */
+export function useSaveSheetLayout() {
+  const queryClient = useQueryClient();
+  const invalidate = useScheduleInvalidation();
+  return useMutation({
+    mutationFn: (placements: SheetPlacement[]) =>
+      api.put<{ placements: number }>('/assignment-types/layout', { placements }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.assignmentTypes });
+      invalidate();
+    },
   });
 }
 

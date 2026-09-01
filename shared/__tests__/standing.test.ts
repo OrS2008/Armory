@@ -102,9 +102,11 @@ describe('laying out a standing post', () => {
     );
     // The first shift starts at 00:00 wall clock; the briefing is 20 minutes
     // earlier, and the post is handed over three times a day, so the note has
-    // to say which of the three a person is being briefed for.
-    expect(shifts[0]?.notes).toBe('תדריך עלייה לעיט לילה בשעה 23:40');
-    expect(shifts[1]?.notes).toBe('תדריך עלייה לעיט בוקר בשעה 07:40');
+    // to say which of the three a person is being briefed for — by its place
+    // in the post's day, which is what the sheet prints beside it.
+    expect(shifts[0]?.notes).toBe('תדריך עלייה לעיט בוקר בשעה 23:40');
+    expect(shifts[1]?.notes).toBe('תדריך עלייה לעיט צהריים בשעה 07:40');
+    expect(shifts[2]?.notes).toBe('תדריך עלייה לעיט ערב בשעה 15:40');
   });
 
   it('does not name the turn on a post that has only one a day', () => {
