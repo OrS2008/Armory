@@ -22,7 +22,7 @@ on:
         type: string
         default: ''
       post_name:
-        description: 'Only this post''s shifts, by name (for example: עיט). Empty means every post.'
+        description: "Only this post's shifts, by name (for example: עיט). Empty means every post."
         type: string
         default: ''
       confirm:

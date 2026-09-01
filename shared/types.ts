@@ -166,6 +166,12 @@ export interface Assignment {
   sheetLabel: string | null;
   crewRoleSuffix: string | null;
   sheetColumn: number | null;
+  /**
+   * Whether the post is still stood. A retired post keeps the shifts it was
+   * stood on, because they are the record of days that happened — but it stops
+   * printing on the sheet, unless somebody is on one of them.
+   */
+  postActive: boolean;
   color: string;
   unitId: string | null;
   title: string | null;

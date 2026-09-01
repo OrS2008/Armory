@@ -458,7 +458,7 @@ export async function loadAssignments(
 
   const rows = await env.DB.prepare(
     `SELECT a.id, a.schedule_id, a.assignment_type_id, t.name AS type_name, t.priority, t.color,
-            t.section, t.sheet_label, t.crew_role_suffix, t.sheet_column,
+            t.section, t.sheet_label, t.crew_role_suffix, t.sheet_column, t.active AS type_active,
             a.unit_id, t.instructions, a.title, a.start_at, a.end_at, a.required_headcount,
             a.status, a.publication_state, a.notes, a.updated_at
        FROM assignment_instances a
@@ -478,6 +478,7 @@ export async function loadAssignments(
       sheet_label: string | null;
       crew_role_suffix: string | null;
       sheet_column: number | null;
+      type_active: number;
       unit_id: string | null;
       instructions: string | null;
       title: string | null;
@@ -554,6 +555,7 @@ export async function loadAssignments(
     sheetLabel: row.sheet_label,
     crewRoleSuffix: row.crew_role_suffix,
     sheetColumn: row.sheet_column,
+    postActive: row.type_active === 1,
     unitId: row.unit_id,
     title: row.title,
     startAt: row.start_at,

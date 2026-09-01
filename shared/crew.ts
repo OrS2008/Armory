@@ -202,6 +202,16 @@ export function groupByPost(
   for (const assignment of assignments) {
     if (assignment.status === 'cancelled') continue;
     if (window && (assignment.startAt < window.from || assignment.startAt > window.to)) continue;
+    /*
+     * A retired post stops printing. Retiring is how a company says "we do not
+     * stand this any more", and the shifts already laid out for it are not
+     * undone by that — so leaving them on the page turned one renamed post into
+     * a card nobody could read, beside an empty one under the new name.
+     *
+     * A shift somebody is actually on still prints, retired or not: that is a
+     * person's shift, and hiding it is how somebody ends up not being relieved.
+     */
+    if (!assignment.postActive && assignment.assignees.length === 0) continue;
     const existing = groups.get(assignment.assignmentTypeId);
     if (existing) {
       existing.shifts.push(assignment);

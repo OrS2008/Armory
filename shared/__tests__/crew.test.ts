@@ -107,6 +107,7 @@ const shift = (over: Partial<Assignment>): Assignment => ({
   sheetLabel: null,
   crewRoleSuffix: null,
   sheetColumn: null,
+  postActive: true,
   color: 'amber',
   unitId: null,
   title: null,
@@ -144,6 +145,22 @@ describe('grouping into posts', () => {
 
   it('leaves a cancelled shift off the sheet', () => {
     expect(groupByPost([shift({ status: 'cancelled' })])).toHaveLength(0);
+  });
+
+  /*
+   * Retiring a post is how a company says it no longer stands one. The shifts
+   * laid out for it are not undone by that, and a renamed post whose old row
+   * kept its hundreds of shifts printed a card nobody could read beside an
+   * empty one under the new name.
+   */
+  it('leaves a retired post off the sheet', () => {
+    expect(groupByPost([shift({ postActive: false })])).toHaveLength(0);
+  });
+
+  it('still prints a retired post while somebody is on it', () => {
+    // Hiding a shift somebody is standing is how they end up not relieved.
+    const posts = groupByPost([shift({ postActive: false, assignees: [person('דנה', null)] })]);
+    expect(posts).toHaveLength(1);
   });
 
   it('groups a lower priority number first, even over a taller post', () => {
