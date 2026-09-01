@@ -106,6 +106,15 @@ bundle.
 
 The password minimum is enforced by the login form; a shorter one locks you out.
 
+### Checking what is live
+
+`https://<host>/version.json` carries the commit the bundle was built from, so
+"did the push go live" is one unauthenticated request rather than a sign-in and
+a look at the settings screen. The **Check what is live** workflow reads it,
+waits for a named commit if given one, and then reads the readiness probe —
+which is a separate question, since the right bundle can still be served by a
+deployment whose database binding is wrong.
+
 ### 5. Deploy, verify, then rotate
 
 Push to `main`, or use **Retry deployment**. When it finishes:

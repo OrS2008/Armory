@@ -1,0 +1,86 @@
+name: Check what is live
+
+# Which build is serving, and is it well.
+#
+# Deployment is Cloudflare's own Git integration: a push to main builds and
+# publishes, and nothing reports back. So "did my change go live" was only
+# answerable by signing in and reading the build reference off the settings
+# screen — which is no use when the question is whether the site came up at all.
+#
+# Two unauthenticated requests answer it: the build reference beside the bundle,
+# and the readiness probe. No Cloudflare token is involved; this reads the public
+# site exactly as a person would.
+on:
+  workflow_dispatch:
+    inputs:
+      expect_ref:
+        description: 'Commit the site should be serving (7 characters). Empty means only report.'
+        type: string
+        default: ''
+      site_host:
+        description: Public host
+        type: string
+        default: shabatzak.pages.dev
+      wait_seconds:
+        description: How long to keep checking before giving up
+        type: number
+        default: 300
+
+concurrency:
+  group: verify-deploy
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Read the live build
+    runs-on: ubuntu-latest
+    env:
+      SITE_HOST: ${{ inputs.site_host }}
+      EXPECT_REF: ${{ inputs.expect_ref }}
+      WAIT_SECONDS: ${{ inputs.wait_seconds }}
+    steps:
+      # A build takes a couple of minutes and nothing announces it, so the check
+      # waits for the reference it was told to expect rather than reading once
+      # and reporting whatever the previous build happens to still be serving.
+      - name: Wait for the build to be the one that was pushed
+        id: live
+        run: |
+          set -uo pipefail
+          deadline=$(( $(date +%s) + WAIT_SECONDS ))
+          while :; do
+            version=$(curl -fsS --max-time 20 "https://$SITE_HOST/version.json" || echo '')
+            ref=$(printf '%s' "$version" | sed -n 's/.*"ref":"\([^"]*\)".*/\1/p')
+            echo "serving: ${ref:-<no answer>}"
+            if [ -z "$EXPECT_REF" ] && [ -n "$ref" ]; then break; fi
+            if [ -n "$EXPECT_REF" ] && [ "$ref" = "$EXPECT_REF" ]; then break; fi
+            if [ "$(date +%s)" -ge "$deadline" ]; then
+              echo "::error::The site is serving '${ref:-nothing}' after ${WAIT_SECONDS}s, not '$EXPECT_REF'."
+              echo "ref=${ref}" >> "$GITHUB_OUTPUT"
+              exit 1
+            fi
+            sleep 15
+          done
+          echo "ref=${ref}" >> "$GITHUB_OUTPUT"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+
+      # Serving the right bundle and being able to answer are different things:
+      # the database binding and the schema fail on their own.
+      - name: Read the readiness probe
+        id: health
+        run: |
+          set -uo pipefail
+          health=$(curl -fsS --max-time 20 "https://$SITE_HOST/api/v1/health" || echo '')
+          echo "health=${health}" >> "$GITHUB_OUTPUT"
+          {
+            echo "### https://$SITE_HOST"
+            echo ''
+            echo "| | |"
+            echo "| --- | --- |"
+            echo "| Serving build | \`${{ steps.live.outputs.ref }}\` |"
+            echo "| Version file | \`${{ steps.live.outputs.version }}\` |"
+            echo "| Health | \`${health}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          case "$health" in
+            *'"status":"ready"'*) ;;
+            *) echo "::error::The site is not ready: ${health:-no answer}"; exit 1 ;;
+          esac
