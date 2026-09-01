@@ -117,6 +117,29 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
+      # Every post, whether or not it carries shifts. A post renamed while its
+      # old row stayed behind leaves the sheet showing an empty card under the
+      # new name and hundreds of shifts under the old one, and no count of
+      # shifts alone can show that: the row with none is the evidence.
+      - name: List every post
+        run: |
+          set -euo pipefail
+          npx wrangler d1 execute "$DATABASE_NAME" --remote --json --command \
+            "SELECT t.id, t.name, t.active, t.standing, t.shift_hours, t.shift_start_hour,
+                    t.sheet_column, t.priority,
+                    (SELECT COUNT(*) FROM assignment_instances a
+                      WHERE a.assignment_type_id = t.id) AS shifts
+               FROM assignment_types t
+              WHERE t.org_id = 'org_default'
+              ORDER BY shifts DESC, t.name" \
+            | tee posts.json
+          {
+            echo '### Every post'
+            echo '```json'
+            cat posts.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
       # The handover times, per post, per day. A post that hands over three
       # times a day and shows six rows here has been laid out twice on two
       # rhythms, which is exactly what makes its card unreadable.
