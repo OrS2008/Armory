@@ -36,12 +36,14 @@ interface Props {
 }
 
 /**
- * Changing or calling off a single shift.
+ * Changing a single shift, or taking it off the board.
  *
  * A shift that was created is not a fact of nature — its hours move, its
- * headcount changes, and sometimes it does not happen at all. Calling one off
- * cancels it rather than deleting it: who stood there yesterday is a question
- * the sheet still has to be able to answer.
+ * headcount changes, and sometimes it does not happen at all. Removing one is
+ * two acts under one name, and the server picks: a shift still ahead of us that
+ * nobody is on records nothing, so it is deleted outright; one that somebody is
+ * standing is cancelled instead, because who was at the gate on Tuesday is a
+ * question the sheet still has to be able to answer.
  */
 export function AssignmentEditDialog({ assignment, timezone, onClose }: Props) {
   if (!assignment) return null;
@@ -177,7 +179,7 @@ function EditForm({
       <div className="mt-5 rounded-[var(--radius-control)] border border-danger-soft bg-danger-soft/40 p-3">
         {confirmingCancel ? (
           <div className="flex flex-col gap-2">
-            <p className="text-sm text-danger">{t('schedule.cancelAssignmentConfirm')}</p>
+            <p className="text-sm text-danger">{t('schedule.removeAssignmentConfirm')}</p>
             <div className="flex flex-wrap gap-2">
               <Button
                 variant="danger"
@@ -185,8 +187,13 @@ function EditForm({
                 loading={cancel.isPending}
                 onClick={() =>
                   cancel.mutate(assignment.id, {
-                    onSuccess: () => {
-                      toast.push('success', t('schedule.cancelled'));
+                    onSuccess: (result) => {
+                      toast.push(
+                        'success',
+                        result.status === 'deleted'
+                          ? t('schedule.deleted')
+                          : t('schedule.cancelled'),
+                      );
                       onClose();
                     },
                     onError: (error) =>
@@ -197,7 +204,7 @@ function EditForm({
                   })
                 }
               >
-                {t('schedule.cancelAssignment')}
+                {t('schedule.removeAssignment')}
               </Button>
               <Button variant="ghost" size="sm" onClick={() => setConfirmingCancel(false)}>
                 {t('app.cancel')}
@@ -211,7 +218,7 @@ function EditForm({
             icon={<Trash2 className="size-4" />}
             onClick={() => setConfirmingCancel(true)}
           >
-            {t('schedule.cancelAssignment')}
+            {t('schedule.removeAssignment')}
           </Button>
         )}
       </div>

@@ -299,13 +299,16 @@ test.describe('scheduling workflow', () => {
     await editor.getByRole('button', { name: 'שמירת השינויים' }).click();
     await expect(page.getByRole('dialog')).toHaveCount(0);
 
-    // Calling it off takes it off the board without deleting what happened.
+    // Taking it off the board. This one starts today and nobody is on it, so
+    // it records nothing and is deleted outright rather than struck off — the
+    // difference the dialog explains before it happens.
     await page.getByRole('button', { name: '13:00 - 19:00' }).first().click();
     await page.locator('dialog[open]').getByRole('button', { name: 'עריכת המשימה' }).click();
     const closing = page.locator('dialog[open]');
-    await closing.getByRole('button', { name: 'ביטול המשימה' }).click();
-    await closing.getByRole('button', { name: 'ביטול המשימה' }).click();
-    await expect(page.getByText('המשימה בוטלה')).toBeVisible();
+    await closing.getByRole('button', { name: 'הסרת המשימה מהלוח' }).click();
+    await closing.getByRole('button', { name: 'הסרת המשימה מהלוח' }).click();
+    await expect(page.getByText(/המשימה נמחקה|המשימה בוטלה/)).toBeVisible();
+    await expect(page.getByRole('button', { name: '13:00 - 19:00' })).toHaveCount(0);
   });
 
   /*

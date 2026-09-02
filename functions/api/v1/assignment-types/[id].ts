@@ -124,14 +124,33 @@ export const onRequestDelete: PagesFunction<Env> = async ({ request, env, params
   )
     .bind(id)
     .first<{ count: number }>();
-  if ((used?.count ?? 0) > 0) {
-    return fail(409, ErrorCodes.IN_USE, { assignments: used?.count ?? 0 });
-  }
+  const shifts = used?.count ?? 0;
 
+  /*
+   * A post that has been stood takes its shifts with it, and everyone who was
+   * ever on them. That is a large enough thing to do that it is refused unless
+   * it was asked for in those words — `?shifts=delete` — rather than being the
+   * quiet consequence of pressing delete on a screen. Without it the caller is
+   * told how many stand in the way, so the choice is made knowing the size of
+   * it; retiring the post instead leaves every one of them readable.
+   */
+  const cascade = new URL(request.url).searchParams.get('shifts') === 'delete';
+  if (shifts > 0 && !cascade) return fail(409, ErrorCodes.IN_USE, { assignments: shifts });
+
+  // assignment_instances carries no cascade from its type, so the shifts go
+  // first and everything hanging off a shift follows them. The audit trail does
+  // not: it holds no foreign key precisely so that it outlives what it
+  // describes, and this removal is itself recorded there.
+  if (shifts > 0) {
+    await env.DB.prepare('DELETE FROM assignment_instances WHERE assignment_type_id = ?')
+      .bind(id)
+      .run();
+  }
   // The requirement and exclusion rows cascade; nothing else refers to a type.
   await env.DB.prepare('DELETE FROM assignment_types WHERE id = ?').bind(id).run();
   await writeAudit(env, user, AuditActions.ASSIGNMENT_TYPE_DELETED, 'assignment_type', id, {
     name: existing.name,
+    shifts,
   });
-  return ok({ id, deleted: true });
+  return ok({ id, deleted: true, shifts });
 };

@@ -433,15 +433,16 @@
 /*
  * Dragging on the sheet.
  *
- * A handle has to say it is one before it is pressed, and has to stop the page
- * scrolling under a finger that is moving a card rather than reading — which is
- * what `touch-action: none` buys, and the only reason the gesture works on a
- * phone at all.
+ * Deliberately no `touch-action` here. Marking the handles `none` did stop the
+ * page scrolling under a drag — and stopped it scrolling under a read, which is
+ * what a finger on a sheet is nearly always doing: on a phone the page is made
+ * of these title bars and these names, so the sheet became one that could not be
+ * scrolled on the device it is read on. A touch drag waits for a press and hold
+ * instead, and holds the scroll off itself once it starts. See `useSheetDrag`.
  */
 .sheet-grab,
 .sheet-drag-name {
   cursor: grab;
-  touch-action: none;
   user-select: none;
 }
 

@@ -245,10 +245,17 @@ describe('when the day asks more of the roster than it has', () => {
 });
 
 describe('auto-fill repair pass', () => {
-  it('moves someone rather than leaving the only driver in the wrong seat', () => {
+  /*
+   * This used to be the repair pass's own test: the greedy pass handed the only
+   * driver to the plain seat, and the swap put it right afterwards. A plain seat
+   * no longer reaches for somebody a named seat wants, so there is nothing left
+   * to repair here — the first pass gets it right, which is the better outcome
+   * and the one the sheet asked for. The repair pass still has its own case
+   * below, where no arrangement fills both posts.
+   */
+  it('keeps the only driver for the seat that needs one, without having to swap', () => {
     // Two people, one of them the only driver. The earlier post needs anybody;
-    // the later one needs a driver and overlaps it, so a greedy pass that hands
-    // the driver to the earlier post leaves the later one empty.
+    // the later one needs a driver and overlaps it.
     const two = [person('d1', 'א דן', ['q_drive']), person('n1', 'ב נועה')];
 
     const proposal = buildAutofillProposal({
@@ -264,7 +271,7 @@ describe('auto-fill repair pass', () => {
     });
 
     expect(proposal.gaps).toEqual([]);
-    expect(proposal.swaps).toBe(1);
+    expect(proposal.swaps).toBe(0);
     expect(proposal.proposed).toHaveLength(2);
 
     const patrol = proposal.proposed.find((item) => item.assignmentId === 'patrol');
@@ -296,6 +303,63 @@ describe('auto-fill repair pass', () => {
     expect(proposal.proposed).toHaveLength(1);
     expect(proposal.gaps).toHaveLength(1);
     expect(proposal.gaps[0]?.missing).toBe(1);
+  });
+
+  /*
+   * "אל תערבב לי מפקדים או נהגים כלוחמים."
+   *
+   * A crew of four that needs one commander and one driver has two plain seats
+   * left. Filling those with the other commanders and drivers empties the bench
+   * the next crew's named seats draw from, and the shortage shows up the
+   * following morning on a different post.
+   */
+  it('leaves the plain seats to people no named seat wants', () => {
+    const crew = [
+      person('c1', 'א מפקד', ['q_cmd']),
+      person('c2', 'ב מפקד', ['q_cmd']),
+      person('d1', 'ג נהג', ['q_drive']),
+      person('d2', 'ד נהג', ['q_drive']),
+      person('f1', 'ה לוחם'),
+      person('f2', 'ו לוחם'),
+    ];
+
+    const proposal = buildAutofillProposal({
+      assignments: [
+        post('p', 'סיור', '08:00', '16:00', 4, [
+          { qualificationId: 'q_cmd', minCount: 1 },
+          { qualificationId: 'q_drive', minCount: 1 },
+        ]),
+      ],
+      personnel: crew,
+      absences: [],
+      rules: DEFAULT_RULES,
+      qualificationNames: { q_cmd: 'מפקד', q_drive: 'נהג' },
+      timezone: TZ,
+    });
+
+    const plain = proposal.proposed.filter((item) => item.role === null);
+    expect(plain.map((item) => item.personnelId).sort()).toEqual(['f1', 'f2']);
+    // And the named seats still got the people they needed.
+    expect(proposal.proposed.filter((item) => item.role === 'q_cmd')).toHaveLength(1);
+    expect(proposal.proposed.filter((item) => item.role === 'q_drive')).toHaveLength(1);
+  });
+
+  it('spends a marked person on a plain seat when nobody else can stand it', () => {
+    // Holding them back only helps while there is somebody to hold them back
+    // for. A seat left empty to protect a bench nobody will draw from is a
+    // shortage the sheet invented.
+    const onlyMarked = [person('c1', 'א מפקד', ['q_cmd']), person('d1', 'ב נהג', ['q_drive'])];
+
+    const proposal = buildAutofillProposal({
+      assignments: [post('p', 'סיור', '08:00', '16:00', 2)],
+      personnel: onlyMarked,
+      absences: [],
+      rules: DEFAULT_RULES,
+      timezone: TZ,
+    });
+
+    expect(proposal.proposed).toHaveLength(2);
+    expect(proposal.gaps).toEqual([]);
   });
 
   it('gives a crew the seats it can fill even when one seat cannot be filled', () => {

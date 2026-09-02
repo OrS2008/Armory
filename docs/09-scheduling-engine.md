@@ -203,6 +203,31 @@ A move is two acts — a seat is taken once, so whoever is in the target stands 
 before anybody sits down. If the second half is refused, everyone is put back:
 a half-finished swap is worse than a refused one.
 
+The gesture differs by what is doing it, because a finger has only one gesture
+and the page needs it. A mouse moving with the button down can only be dragging,
+so a few pixels start it. A finger moving means scrolling — which is what most
+of the sheet is for — so touch waits for a press and hold, and any movement
+before that hands the gesture back to the page. Marking the handles
+`touch-action: none` was the first attempt and the wrong one: on a phone the
+sheet is made of those title bars and those names, so it stopped the page being
+scrolled at all.
+
+## Removing what is no longer needed
+
+Three different acts, and calling them all "delete" is how a roster loses the
+record of a day that happened:
+
+| What | Happens | Why |
+| --- | --- | --- |
+| A shift still ahead of us that nobody is on | Deleted | It records nothing. Cancelling would leave a tombstone that also blocks the post from ever being laid out over that slot again |
+| A shift somebody stood or is standing | Cancelled | Who was at the gate on Tuesday is a question the sheet has to keep answering. It counts as existing, so laying the period out again never resurrects it |
+| A post nobody needs | Deleted, with every shift it was stood on | Refused unless asked for in those words (`?shifts=delete`), and the confirmation says how many go with it. Retiring it instead keeps every one of them readable |
+
+The board offers the first two under one action, because from the reader's side
+they are the same intent — take this off the sheet — and which one applies is a
+fact about the shift rather than a decision to make. The result says which
+happened.
+
 ### Two ways to need a qualification
 
 An assignment type attaches qualifications with a `minCount`, because "everyone
@@ -219,6 +244,20 @@ requirements at `minCount: 1`. Modelling it at `0` would demand four people who
 are each both, which is why the distinction exists. The crew-level shortfall is
 reported against the assignment rather than blamed on an individual, since no
 single assignee is at fault.
+
+### Who is not filler
+
+A מפקד and a נהג are scarce in a way a לוחם is not: one of each is what makes a
+crew a crew, and there are only so many of them. A crew of four needing one of
+each has two plain seats left, and filling those with the other commanders and
+drivers empties the bench the next crew's named seats draw from — the shortage
+then shows up the following morning, on a different post.
+
+So auto-fill offers a plain seat to people holding none of the marks that name a
+seat anywhere on the board, and reaches for a marked one only when the seat
+would otherwise stand empty. Holding them back only helps while there is
+somebody to hold them back for; a seat left empty to protect a bench nobody will
+draw from is a shortage the sheet invented.
 
 Candidate ranking knows about open seats: someone holding a qualification the
 crew is still short of gains 25 points and a reason saying so, which lifts them

@@ -11,7 +11,7 @@
  * away, nobody without the qualification the crew still needs.
  */
 import { rankCandidates } from './candidates';
-import { openSeatRoles } from './crew';
+import { namedSeatMarks, openSeatRoles } from './crew';
 import { DEFAULT_CREW_ROLE } from './messages.he';
 import type { EngineAbsence, EngineAssignment, EnginePerson, SchedulingRule } from './conflicts';
 import type { FairnessWeights } from './fairness';
@@ -91,6 +91,22 @@ export function buildAutofillProposal(input: AutofillInput): AutofillProposal {
 
   const wanted = (assignment: EngineAssignment) =>
     Math.max(0, assignment.requiredHeadcount - assignment.assigneeIds.length);
+
+  /*
+   * Who is wanted for a named seat somewhere, and so is not filler.
+   *
+   * A crew of four that needs one commander and one driver has two plain seats
+   * left, and filling those with the other commanders and drivers empties the
+   * bench that the next crew's named seats draw from. So a plain seat is
+   * offered to people who hold none of these marks first, and reaches for a
+   * marked one only when the seat would otherwise stand empty — which is the
+   * one case where holding them back costs more than spending them.
+   */
+  const reserved = namedSeatMarks(input.assignments);
+  const isFiller = (personnelId: string) =>
+    !(roster.find((person) => person.id === personnelId)?.qualificationIds ?? []).some((mark) =>
+      reserved.has(mark),
+    );
 
   const targets = working
     .filter((assignment) => !assignment.cancelled && wanted(assignment) > 0)
@@ -184,9 +200,14 @@ export function buildAutofillProposal(input: AutofillInput): AutofillProposal {
     );
     if (pool.length === 0) return null;
 
+    // A plain seat takes whoever is not wanted for a named one, and only falls
+    // back to the rest when that leaves nobody.
+    const unreserved = seat ? pool : pool.filter((person) => isFiller(person.id));
+    const field = unreserved.length > 0 ? unreserved : pool;
+
     const [best] = rankCandidates({
       assignment,
-      personnel: pool,
+      personnel: field,
       roster,
       assignments: working,
       absences: input.absences,

@@ -48,6 +48,26 @@ export function seatRoles(source: {
   return roles;
 }
 
+/**
+ * The marks that name a seat somewhere on the board.
+ *
+ * A מפקד or a נהג is scarce in a way a לוחם is not: one of each is what makes a
+ * crew a crew, and there are only so many of them. Spending one on a plain seat
+ * is spending it — the post it was needed at is short a commander, and the sheet
+ * says so the following morning. This is who must be kept for those seats.
+ */
+export function namedSeatMarks(
+  posts: { requiredQualifications: { qualificationId: string; minCount: number }[] }[],
+): Set<string> {
+  const marks = new Set<string>();
+  for (const post of posts) {
+    for (const item of post.requiredQualifications) {
+      if (item.minCount > 0) marks.add(item.qualificationId);
+    }
+  }
+  return marks;
+}
+
 /** Seats nobody fills yet, given who is already on the crew. */
 export function openSeatRoles(source: {
   requiredHeadcount: number;

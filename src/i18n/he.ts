@@ -202,6 +202,10 @@ export const he = {
   'schedule.cancelAssignmentConfirm':
     'המשימה תרד מהלוח. השיבוצים שנעשו בה נשמרים בהיסטוריה ואינם נמחקים.',
   'schedule.cancelled': 'המשימה בוטלה.',
+  'schedule.removeAssignment': 'הסרת המשימה מהלוח',
+  'schedule.removeAssignmentConfirm':
+    'המשימה תוסר מהלוח. משמרת עתידית שאיש לא משובץ אליה תימחק לגמרי; משמרת שמישהו עומד בה תבוטל ותישאר לתיעוד.',
+  'schedule.deleted': 'המשימה נמחקה.',
   'schedule.saveAssignment': 'שמירת השינויים',
   'schedule.unassignDay': 'הסרה מכל משימות היום',
   'schedule.unassignDayDone': 'הוסר מ־{count} משימות באותו היום.',
@@ -360,6 +364,10 @@ export const he = {
   'assignments.deleteType': 'מחיקת סוג המשימה',
   'assignments.deleteTypeConfirm': 'סוג המשימה "{name}" יימחק. הפעולה אינה הפיכה.',
   'assignments.deleteTypeDone': 'סוג המשימה נמחק.',
+  'assignments.deleteTypeWithShiftsConfirm':
+    'סוג המשימה "{name}" יימחק יחד עם {count} המשמרות שנוצרו ממנו וכל השיבוצים שלהן. הפעולה אינה הפיכה.',
+  'assignments.deleteTypeWithShiftsDone': 'סוג המשימה נמחק, יחד עם {count} משמרות.',
+  'assignments.deleteTypeAcceptShiftLoss': 'אני מאשר שגם {count} המשמרות והשיבוצים שלהן יימחקו.',
   'assignments.deleteTypeInUse':
     'אי אפשר למחוק — כבר נוצרו {count} משמרות מסוג המשימה הזה, ומחיקה הייתה מוחקת גם אותן מהלוח ומההיסטוריה.',
   'assignments.retireType': 'השבתת סוג המשימה',

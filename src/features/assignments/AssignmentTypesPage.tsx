@@ -47,6 +47,13 @@ export function AssignmentTypesPage() {
   const [hours, setHours] = useState(8);
   const [excluded, setExcluded] = useState<string[]>([]);
   const [removing, setRemoving] = useState<AssignmentType | null>(null);
+  /*
+   * Removing a post that has been stood takes every shift it was stood on, and
+   * everyone who was ever on them. That is not a thing to do by pressing one
+   * button on a phone, so it has to be said twice — once by choosing it, once
+   * by ticking what it will cost.
+   */
+  const [acceptsShiftLoss, setAcceptsShiftLoss] = useState(false);
   const remove = useDeleteAssignmentType();
   const setActive = useSetAssignmentTypeActive();
 
@@ -261,13 +268,18 @@ export function AssignmentTypesPage() {
     {
       key: 'delete',
       label: t('assignments.deleteType'),
+      // A post that has been stood can be removed too — it just takes its
+      // shifts with it, which the confirmation says in so many words. Refusing
+      // outright left the only way out in a workflow nobody on a phone can run.
       hint:
         type.usageCount > 0
           ? t('assignments.deleteTypeInUse', { count: type.usageCount })
           : t('assignments.typeUnused'),
       icon: <Trash2 className="size-4" />,
-      disabled: type.usageCount > 0,
-      onSelect: () => setRemoving(type),
+      onSelect: () => {
+        setAcceptsShiftLoss(false);
+        setRemoving(type);
+      },
     },
   ];
 
@@ -306,7 +318,15 @@ export function AssignmentTypesPage() {
         open={Boolean(removing)}
         title={t('assignments.deleteType')}
         {...(removing
-          ? { description: t('assignments.deleteTypeConfirm', { name: removing.name }) }
+          ? {
+              description:
+                removing.usageCount > 0
+                  ? t('assignments.deleteTypeWithShiftsConfirm', {
+                      name: removing.name,
+                      count: removing.usageCount,
+                    })
+                  : t('assignments.deleteTypeConfirm', { name: removing.name }),
+            }
           : {})}
         onClose={() => setRemoving(null)}
         footer={
@@ -316,20 +336,30 @@ export function AssignmentTypesPage() {
             </Button>
             <Button
               variant="danger"
+              disabled={Boolean(removing && removing.usageCount > 0 && !acceptsShiftLoss)}
               loading={remove.isPending}
               onClick={() =>
                 removing &&
-                remove.mutate(removing.id, {
-                  onSuccess: () => {
-                    toast.push('success', t('assignments.deleteTypeDone'));
-                    setRemoving(null);
+                remove.mutate(
+                  { id: removing.id, withShifts: removing.usageCount > 0 },
+                  {
+                    onSuccess: (result) => {
+                      toast.push(
+                        'success',
+                        result.shifts > 0
+                          ? t('assignments.deleteTypeWithShiftsDone', { count: result.shifts })
+                          : t('assignments.deleteTypeDone'),
+                      );
+                      setRemoving(null);
+                      setAcceptsShiftLoss(false);
+                    },
+                    onError: (error) =>
+                      toast.push(
+                        'error',
+                        error instanceof ApiError ? error.message : t('state.errorBody'),
+                      ),
                   },
-                  onError: (error) =>
-                    toast.push(
-                      'error',
-                      error instanceof ApiError ? error.message : t('state.errorBody'),
-                    ),
-                })
+                )
               }
             >
               {t('assignments.deleteType')}
@@ -337,6 +367,19 @@ export function AssignmentTypesPage() {
           </>
         }
       >
+        {removing && removing.usageCount > 0 ? (
+          <label className="mb-3 flex items-start gap-2 text-sm text-danger">
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={acceptsShiftLoss}
+              onChange={(event) => setAcceptsShiftLoss(event.target.checked)}
+            />
+            <span>
+              {t('assignments.deleteTypeAcceptShiftLoss', { count: removing.usageCount })}
+            </span>
+          </label>
+        ) : null}
         <p className="text-sm text-ink-muted">{t('assignments.retireTypeHint')}</p>
       </Dialog>
 

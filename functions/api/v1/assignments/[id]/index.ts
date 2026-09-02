@@ -135,6 +135,32 @@ export const onRequestDelete: PagesFunction<Env> = async ({ request, env, params
   const outOfScope = await requireScope(env, user, existing.unit_id);
   if (outOfScope) return outOfScope;
 
+  /*
+   * Removing a shift is two different acts wearing one name.
+   *
+   * A shift somebody stood, or is standing, is a record: who was at the gate on
+   * Tuesday is a question the sheet has to keep answering, so it is cancelled —
+   * struck off the board, kept in the database, and counted as existing so that
+   * laying the period out again never resurrects it.
+   *
+   * A shift still ahead of us that nobody is on records nothing. Cancelling it
+   * leaves a tombstone that also blocks the post from ever being laid out over
+   * that slot again, which is not what "we do not need this one" means. That
+   * one is deleted.
+   */
+  const staffed = await env.DB.prepare(
+    'SELECT COUNT(*) AS count FROM assignment_personnel WHERE assignment_id = ?',
+  )
+    .bind(id)
+    .first<{ count: number }>();
+  const emptyAndAhead = (staffed?.count ?? 0) === 0 && existing.start_at > now();
+
+  if (emptyAndAhead) {
+    await env.DB.prepare('DELETE FROM assignment_instances WHERE id = ?').bind(id).run();
+    await writeAudit(env, user, AuditActions.ASSIGNMENT_DELETED, 'assignment', id);
+    return ok({ id, status: 'deleted' });
+  }
+
   await env.DB.prepare(
     "UPDATE assignment_instances SET status = 'cancelled', updated_by = ?, updated_at = ? WHERE id = ?",
   )

@@ -68,10 +68,22 @@ test.describe('assignment types', () => {
     const row = page.locator('tr, li').filter({ hasText: 'עיט' }).first();
     await row.getByRole('button', { name: 'עוד — עיט' }).click();
 
-    // Offered but refused, and it says how many shifts stand in the way rather
-    // than leaving the reader to guess why the option does nothing.
+    // Offered, and it says how many shifts stand behind it rather than leaving
+    // the reader to guess. Removing it is allowed — it just takes them with it,
+    // which the confirmation states before anything happens.
     const remove = page.getByRole('menuitem', { name: 'מחיקת סוג המשימה' });
-    await expect(remove).toBeDisabled();
+    await expect(remove).toBeEnabled();
     await expect(page.getByText(/כבר נוצרו \d+ משמרות מסוג המשימה הזה/)).toBeVisible();
+
+    await remove.click();
+    const confirm = page.locator('dialog[open]');
+    await expect(confirm.getByText(/יימחק יחד עם \d+ המשמרות שנוצרו ממנו/)).toBeVisible();
+    // Saying it once is choosing it; the cost has to be ticked before the
+    // button that spends it will do anything.
+    await expect(confirm.getByRole('button', { name: 'מחיקת סוג המשימה' })).toBeDisabled();
+    await confirm.getByRole('checkbox').check();
+    await expect(confirm.getByRole('button', { name: 'מחיקת סוג המשימה' })).toBeEnabled();
+    // Not this time: עיט is the post every other spec on this database reads.
+    await page.keyboard.press('Escape');
   });
 });

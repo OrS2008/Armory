@@ -100,11 +100,23 @@ export function useQualifications() {
   });
 }
 
+/**
+ * Removing a post. `withShifts` takes the shifts it was stood on with it, and
+ * everyone who was ever on them — refused without it, so the size of the act is
+ * always known before it happens.
+ */
 export function useDeleteAssignmentType() {
   const queryClient = useQueryClient();
+  const invalidate = useScheduleInvalidation();
   return useMutation({
-    mutationFn: (id: string) => api.delete<{ id: string }>(`/assignment-types/${id}`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.assignmentTypes }),
+    mutationFn: (input: { id: string; withShifts?: boolean }) =>
+      api.delete<{ id: string; shifts: number }>(
+        `/assignment-types/${input.id}${input.withShifts ? '?shifts=delete' : ''}`,
+      ),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.assignmentTypes });
+      invalidate();
+    },
   });
 }
 
@@ -378,10 +390,16 @@ export function useUpdateAssignment() {
 }
 
 /** Cancels the shift. The row and its history are kept, never deleted. */
+/**
+ * Taking one shift off the board. The server decides whether that is a deletion
+ * or a cancellation — a shift nobody stood and nobody will is deleted; one that
+ * is somebody's shift is struck off and kept — and says which it did.
+ */
 export function useCancelAssignment() {
   const invalidate = useScheduleInvalidation();
   return useMutation({
-    mutationFn: (id: string) => api.delete<{ id: string }>(`/assignments/${id}`),
+    mutationFn: (id: string) =>
+      api.delete<{ id: string; status: 'deleted' | 'cancelled' }>(`/assignments/${id}`),
     onSuccess: invalidate,
   });
 }
