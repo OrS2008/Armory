@@ -46,6 +46,22 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     0,
   );
 
+  /*
+   * Who is at a gate at this minute.
+   *
+   * The counts above answer "how is today shaped"; this answers the question a
+   * duty officer actually walks in with, and which the sheet makes them work
+   * out by reading a column of times against a clock. A shift standing empty
+   * right now is in here too — an uncovered post is the reason to look.
+   */
+  const at = Date.now();
+  const onDuty = todaysAssignments
+    .filter(
+      (assignment) =>
+        assignment.status !== 'cancelled' && assignment.startAt <= at && assignment.endAt > at,
+    )
+    .sort((a, b) => a.endAt - b.endAt || a.priority - b.priority);
+
   const recent = can(user, Permissions.auditRead)
     ? await env.DB.prepare(
         `SELECT id, actor_name, action, entity_type, entity_id, created_at
@@ -72,6 +88,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
       openSeatCount: openSeats,
     },
     conflictSummary: summarizeConflicts(evaluation.conflicts),
+    onDuty,
     upcoming: evaluation.assignments
       .filter((assignment) => assignment.endAt > Date.now())
       .slice(0, 8),

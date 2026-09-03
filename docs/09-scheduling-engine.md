@@ -353,6 +353,24 @@ assignment — the override is recorded, not forgotten.
 Saturday) hours plus the assignment count in a window, and combines them with
 configurable weights. Night and weekend hours weigh more than ordinary hours.
 
+### Is the load actually spread evenly?
+
+The workload table sorts by hours, which reads as a leaderboard and answers
+"how much has each person done". The question a commander opens it with is the
+other one — *is anyone carrying the company, and is anyone being missed* — and
+that needs a middle to measure against.
+
+`summarizeBalance` supplies it, against the **median** rather than the mean: one
+person on a fortnight of nights drags a mean far enough that half the company
+reads as under-loaded, and that person existing is the reason the number is
+being looked at. It reports the median, each person's signed distance from it,
+the spread between the ends, and the share of the load held by the heaviest
+fifth — even is 20%, and past about a third the roster is leaning rather than
+merely uneven.
+
+Nights and weekends are measurable in their own right, because that is where an
+uneven roster is felt first and a total hides them.
+
 `rankCandidates` scores each person out of 100:
 
 - 70 points scaled by how light their recent workload is, relative to the pool.

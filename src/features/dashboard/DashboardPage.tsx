@@ -10,6 +10,7 @@ import { buttonClass } from '@/components/ui/button-styles';
 import { EmptyState, QueryState } from '@/components/ui/States';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { useDashboard } from '@/hooks/queries';
+import { OnDutyNow } from './OnDutyNow';
 import { SetupChecklist } from './SetupChecklist';
 
 export function DashboardPage() {
@@ -83,6 +84,8 @@ export function DashboardPage() {
                 tone={data.stats.openSeatCount > 0 ? 'warning' : 'success'}
               />
             </div>
+
+            <OnDutyNow assignments={data.onDuty} timezone={data.timezone} />
 
             <div className="grid gap-4 xl:grid-cols-2">
               <Card>

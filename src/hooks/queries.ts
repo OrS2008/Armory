@@ -63,6 +63,8 @@ export interface DashboardData {
     entityId: string;
     createdAt: number;
   }[];
+  /** Every post covered — or standing empty — at the moment of the request. */
+  onDuty: Assignment[];
 }
 
 export function useDashboard() {

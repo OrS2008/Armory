@@ -27,9 +27,14 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     filters.push('(r.personnel_id = ? OR r.replacement_personnel_id = ?)');
     bindings.push(user.personnelId, user.personnelId);
   }
-  if (params.has('status')) {
+  const status = params.get('status');
+  if (status === 'open') {
+    // What the screen is for: the requests still waiting on somebody. A
+    // decided one is a record, and it is asked for by name.
+    filters.push("r.status IN ('pending','proposed')");
+  } else if (status) {
     filters.push('r.status = ?');
-    bindings.push(params.get('status'));
+    bindings.push(status);
   }
   const where = filters.length > 0 ? `WHERE ${filters.join(' AND ')}` : '';
 

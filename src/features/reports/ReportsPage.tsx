@@ -13,11 +13,14 @@ import { DataTable, type Column } from '@/components/ui/DataTable';
 import { QueryState } from '@/components/ui/States';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { useWorkloadReport, type WorkloadRow } from '@/hooks/queries';
+import { BalancePanel } from './BalancePanel';
+import { balanceOf, measureLabels, type Measure } from './balance';
 
 const RANGES = [7, 14, 30, 90] as const;
 
 export function ReportsPage() {
   const [rangeDays, setRangeDays] = useState<number>(30);
+  const [measure, setMeasure] = useState<Measure>('totalHours');
   // Named `range`, not `window`: the global one is needed for printing.
   const range = useMemo(() => {
     const to = startOfDay(todayKey()) + DAY;
@@ -27,6 +30,7 @@ export function ReportsPage() {
   const report = useWorkloadReport(range);
   const rows = report.data?.workload ?? [];
   const gaps = report.data?.staffingGaps ?? [];
+  const balance = balanceOf(rows, measure);
 
   const stamp = formatDayKey(todayKey()).replace(/\//g, '-');
 
@@ -38,6 +42,7 @@ export function ReportsPage() {
     t('reports.weekendHours'),
     t('reports.assignmentCount'),
     t('reports.fairnessScore'),
+    `${t('reports.deviation')} (${measureLabels[measure]})`,
   ];
 
   const workloadRow = (row: WorkloadRow) => [
@@ -48,6 +53,7 @@ export function ReportsPage() {
     row.weekendHours,
     row.assignmentCount,
     row.score,
+    balance.deviation.get(row.personnelId) ?? 0,
   ];
 
   const exportCsv = () => {
@@ -72,6 +78,7 @@ export function ReportsPage() {
           { header: workloadColumns[4] as string, width: 12 },
           { header: workloadColumns[5] as string, width: 14 },
           { header: workloadColumns[6] as string, width: 12 },
+          { header: workloadColumns[7] as string, width: 18 },
         ],
         rows: rows.map(workloadRow),
       },
@@ -141,6 +148,26 @@ export function ReportsPage() {
       header: t('reports.fairnessScore'),
       className: 'ltr-inline tabular-nums',
       cell: (row) => row.score,
+    },
+    {
+      /*
+       * The one column that answers the question the table is really being
+       * read for. A number on its own says how much somebody did; a distance
+       * from the middle says whether that is a lot.
+       */
+      key: 'deviation',
+      header: t('reports.deviation'),
+      className: 'ltr-inline tabular-nums',
+      cell: (row) => {
+        const away = balance.deviation.get(row.personnelId) ?? 0;
+        if (away === 0) return '0';
+        return (
+          <span className={away > 0 ? 'text-warning' : 'text-success'}>
+            {away > 0 ? '+' : '−'}
+            {formatHours(Math.abs(away))}
+          </span>
+        );
+      },
     },
   ];
 
@@ -212,6 +239,8 @@ export function ReportsPage() {
         onRetry={() => void report.refetch()}
       >
         <div className="flex flex-col gap-4">
+          <BalancePanel rows={rows} measure={measure} onMeasureChange={setMeasure} />
+
           <div className="card p-0">
             <DataTable
               rows={rows}

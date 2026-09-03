@@ -27,7 +27,16 @@ const statusLabels: Record<ReplacementStatus, string> = {
 export function ReplacementsPage() {
   const { can } = useAuth();
   const toast = useToast();
-  const replacements = useReplacements();
+  /*
+   * Open requests, unless asked otherwise.
+   *
+   * The screen exists to answer "what is waiting on me", and the empty state
+   * has always said "אין בקשות החלפה פתוחות" — but the list was every request
+   * ever made, so a company that had approved a hundred replacements opened
+   * this and read a hundred settled rows to find the two that were not.
+   */
+  const [filter, setFilter] = useState<'open' | 'all' | ReplacementStatus>('open');
+  const replacements = useReplacements(filter === 'all' ? undefined : filter);
   const personnel = usePersonnel();
   const [selected, setSelected] = useState<Record<string, string>>({});
 
@@ -166,14 +175,35 @@ export function ReplacementsPage() {
 
   return (
     <>
-      <PageHeader title={t('replacements.title')} description={t('replacements.subtitle')} />
+      <PageHeader
+        title={t('replacements.title')}
+        description={t('replacements.subtitle')}
+        actions={
+          <Select
+            className="w-auto"
+            aria-label={t('replacements.filter')}
+            value={filter}
+            onChange={(event) => setFilter(event.target.value as typeof filter)}
+          >
+            <option value="open">{t('replacements.filterOpen')}</option>
+            {(Object.keys(statusLabels) as ReplacementStatus[]).map((status) => (
+              <option key={status} value={status}>
+                {statusLabels[status]}
+              </option>
+            ))}
+            <option value="all">{t('replacements.filterAll')}</option>
+          </Select>
+        }
+      />
 
       <div className="card p-0">
         <QueryState
           isLoading={replacements.isLoading}
           error={replacements.error}
           isEmpty={requests.length === 0}
-          emptyDescription={t('replacements.empty')}
+          emptyDescription={
+            filter === 'open' ? t('replacements.empty') : t('replacements.emptyFiltered')
+          }
           onRetry={() => void replacements.refetch()}
         >
           <DataTable

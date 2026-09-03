@@ -43,3 +43,14 @@ export function formatRange(startAt: number, endAt: number, timeZone = DEFAULT_T
     ? `${formatDate(startAt, timeZone)} ${formatTime(startAt, timeZone)}–${formatTime(endAt, timeZone)}`
     : `${formatDateTime(startAt, timeZone)} – ${formatDateTime(endAt, timeZone)}`;
 }
+
+/**
+ * How long until a handover, said the way it is said out loud: minutes while
+ * it is under an hour, `H:MM` above that. Rounded up, because a handover in
+ * fifty seconds is a handover in a minute rather than in none.
+ */
+export function formatCountdown(ms: number): string {
+  const minutes = Math.max(0, Math.ceil(ms / 60_000));
+  if (minutes < 60) return `${minutes} דק׳`;
+  return `${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, '0')}`;
+}
