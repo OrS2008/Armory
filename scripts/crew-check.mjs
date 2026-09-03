@@ -18,7 +18,14 @@ if (names.length === 0) {
 
 const q = (value) => `'${String(value).replace(/'/g, "''")}'`;
 const list = names.map(q).join(',');
+const post = q(spec.post ?? '');
+// The post itself first: laying a crew on one that is not there fails on a
+// foreign key, which says far less than naming the post that is missing.
 console.log(
-  `SELECT ${q(spec.post ?? '')} AS post, display_name, status
-     FROM personnel WHERE display_name IN (${list}) ORDER BY display_name;`,
+  `SELECT 'post' AS row, id AS a, name AS b, CAST(active AS TEXT) AS c
+     FROM assignment_types WHERE id = ${post} OR name = ${post}
+   UNION ALL
+   SELECT 'person', display_name, status, ''
+     FROM personnel WHERE display_name IN (${list})
+   ORDER BY row, a;`,
 );
