@@ -1,6 +1,7 @@
 import { ErrorCodes } from '../../../../shared/errors';
-import { Permissions } from '../../../../shared/rbac';
+import { Permissions, can } from '../../../../shared/rbac';
 import { replacementDecisionSchema } from '../../../../shared/schemas';
+import { DAY } from '../../../../shared/time';
 import {
   AuditActions,
   auditStatement,
@@ -8,11 +9,19 @@ import {
   usersForPersonnel,
 } from '../../../_lib/audit';
 import { requireUser } from '../../../_lib/auth';
+import { engineQualifications, evaluateWindow } from '../../../_lib/data';
+import { verifySeat } from '../../../_lib/seat';
 import { checkOrigin, fail, newId, now, ok, readBody, type Env } from '../../../_lib/http';
 
 /**
  * Approving a replacement swaps the two people on the assignment in a single
  * batch, so the schedule never shows both or neither.
+ *
+ * It is a scheduling decision like any other, and so it goes through the same
+ * gate. Before this, it did not: the swap was written unchecked, which let an
+ * approval do what the board would have refused — double-book the incoming
+ * person, spend their rest, or drop them into a מפקד seat they do not hold. The
+ * seat's mark travels with the seat, so a driver is replaced by a driver.
  */
 export const onRequestPatch: PagesFunction<Env> = async ({ request, env, params }) => {
   const origin = checkOrigin(request);
@@ -25,7 +34,7 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env, params 
 
   const existing = await env.DB.prepare(
     `SELECT r.id, r.assignment_id, r.personnel_id, r.replacement_personnel_id, r.status,
-            a.publication_state
+            a.publication_state, a.start_at, a.end_at
        FROM replacement_requests r
        JOIN assignment_instances a ON a.id = r.assignment_id
       WHERE r.id = ?`,
@@ -38,6 +47,8 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env, params 
       replacement_personnel_id: string | null;
       status: string;
       publication_state: string;
+      start_at: number;
+      end_at: number;
     }>();
   if (!existing) return fail(404, ErrorCodes.NOT_FOUND);
 
@@ -58,14 +69,81 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env, params 
   ];
 
   if (input.status === 'approved' && replacementId) {
+    if (replacementId === existing.personnel_id) {
+      return fail(422, ErrorCodes.VALIDATION_FAILED, {
+        fields: { replacementPersonnelId: 'המחליף והמוחלף הם אותו אדם' },
+      });
+    }
+
+    // The seat the outgoing person stands in. It is the seat the incoming
+    // person inherits, mark and all.
+    const seat = await env.DB.prepare(
+      `SELECT personnel_id, role_qualification_id
+         FROM assignment_personnel WHERE assignment_id = ? AND personnel_id IN (?, ?)`,
+    )
+      .bind(existing.assignment_id, existing.personnel_id, replacementId)
+      .all<{ personnel_id: string; role_qualification_id: string | null }>();
+    const rows = seat.results ?? [];
+    if (rows.some((seatRow) => seatRow.personnel_id === replacementId)) {
+      return fail(409, ErrorCodes.ALREADY_ASSIGNED);
+    }
+    const role =
+      rows.find((seatRow) => seatRow.personnel_id === existing.personnel_id)
+        ?.role_qualification_id ?? null;
+
+    const evaluation = await evaluateWindow(env, {
+      from: existing.start_at - 8 * DAY,
+      to: existing.end_at + 8 * DAY,
+    });
+    const person = evaluation.personnel.find((candidate) => candidate.id === replacementId);
+    if (!person) return fail(404, ErrorCodes.NOT_FOUND);
+    if (person.status !== 'active') {
+      return fail(422, ErrorCodes.VALIDATION_FAILED, {
+        fields: { replacementPersonnelId: 'ניתן לשבץ רק אנשים פעילים' },
+      });
+    }
+
+    const qualifications = await engineQualifications(env);
+    const verdict = verifySeat(evaluation, qualifications, person, {
+      assignmentId: existing.assignment_id,
+      role,
+      vacating: existing.personnel_id,
+    });
+    if (verdict.refusal) {
+      return fail(422, ErrorCodes.VALIDATION_FAILED, {
+        fields: { replacementPersonnelId: verdict.refusal },
+      });
+    }
+    const { blocking } = verdict;
+    if (blocking.length > 0) {
+      if (!input.overrideReason) {
+        return fail(409, ErrorCodes.SCHEDULING_CONFLICT, { conflicts: blocking });
+      }
+      if (!can(user, Permissions.assignmentsOverride)) {
+        return fail(403, ErrorCodes.FORBIDDEN, { conflicts: blocking });
+      }
+      if (blocking.some((conflict) => !conflict.overridable)) {
+        return fail(403, ErrorCodes.OVERRIDE_NOT_ALLOWED, { conflicts: blocking });
+      }
+    }
+
     statements.push(
       env.DB.prepare(
         'DELETE FROM assignment_personnel WHERE assignment_id = ? AND personnel_id = ?',
       ).bind(existing.assignment_id, existing.personnel_id),
       env.DB.prepare(
-        `INSERT OR IGNORE INTO assignment_personnel (id, assignment_id, personnel_id, assigned_by, assigned_at)
-         VALUES (?, ?, ?, ?, ?)`,
-      ).bind(newId('apr'), existing.assignment_id, replacementId, user.id, timestamp),
+        `INSERT OR IGNORE INTO assignment_personnel
+           (id, assignment_id, personnel_id, assigned_by, assigned_at, override_reason, role_qualification_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      ).bind(
+        newId('apr'),
+        existing.assignment_id,
+        replacementId,
+        user.id,
+        timestamp,
+        blocking.length > 0 ? (input.overrideReason ?? null) : null,
+        role,
+      ),
       env.DB.prepare(
         `UPDATE assignment_instances
             SET publication_state = CASE WHEN publication_state = 'published' THEN 'modified' ELSE publication_state END,
@@ -88,6 +166,19 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env, params 
           null,
           'assignment',
           existing.assignment_id,
+        ),
+      );
+    }
+
+    if (blocking.length > 0) {
+      statements.push(
+        auditStatement(
+          env,
+          user,
+          AuditActions.ASSIGNMENT_OVERRIDE,
+          'assignment',
+          existing.assignment_id,
+          { personnelId: replacementId, codes: blocking.map((conflict) => conflict.code) },
         ),
       );
     }

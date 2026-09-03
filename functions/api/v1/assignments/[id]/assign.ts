@@ -1,4 +1,3 @@
-import { detectConflicts } from '../../../../../shared/conflicts';
 import { ErrorCodes } from '../../../../../shared/errors';
 import { formatRange } from '../../../../../shared/format';
 import { Permissions, can } from '../../../../../shared/rbac';
@@ -11,13 +10,8 @@ import {
   writeAudit,
 } from '../../../../_lib/audit';
 import { requireScope, requireUser } from '../../../../_lib/auth';
-import {
-  evaluateWindow,
-  engineQualifications,
-  toEngineAssignment,
-  toEngineAbsences,
-  toEnginePerson,
-} from '../../../../_lib/data';
+import { evaluateWindow, engineQualifications } from '../../../../_lib/data';
+import { verifySeat } from '../../../../_lib/seat';
 import { checkOrigin, fail, newId, now, ok, readBody, type Env } from '../../../../_lib/http';
 
 export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }) => {
@@ -81,46 +75,18 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }
    * The conflict engine says the same thing, but it says it as a rule: a rule
    * can be switched off in settings, and a blocking one can be overridden with
    * a reason by anybody allowed to override. Neither is what "only a driver
-   * drives" means. This check is not a rule — it stands outside the engine,
-   * before anything is written, and there is no way past it.
+   * drives" means. `verifySeat` answers it outside the engine, before anything
+   * is written, and there is no way past it.
    */
   const qualifications = await engineQualifications(env);
-  if (input.role && !person.qualificationIds.includes(input.role)) {
-    const label = qualifications.qualificationNames[input.role] ?? input.role;
-    return fail(422, ErrorCodes.VALIDATION_FAILED, {
-      fields: {
-        role: `${person.displayName} אינו מחזיק בהכשיר ${label} ולכן אינו יכול למלא תפקיד זה`,
-      },
-    });
-  }
-
-  // Re-run the engine with the person added — the same code the board uses.
-  const engineAssignments = evaluation.assignments.map((assignment) => {
-    const engine = toEngineAssignment(assignment);
-    return assignment.id === assignmentId
-      ? {
-          ...engine,
-          assigneeIds: [...engine.assigneeIds, input.personnelId],
-          assigneeRoles: { ...engine.assigneeRoles, [input.personnelId]: input.role ?? null },
-          overriddenBy: [],
-        }
-      : engine;
+  const verdict = verifySeat(evaluation, qualifications, person, {
+    assignmentId,
+    role: input.role ?? null,
   });
-  const conflicts = detectConflicts({
-    assignments: engineAssignments,
-    personnel: [toEnginePerson(person)],
-    absences: toEngineAbsences(evaluation.availability).filter(
-      (absence) => absence.personnelId === input.personnelId,
-    ),
-    rules: evaluation.rules,
-    ...qualifications,
-    timezone: evaluation.timezone,
-  }).filter(
-    (conflict) =>
-      conflict.personnelId === input.personnelId && conflict.assignmentId === assignmentId,
-  );
-
-  const blocking = conflicts.filter((conflict) => conflict.severity === 'blocking');
+  if (verdict.refusal) {
+    return fail(422, ErrorCodes.VALIDATION_FAILED, { fields: { role: verdict.refusal } });
+  }
+  const { conflicts, blocking } = verdict;
   if (blocking.length > 0) {
     if (!input.overrideReason) {
       return fail(409, ErrorCodes.SCHEDULING_CONFLICT, { conflicts: blocking });

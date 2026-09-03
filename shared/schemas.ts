@@ -341,6 +341,7 @@ export const replacementSchema = z.object({
 export const replacementDecisionSchema = z.object({
   status: z.enum(['proposed', 'approved', 'rejected', 'cancelled']),
   replacementPersonnelId: optionalId(),
+  overrideReason: optionalText(300),
 });
 
 export const importRowSchema = z.object({

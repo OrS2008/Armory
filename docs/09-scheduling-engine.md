@@ -286,6 +286,27 @@ Candidate ranking knows about open seats: someone holding a qualification the
 crew is still short of gains 25 points and a reason saying so, which lifts them
 above an equally rested peer who would leave the gap open.
 
+### An approved replacement is a scheduling decision
+
+A replacement used to be written unchecked: the approval swapped the two people
+in one batch and asked nothing. That let an approval do what the board would
+have refused — double-book the person coming in, spend the rest they were owed,
+or drop them into a מפקד seat they do not hold — and it dropped the seat's mark
+on the way, so a driver was replaced by a nobody and the post quietly lost its
+driver.
+
+`functions/_lib/seat.ts` now answers the one question all of these ask: *would
+seating this person here break anything?* It simulates the placement — with the
+outgoing person standing up, where somebody is standing up — re-runs the engine
+over the window, and returns the conflicts for that person on that assignment,
+plus the seat refusal that stands outside the engine. `assign` and the
+replacement approval both go through it, so they cannot drift into disagreeing
+about the same person on the same shift.
+
+The seat's mark travels with the seat: whoever comes in inherits the
+`role_qualification_id` the outgoing person stood in, and is refused if they do
+not hold it.
+
 ## Conflict shape
 
 Every conflict answers the four questions the plan asks for:
