@@ -85,6 +85,7 @@ listed in `shared/errors.ts`, messages in `shared/messages.he.ts`.
 | POST | `/assignments/:id/acknowledge` | session + linked personnel | Soldier confirms their own assignment |
 | GET / POST | `/assignment-types` | `assignment_types.read` / `.write` | |
 | PATCH | `/assignment-types/:id` | `assignment_types.write` | |
+| GET / PUT | `/assignment-types/:id/crews` | `assignment_types.read` / `.write` | The post's fixed crews — "these four, together". PUT replaces the whole set in one batch |
 
 ### Schedules
 

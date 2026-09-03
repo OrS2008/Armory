@@ -86,6 +86,8 @@ export const conflictMessages: Record<string, string> = {
   EXCLUDED_QUALIFICATION:
     '{person} מסומן {qualification}, ולמשימת {assignment} לא משבצים מי שמסומן כך.',
   NOT_SCHEDULABLE: '{person} מסומן {qualification} ואינו משובץ למשימות.',
+  CREW_MEMBER_ONLY: '{person} אינו חבר באף סבב של {assignment}, ולכן אינו יכול לעמוד בה.',
+  CREW_NO_MIX: '{person} שייך ל{crew}, והמשמרת עומדת ב{standing} — משמרת אחת היא סבב אחד.',
 };
 
 /** How to resolve it, per conflict code. */
@@ -109,6 +111,8 @@ export const conflictResolutions: Record<string, string> = {
   EXCLUDED_QUALIFICATION:
     'בחרו אדם אחר, או הסירו את {qualification} מרשימת הפסילות של סוג המשימה בהגדרות ← סוגי משימות.',
   NOT_SCHEDULABLE: 'אם יש לשבצו בכל זאת, הסירו ממנו את הסימון {qualification} במסך כוח האדם.',
+  CREW_MEMBER_ONLY: 'בחרו מחברי אחד הסבבים, או הוסיפו אותו לסבב בהגדרות סוג המשימה.',
+  CREW_NO_MIX: 'החליפו אותו בחבר {standing}, או העבירו את כל המשמרת ל{crew}.',
 };
 
 export function conflictMessage(code: string, params: Params): string {
@@ -240,6 +244,8 @@ export const ruleDescriptions: Record<string, string> = {
   EXCLUDED_QUALIFICATION:
     'סוג משימה יכול לפסול סימונים: למשימת סיור לא משבצים מי שמסומן מבצעים, ולש״ג לא משבצים מפקד.',
   NOT_SCHEDULABLE: 'מי שמסומן מפלג אינו נכנס לסבב המשימות כלל.',
+  CREW_MEMBER_ONLY: 'משימה שמוגדרים לה סבבים קבועים נעמדת רק על ידי חבריהם.',
+  CREW_NO_MIX: 'סבב עולה כצוות שלם — אין מערבבים שני סבבים במשמרת אחת.',
 };
 
 export const severityLabels: Record<Severity, string> = {

@@ -220,6 +220,27 @@ export interface ReplacementRequest {
   acceptedAt: number | null;
 }
 
+/**
+ * A fixed crew on a post: people who stand it together rather than separately.
+ *
+ * "אלה הארבעה, ביחד" is a fact about the group, so it cannot be said with a
+ * qualification — a qualification is always a fact about one person.
+ */
+export interface AssignmentTypeCrew {
+  id: string;
+  assignmentTypeId: string;
+  name: string;
+  /** Where it sits in the rotation, lower first. */
+  position: number;
+  active: boolean;
+  members: {
+    personnelId: string;
+    personnelName: string;
+    /** The seat they take in this crew, or null for a plain one. */
+    roleQualificationId: string | null;
+  }[];
+}
+
 export type VolunteerStatus = 'offered' | 'accepted' | 'declined' | 'withdrawn';
 
 /** Somebody putting their name down for a seat nobody is standing. */

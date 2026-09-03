@@ -161,6 +161,58 @@ The board reads the note off the shift, falling back to the post's
 `instructions`, so a fixed rule and a computed time share one הערות column and
 the day's own edit to a shift always wins.
 
+## A post stood by a fixed crew
+
+חפ״ק is not four seats filled from the roster. It is two rotations of four who
+go on together, and a shift is one whole rotation.
+
+That cannot be said with a qualification. A qualification is always a fact
+about one person — "holds a driving licence" — and "these four, together" is a
+fact about the group. So the group is a row:
+
+| Table | What it holds |
+| --- | --- |
+| `assignment_type_crews` | A crew on a post: its name, and where it sits in the rotation |
+| `assignment_type_crew_members` | Who is in it, and which seat they take |
+
+A post with no crews behaves exactly as it always did. Defining crews on one
+does two things at once, and both are blocking and **not overridable** —
+"צוות שלם, בלי חריגות בכלל":
+
+| Rule | What it refuses |
+| --- | --- |
+| `CREW_MEMBER_ONLY` | Anybody who is not in one of that post's crews |
+| `CREW_NO_MIX` | A second crew on a shift the first is already standing |
+
+Like a named seat, the real enforcement is in `verifySeat`, outside the rules
+engine: a rule can be switched off in settings and a blocking one can be
+overridden with a reason, and neither is what a fixed crew means. The rules
+still run so that rows written before this, and the board, can show it.
+
+### Which crew a shift *is*
+
+Reporting "the others" needs an answer that does not depend on the order rows
+came back in: the crew most of the shift belongs to, earliest in the rotation
+where that is a tie. Two against two would otherwise blame whichever pair
+SQLite happened to list second, and the same shift would read differently on
+two loads.
+
+### The rotations alternate on their own
+
+Nothing schedules סבב א׳ then סבב ב׳ — the rules already there do it. חפ״ק is
+handed over once a day, so the crew that has just stood twenty-four hours has
+no rest at all before the next one starts, and `MIN_REST` refuses them. The
+other crew is what is left. Building an alternator would have been a second
+mechanism saying what the first already says.
+
+### Editing them
+
+The whole set is saved in one act (`PUT /assignment-types/:id/crews`). A crew
+only means anything beside the others, so saving one at a time invites a moment
+where somebody is in both or in neither — and while that lasts, every shift on
+the post is refused. Somebody in two crews of one post is refused outright:
+"which crew is this shift" would have no answer.
+
 ## The printed page
 
 The sheet is not a packing problem. It is a fixed three-column page, read right

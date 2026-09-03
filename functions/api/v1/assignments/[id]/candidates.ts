@@ -57,6 +57,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env, params })
     absences: toEngineAbsences(evaluation.availability),
     rules: evaluation.rules,
     ...qualifications,
+    crewsByType: evaluation.crewsByType,
     timezone: evaluation.timezone,
   });
 

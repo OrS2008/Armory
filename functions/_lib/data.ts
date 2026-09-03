@@ -3,6 +3,7 @@ import type {
   Conflict,
   EngineAbsence,
   EngineAssignment,
+  EngineCrew,
   EnginePerson,
   RequiredQualification,
   RuleCode,
@@ -13,6 +14,7 @@ import type {
   AdminUser,
   Assignment,
   AssignmentType,
+  AssignmentTypeCrew,
   Availability,
   Personnel,
   PublicationState,
@@ -396,6 +398,82 @@ export async function loadTypeExclusions(env: Env): Promise<Map<string, string[]
   return map;
 }
 
+/**
+ * The fixed crews of every post that has any.
+ *
+ * Loaded whole rather than per post: there are a handful of them in a company,
+ * and the engine needs every one that a window's shifts might belong to.
+ */
+export async function loadCrews(env: Env): Promise<Map<string, AssignmentTypeCrew[]>> {
+  const [crews, members] = await Promise.all([
+    env.DB.prepare(
+      `SELECT id, assignment_type_id, name, position, active
+         FROM assignment_type_crews WHERE active = 1
+        ORDER BY assignment_type_id, position, name`,
+    ).all<{
+      id: string;
+      assignment_type_id: string;
+      name: string;
+      position: number;
+      active: number;
+    }>(),
+    env.DB.prepare(
+      `SELECT m.crew_id, m.personnel_id, m.role_qualification_id, p.display_name
+         FROM assignment_type_crew_members m
+         JOIN personnel p ON p.id = m.personnel_id
+        ORDER BY m.crew_id`,
+    ).all<{
+      crew_id: string;
+      personnel_id: string;
+      role_qualification_id: string | null;
+      display_name: string;
+    }>(),
+  ]);
+
+  const byCrew = new Map<string, AssignmentTypeCrew['members']>();
+  for (const row of members.results ?? []) {
+    const list = byCrew.get(row.crew_id) ?? [];
+    list.push({
+      personnelId: row.personnel_id,
+      personnelName: row.display_name,
+      roleQualificationId: row.role_qualification_id,
+    });
+    byCrew.set(row.crew_id, list);
+  }
+
+  const map = new Map<string, AssignmentTypeCrew[]>();
+  for (const row of crews.results ?? []) {
+    const list = map.get(row.assignment_type_id) ?? [];
+    list.push({
+      id: row.id,
+      assignmentTypeId: row.assignment_type_id,
+      name: row.name,
+      position: row.position,
+      active: row.active === 1,
+      members: byCrew.get(row.id) ?? [],
+    });
+    map.set(row.assignment_type_id, list);
+  }
+  return map;
+}
+
+/** The same crews in the shape the engine reads. */
+export function toEngineCrews(
+  crews: Map<string, AssignmentTypeCrew[]>,
+): Record<string, EngineCrew[]> {
+  return Object.fromEntries(
+    [...crews].map(([typeId, list]) => [
+      typeId,
+      list.map((crew) => ({
+        id: crew.id,
+        name: crew.name,
+        position: crew.position,
+        memberIds: crew.members.map((member) => member.personnelId),
+      })),
+    ]),
+  );
+}
+
 export async function loadTypeQualifications(
   env: Env,
 ): Promise<Map<string, RequiredQualification[]>> {
@@ -690,10 +768,13 @@ export async function evaluateWindow(
   personnel: Personnel[];
   availability: Availability[];
   rules: SchedulingRule[];
+  /** The fixed crews of every post that has any, keyed by assignment type id. */
+  crews: Map<string, AssignmentTypeCrew[]>;
+  crewsByType: Record<string, EngineCrew[]>;
   timezone: string;
 }> {
-  const [assignments, personnel, availability, rules, qualifications, timezone] = await Promise.all(
-    [
+  const [assignments, personnel, availability, rules, qualifications, crews, timezone] =
+    await Promise.all([
       loadAssignments(env, {
         from: window.from,
         to: window.to,
@@ -704,20 +785,22 @@ export async function evaluateWindow(
       loadAvailability(env, { from: window.from, to: window.to, status: 'approved' }),
       loadRules(env),
       engineQualifications(env),
+      loadCrews(env),
       orgTimezone(env),
-    ],
-  );
+    ]);
 
+  const crewsByType = toEngineCrews(crews);
   const conflicts = detectConflicts({
     assignments: assignments.map(toEngineAssignment),
     personnel: personnel.map(toEnginePerson),
     absences: toEngineAbsences(availability),
     rules,
     ...qualifications,
+    crewsByType,
     timezone,
   });
 
-  return { conflicts, assignments, personnel, availability, rules, timezone };
+  return { conflicts, assignments, personnel, availability, rules, crews, crewsByType, timezone };
 }
 
 export function safeJson<T>(raw: string | null, fallback: T): T {

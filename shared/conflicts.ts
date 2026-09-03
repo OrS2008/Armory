@@ -38,6 +38,8 @@ export const RULE_CODES = [
   'DUPLICATE_ASSIGNMENT',
   'EXCLUDED_QUALIFICATION',
   'NOT_SCHEDULABLE',
+  'CREW_MEMBER_ONLY',
+  'CREW_NO_MIX',
 ] as const;
 
 export type RuleCode = (typeof RULE_CODES)[number];
@@ -96,6 +98,22 @@ export interface EngineAssignment {
   overriddenBy?: string[];
 }
 
+/**
+ * A fixed crew: people who stand a post together rather than separately.
+ *
+ * "אלה הארבעה, ביחד" is a fact about the group, not about any of them, so it
+ * cannot be said with a qualification. A post with no crews behaves as it
+ * always did; defining crews on one narrows it to their members and makes a
+ * shift one whole crew.
+ */
+export interface EngineCrew {
+  id: string;
+  name: string;
+  /** Where it sits in the rotation, lower first. */
+  position: number;
+  memberIds: string[];
+}
+
 export interface EngineAbsence {
   personnelId: string;
   kind: AvailabilityKind;
@@ -114,6 +132,8 @@ export interface EngineInput {
    * them: whoever is marked חמ״ל does חמ״ל and nothing else.
    */
   exclusiveQualificationIds?: string[];
+  /** The fixed crews of each post that has any, keyed by assignment type id. */
+  crewsByType?: Record<string, EngineCrew[]>;
   /**
    * Marks that take their holder out of the rotation entirely: whoever is
    * marked מפלג has a job, not a shift.
@@ -234,6 +254,22 @@ export const DEFAULT_RULES: SchedulingRule[] = [
   {
     code: 'ROLE_TAKEN',
     name: 'תפקיד אחד לכל אדם במשימה',
+    enabled: true,
+    severity: 'blocking',
+    overridable: false,
+    config: {},
+  },
+  {
+    code: 'CREW_MEMBER_ONLY',
+    name: 'משימה בסבב קבוע — רק חברי הסבב',
+    enabled: true,
+    severity: 'blocking',
+    overridable: false,
+    config: {},
+  },
+  {
+    code: 'CREW_NO_MIX',
+    name: 'משמרת אחת היא סבב אחד',
     enabled: true,
     severity: 'blocking',
     overridable: false,
@@ -513,6 +549,65 @@ export function detectConflicts(input: EngineInput): Conflict[] {
           add('EXCLUSIVE_QUALIFICATION', exclusiveRule, assignment, personnelId, {
             person: personName(personnelId),
             qualification: qualificationLabel(blockingQualification),
+            assignment: assignment.title,
+          });
+        }
+      }
+    }
+
+    /*
+     * A post stood by fixed crews: the shift is one whole crew, and nobody
+     * outside them stands it at all.
+     *
+     * "צוות שלם, בלי חריגות בכלל" — so both rules are blocking and neither is
+     * overridable, and an override recorded against somebody for another
+     * reason does not silence them. A seat on a crewed post belongs to that
+     * crew the way a נהג seat belongs to a driver.
+     */
+    const crews = assignment.assignmentTypeId
+      ? (input.crewsByType?.[assignment.assignmentTypeId] ?? [])
+      : [];
+    if (crews.length > 0) {
+      const crewOf = new Map<string, EngineCrew>();
+      for (const crew of crews) {
+        for (const memberId of crew.memberIds) crewOf.set(memberId, crew);
+      }
+
+      /*
+       * Which crew this shift *is*: the one most of it belongs to, earliest in
+       * the rotation where that is a tie. Reporting "the others" needs an
+       * answer that does not depend on the order the rows came back in — two
+       * against two would otherwise blame whichever pair SQLite listed second.
+       */
+      const tally = new Map<string, number>();
+      for (const personnelId of assignment.assigneeIds) {
+        const crew = crewOf.get(personnelId);
+        if (crew) tally.set(crew.id, (tally.get(crew.id) ?? 0) + 1);
+      }
+      const standing = crews
+        .filter((crew) => tally.has(crew.id))
+        .sort(
+          (left, right) =>
+            (tally.get(right.id) ?? 0) - (tally.get(left.id) ?? 0) ||
+            left.position - right.position,
+        )[0];
+
+      const memberRule = rule('CREW_MEMBER_ONLY');
+      const mixRule = rule('CREW_NO_MIX');
+      for (const personnelId of assignment.assigneeIds) {
+        const crew = crewOf.get(personnelId);
+        if (!crew) {
+          if (memberRule) {
+            add('CREW_MEMBER_ONLY', memberRule, assignment, personnelId, {
+              person: personName(personnelId),
+              assignment: assignment.title,
+            });
+          }
+        } else if (mixRule && standing && crew.id !== standing.id) {
+          add('CREW_NO_MIX', mixRule, assignment, personnelId, {
+            person: personName(personnelId),
+            crew: crew.name,
+            standing: standing.name,
             assignment: assignment.title,
           });
         }

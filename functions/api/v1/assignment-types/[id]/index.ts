@@ -1,10 +1,10 @@
-import { ErrorCodes } from '../../../../shared/errors';
-import { Permissions } from '../../../../shared/rbac';
-import { assignmentTypeSchema } from '../../../../shared/schemas';
-import { AuditActions, writeAudit } from '../../../_lib/audit';
-import { requireUser } from '../../../_lib/auth';
-import { boolToInt } from '../../../_lib/data';
-import { checkOrigin, fail, now, ok, readBody, type Env } from '../../../_lib/http';
+import { ErrorCodes } from '../../../../../shared/errors';
+import { Permissions } from '../../../../../shared/rbac';
+import { assignmentTypeSchema } from '../../../../../shared/schemas';
+import { AuditActions, writeAudit } from '../../../../_lib/audit';
+import { requireUser } from '../../../../_lib/auth';
+import { boolToInt } from '../../../../_lib/data';
+import { checkOrigin, fail, now, ok, readBody, type Env } from '../../../../_lib/http';
 
 export const onRequestPatch: PagesFunction<Env> = async ({ request, env, params }) => {
   const origin = checkOrigin(request);

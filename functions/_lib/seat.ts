@@ -42,10 +42,38 @@ export function verifySeat(
   request: SeatRequest,
 ): SeatVerdict {
   const role = request.role ?? null;
+  const target = evaluation.assignments.find((one) => one.id === request.assignmentId);
+
+  /*
+   * A post stood by fixed crews is stood by one whole crew: "צוות שלם, בלי
+   * חריגות בכלל". Like the seat's mark, this is answered here rather than by a
+   * rule — a rule can be switched off in settings, and a blocking one can be
+   * overridden with a reason. Neither is what a fixed crew means.
+   */
+  const crews = target?.assignmentTypeId
+    ? (evaluation.crewsByType[target.assignmentTypeId] ?? [])
+    : [];
+  let crewRefusal: string | null = null;
+  if (crews.length > 0) {
+    const mine = crews.find((crew) => crew.memberIds.includes(person.id));
+    if (!mine) {
+      crewRefusal = `${person.displayName} אינו חבר באף סבב של ${target?.assignmentTypeName ?? 'המשימה'}`;
+    } else {
+      // The crew the shift already stands, ignoring whoever is standing up.
+      const seated = (target?.assignees ?? [])
+        .filter((assignee) => assignee.personnelId !== (request.vacating ?? null))
+        .map((assignee) => crews.find((crew) => crew.memberIds.includes(assignee.personnelId)))
+        .find((crew) => crew !== undefined);
+      if (seated && seated.id !== mine.id) {
+        crewRefusal = `${person.displayName} שייך ל${mine.name}, והמשמרת עומדת ב${seated.name} — משמרת אחת היא סבב אחד`;
+      }
+    }
+  }
+
   const refusal =
     role && !person.qualificationIds.includes(role)
       ? `${person.displayName} אינו מחזיק בהכשיר ${qualifications.qualificationNames[role] ?? role} ולכן אינו יכול למלא תפקיד זה`
-      : null;
+      : crewRefusal;
 
   // Re-run the engine with the placement applied — the same code the board uses.
   const assignments = evaluation.assignments.map((assignment) => {
@@ -70,6 +98,7 @@ export function verifySeat(
     ),
     rules: evaluation.rules,
     ...qualifications,
+    crewsByType: evaluation.crewsByType,
     timezone: evaluation.timezone,
   }).filter(
     (conflict) =>

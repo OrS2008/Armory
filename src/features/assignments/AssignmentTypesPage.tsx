@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Pencil, Plus, Power, Trash2 } from 'lucide-react';
+import { Pencil, Plus, Power, Trash2, UsersRound } from 'lucide-react';
 import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation } from '@tanstack/react-query';
@@ -17,6 +17,7 @@ import { ApiError, api } from '@/lib/api';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Dialog } from '@/components/ui/Dialog';
+import { CrewsDialog } from './CrewsDialog';
 import { Field } from '@/components/ui/Field';
 import { Input, Select, Textarea } from '@/components/ui/Input';
 import { DataTable, type Column } from '@/components/ui/DataTable';
@@ -38,6 +39,7 @@ export function AssignmentTypesPage() {
   const types = useAssignmentTypes();
   const qualifications = useQualifications();
   const [editing, setEditing] = useState<AssignmentType | null>(null);
+  const [crewsFor, setCrewsFor] = useState<AssignmentType | null>(null);
   const [open, setOpen] = useState(false);
   const [requirements, setRequirements] = useState<{ qualificationId: string; minCount: number }[]>(
     [],
@@ -266,6 +268,13 @@ export function AssignmentTypesPage() {
         ),
     },
     {
+      key: 'crews',
+      label: t('assignments.crews'),
+      hint: t('assignments.crewsMenuHint'),
+      icon: <UsersRound className="size-4" />,
+      onSelect: () => setCrewsFor(type),
+    },
+    {
       key: 'delete',
       label: t('assignments.deleteType'),
       // A post that has been stood can be removed too — it just takes its
@@ -382,6 +391,8 @@ export function AssignmentTypesPage() {
         ) : null}
         <p className="text-sm text-ink-muted">{t('assignments.retireTypeHint')}</p>
       </Dialog>
+
+      <CrewsDialog post={crewsFor} onClose={() => setCrewsFor(null)} />
 
       <Dialog
         open={open}

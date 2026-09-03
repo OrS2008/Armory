@@ -344,6 +344,32 @@ export const replacementResponseSchema = z.object({
   accept: z.boolean(),
 });
 
+/**
+ * The whole set of crews on a post, replaced in one act.
+ *
+ * A crew is only meaningful beside the others — "these four, and those four" —
+ * so editing one at a time invites a moment where a person belongs to both, or
+ * to none. The screen sends what the post should have.
+ */
+export const crewsSchema = z.object({
+  crews: z
+    .array(
+      z.object({
+        name: trimmed(60).min(1, v.required),
+        position: z.number().int().min(1).max(99),
+        members: z
+          .array(
+            z.object({
+              personnelId: idSchema,
+              role: optionalId(),
+            }),
+          )
+          .max(50),
+      }),
+    )
+    .max(20),
+});
+
 export const volunteerSchema = z.object({
   assignmentId: idSchema,
   /** The seat being offered for. Omitted or null is a plain one. */

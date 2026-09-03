@@ -50,6 +50,8 @@ Cloudflare D1 (SQLite). One migration, `migrations/0001_init.sql`, applied with
 | `scheduling_rules` | The configurable policy: enabled, severity, overridable, JSON config |
 | `replacement_requests` | Swap workflow, including the stand-in a requester named and whether that person agreed |
 | `shift_volunteers` | Offers to stand a seat nobody is on. Not a replacement: there is nobody to replace |
+| `assignment_type_crews` | A fixed crew on a post — "these four, together", which no qualification can say |
+| `assignment_type_crew_members` | Who is in a crew, and the seat they take in it |
 | `notifications` | Per-user in-app notifications |
 | `audit_events` | Append-only trail |
 

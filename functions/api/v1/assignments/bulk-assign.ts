@@ -127,6 +127,7 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     absences: toEngineAbsences(evaluation.availability),
     rules: evaluation.rules,
     ...qualifications,
+    crewsByType: evaluation.crewsByType,
     timezone: evaluation.timezone,
   });
 

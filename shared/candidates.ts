@@ -9,7 +9,7 @@ import {
   type EnginePerson,
   type SchedulingRule,
 } from './conflicts';
-import type { EngineAbsence } from './conflicts';
+import type { EngineAbsence, EngineCrew } from './conflicts';
 import { computeWorkload, restHoursBefore, type FairnessWeights, type Workload } from './fairness';
 import { formatHours } from './format';
 import { DAY, DEFAULT_TIMEZONE } from './time';
@@ -32,6 +32,8 @@ export interface CandidateInput {
   exclusiveQualificationIds?: string[];
   /** Qualifications that take their holder out of the rotation entirely. */
   blockingQualificationIds?: string[];
+  /** The fixed crews of each post that has any, keyed by assignment type id. */
+  crewsByType?: Record<string, EngineCrew[]>;
   weights?: FairnessWeights;
   timezone?: string;
   /** Workload look-back window; defaults to 14 days before the assignment. */
@@ -107,6 +109,7 @@ export function rankCandidates(input: CandidateInput): Candidate[] {
       ...(input.blockingQualificationIds
         ? { blockingQualificationIds: input.blockingQualificationIds }
         : {}),
+      ...(input.crewsByType ? { crewsByType: input.crewsByType } : {}),
       timezone,
     }).filter((conflict) => conflict.personnelId === person.id);
 
