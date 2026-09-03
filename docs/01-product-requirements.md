@@ -75,8 +75,17 @@ remains. Editing a published assignment marks it "changed" until republished.
 
 ### Personal experience
 
-Own schedule and availability only; drafts hidden until publication;
-acknowledge an assignment; request a replacement; in-app notifications.
+Own schedule and availability only; acknowledge an assignment; in-app
+notifications; and three things a soldier can do without asking anybody:
+
+- **Subscribe to their own duty times** from the calendar already on their
+  phone, which is what actually answers "when am I next on duty?" — it rings on
+  its own and works when the app does not.
+- **Find their own cover.** Ask for a replacement and name somebody from a list
+  the engine says could actually stand it. The named person answers for
+  themselves; the commander still approves.
+- **Take a seat nobody is standing.** See the holes in the coming week they are
+  eligible for, and offer. An offer is not an assignment.
 
 ### Accountability
 
@@ -102,15 +111,22 @@ assignment types, assignment instances, day/week/personnel board, manual
 assignment, conflict detection, drafts, publication, personal view,
 notifications, audit log, Hebrew RTL, responsive mobile UI.
 
-## Post-MVP, in order
+## Post-MVP
 
-1. User administration UI and MFA.
-2. Reminder notifications (Cron Triggers or Queues).
-3. Drag-and-drop, multi-select and undo on the board.
-4. Templates and "duplicate last week".
-5. Live updates over Durable Objects; presence indicators.
-6. CSV import with dry run; PDF and Excel export.
-7. Command palette, global search, keyboard shortcuts.
-8. PWA offline caching of the personal schedule.
-9. Assisted auto-fill, then constraint optimisation — after the unit's
-   scheduling policy is agreed.
+Delivered: user administration and MFA; drag-and-drop with undo on the sheet;
+CSV import with a dry run, PDF and Excel export; command palette, global search
+and keyboard shortcuts; PWA offline caching; assisted auto-fill with a repair
+pass; the standing roster; the personal calendar feed; peer cover with consent;
+and volunteering for open seats.
+
+Still open, in order:
+
+1. Templates and "duplicate last week".
+2. Live updates over Durable Objects; presence indicators.
+3. Constraint optimisation beyond the repair pass — see
+   `docs/09-scheduling-engine.md`, which explains why it will not be built in
+   this runtime.
+
+**Reminder notifications** are answered by the calendar feed rather than by a
+cron: a subscribed calendar raises its own alarm an hour before a shift, on the
+device the soldier actually carries, and keeps doing it while we are offline.
