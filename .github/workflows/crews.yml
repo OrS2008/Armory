@@ -70,7 +70,7 @@ jobs:
           npx wrangler d1 execute "$DATABASE_NAME" --remote --command "
             SELECT name AS post, CAST(standing AS TEXT) AS standing,
                    shift_hours, required_headcount, max_continuous_minutes,
-                   (SELECT COUNT(*) FROM assignments a
+                   (SELECT COUNT(*) FROM assignment_instances a
                      WHERE a.assignment_type_id = assignment_types.id) AS shifts
               FROM assignment_types
              WHERE standing = 1
