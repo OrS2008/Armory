@@ -606,6 +606,49 @@ describe('continuous duty across back-to-back shifts', () => {
     expect(conflicts.some((conflict) => conflict.code === 'MAX_CONTINUOUS')).toBe(false);
   });
 
+  /*
+   * A post that hands over once a day is saying what one turn is. The rule
+   * exists to catch somebody stacking turns, and could not tell the two apart
+   * until a post could declare its own length — which made auto-fill refuse
+   * every candidate for a standing post and propose nobody at all.
+   */
+  it('lets a post stand the turn it says it stands', () => {
+    const turn = assignment({
+      id: 'a1',
+      startAt: at('2026-08-21', '05:00'),
+      endAt: at('2026-08-22', '05:00'),
+      maxContinuousMinutes: 1440,
+    });
+
+    expect(run([turn], eightHourLimit).some((item) => item.code === 'MAX_CONTINUOUS')).toBe(false);
+  });
+
+  it('still catches two of those turns back to back', () => {
+    const turn = (id: string, from: string, to: string) =>
+      assignment({
+        id,
+        startAt: at('2026-08-21', from),
+        endAt: at('2026-08-22', to),
+        maxContinuousMinutes: 1440,
+      });
+    // The allowance is one turn, not a licence for the post.
+    const conflicts = run(
+      [
+        assignment({
+          id: 'a1',
+          startAt: at('2026-08-20', '05:00'),
+          endAt: at('2026-08-21', '05:00'),
+          maxContinuousMinutes: 1440,
+        }),
+        turn('a2', '05:00', '05:00'),
+      ],
+      eightHourLimit,
+    ).filter((item) => item.code === 'MAX_CONTINUOUS');
+
+    expect(conflicts).toHaveLength(1);
+    expect(conflicts[0]?.message).toContain('48');
+  });
+
   it('reports one conflict for a run, not one per shift', () => {
     const conflicts = run(
       [shift('a1', '00:00', '06:00'), shift('a2', '06:00', '12:00'), shift('a3', '12:00', '18:00')],
