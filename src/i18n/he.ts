@@ -154,6 +154,9 @@ export const he = {
   'schedule.role': 'תפקיד',
   'schedule.rolePlain': 'לוחם',
   'schedule.roleTaken': 'התפקיד תפוס במשימה',
+  'schedule.seatNeedsQualification':
+    '{name} אינו מחזיק בהכשיר {qualification} ולא ניתן לשבצו לתפקיד.',
+  'schedule.seatOnlyForHolders': 'רק מי שמחזיק בהכשיר {qualification} מוצג כאן.',
   'schedule.assignToSeat': 'משבצים לתפקיד:',
   'schedule.day': 'יום',
   'schedule.week': 'שבוע',

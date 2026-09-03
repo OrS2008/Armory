@@ -74,6 +74,17 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       rejected.push({ ...pair, reason: 'ניתן לשבץ רק אנשים פעילים' });
       continue;
     }
+    /*
+     * A named seat belongs to its qualification. The engine says so too, as a
+     * blocking rule — but a rule can be switched off, and this cannot: only a
+     * driver drives, whatever the settings screen currently says.
+     */
+    const holder = evaluation.personnel.find((person) => person.id === pair.personnelId);
+    if (pair.role && !holder?.qualificationIds.includes(pair.role)) {
+      const label = qualifications.qualificationNames[pair.role] ?? pair.role;
+      rejected.push({ ...pair, reason: `אינו מחזיק בהכשיר ${label}` });
+      continue;
+    }
     const existing = evaluation.assignments
       .find((assignment) => assignment.id === pair.assignmentId)
       ?.assignees.some((assignee) => assignee.personnelId === pair.personnelId);

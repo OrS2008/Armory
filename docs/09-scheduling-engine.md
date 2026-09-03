@@ -166,6 +166,29 @@ A turn covering a **whole day** prints no clock at all — it is simply today �
 A narrower screen folds column three into two and then into one, which keeps the
 reading order the sheet was written in.
 
+### A named seat belongs to its mark
+
+> "רק מי שיש לו הכשר נהג יכול להיות נהג. רק מי שיש לו הכשר מפקד יכול להיות מפקד.
+> כל השאר יכולים להיות לוחמים. אין מצב שאתה בטעות מערבב לי את זה."
+
+This is not a preference the scheduler weighs, and not a rule the settings screen
+can switch off. It holds in four places, each of which could otherwise break it
+on its own:
+
+| Where | What holds it |
+| --- | --- |
+| The sheet | `buildCrew` seats a named seat only from the person recorded in it, or — where the caller can say who holds what — somebody qualified. A named seat with nobody qualified on the shift prints **empty**, and the people on it read לוחם |
+| Auto-fill | A named seat draws only from holders, and never spends one on a plain seat while somebody unmarked can stand it |
+| The assign dialog | Choosing נהג narrows the candidate list to the drivers, and says so |
+| The API | `assign` and `bulk-assign` refuse a seat the person does not hold — **422, before anything is written**, outside the rules engine, and an `overrideReason` in the request is ignored rather than honoured |
+
+The `ROLE_QUALIFICATION` rule still runs, because rows written before the API
+enforced this are still in the table and the sheet has to show them. It is
+blocking and no longer overridable: there is nothing left for an override to
+mean. `.github/workflows/crew-roles.yml` lists those rows against production and,
+when told to, corrects them — by clearing the seat, never by removing anybody:
+the shift stays, and the person stands it as the לוחם they were qualified for.
+
 ### Naming the turns
 
 A turn is named by its place in the post's own day rather than by the clock —

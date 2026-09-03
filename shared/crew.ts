@@ -24,7 +24,21 @@ interface CrewSource {
 }
 
 /**
- * The role each seat carries, in reading order: named roles first, plain seats
+ * A seat in the crew, before anybody is put in it.
+ *
+ * `named` is the distinction that matters: a named seat is a post's נהג or
+ * מפקד — a job only its holder may do — while an unnamed one is a plain
+ * combatant seat that anybody on the roster can stand. Both can carry a
+ * qualification: a חמ״ל shift binds every seat to חמ״ל without any of them
+ * being the crew's one חמ״ל, and that is what keeps the two apart.
+ */
+export interface SeatSlot {
+  role: string | null;
+  named: boolean;
+}
+
+/**
+ * The seats a post stands, in reading order: named roles first, plain seats
  * after. The named ones keep the order the post lists them in, which is the
  * order they are read out — מפקד before נהג before the plain seats.
  *
@@ -33,19 +47,29 @@ interface CrewSource {
  * so it names them all rather than adding any: a חמ״ל shift is one חמ״ל seat,
  * not a חמ״ל plus a spare.
  */
+export function seatPlan(source: {
+  requiredHeadcount: number;
+  requiredQualifications: { qualificationId: string; minCount: number }[];
+}): SeatSlot[] {
+  const seats: SeatSlot[] = [];
+  for (const item of source.requiredQualifications) {
+    if (item.minCount <= 0) continue;
+    for (let index = 0; index < item.minCount; index += 1) {
+      seats.push({ role: item.qualificationId, named: true });
+    }
+  }
+  const bindsEveryone = source.requiredQualifications.find((item) => item.minCount <= 0);
+  const plain = bindsEveryone ? bindsEveryone.qualificationId : null;
+  while (seats.length < source.requiredHeadcount) seats.push({ role: plain, named: false });
+  return seats;
+}
+
+/** The plan as bare roles, for the places that only ask what each seat is. */
 export function seatRoles(source: {
   requiredHeadcount: number;
   requiredQualifications: { qualificationId: string; minCount: number }[];
 }): (string | null)[] {
-  const roles: (string | null)[] = [];
-  for (const item of source.requiredQualifications) {
-    if (item.minCount <= 0) continue;
-    for (let index = 0; index < item.minCount; index += 1) roles.push(item.qualificationId);
-  }
-  const bindsEveryone = source.requiredQualifications.find((item) => item.minCount <= 0);
-  const plain = bindsEveryone ? bindsEveryone.qualificationId : null;
-  while (roles.length < source.requiredHeadcount) roles.push(plain);
-  return roles;
+  return seatPlan(source).map((seat) => seat.role);
 }
 
 /**
@@ -100,6 +124,13 @@ export function buildCrew(
   assignment: CrewSource,
   qualificationName: (id: string) => string,
   roleSuffix?: string | null,
+  /**
+   * Whether a person holds a mark. Given it, somebody put on the shift without
+   * a seat can still be shown in the named one they are qualified for; without
+   * it, only the person recorded in that seat is ever printed there. Either way
+   * nobody unqualified appears in it.
+   */
+  holds?: (personnelId: string, qualificationId: string) => boolean,
 ): CrewSeat[] {
   const suffixed = (label: string) => (roleSuffix ? `${label} ${roleSuffix}` : label);
   const bindsEveryone = assignment.requiredQualifications.find((item) => item.minCount <= 0);
@@ -107,23 +138,46 @@ export function buildCrew(
     bindsEveryone ? qualificationName(bindsEveryone.qualificationId) : DEFAULT_CREW_ROLE,
   );
 
-  const seats: CrewSeat[] = seatRoles(assignment).map((role) => ({
+  const plan = seatPlan(assignment);
+  const seats: CrewSeat[] = plan.map(({ role }) => ({
     roleQualificationId: role,
     label: role ? suffixed(qualificationName(role)) : plainLabel,
     assignee: null,
   }));
 
-  // Whoever holds a named role sits in it; everyone else fills the remaining
-  // seats in order. An over-full crew keeps its extra people rather than
-  // dropping them — a seat that should not exist is still someone's shift.
+  /*
+   * Only the person assigned to a named seat sits in it.
+   *
+   * A נהג seat is filled by the person recorded as this shift's נהג and by
+   * nobody else. Letting the leftovers spill into an empty named seat is how a
+   * plain combatant came to be printed as the driver — the sheet said מפקד
+   * beside a name the roster had never made a commander, and the seat that
+   * actually needed filling looked filled. An empty named seat stays empty:
+   * that is the truth, and it is what a reader has to see.
+   */
   const remaining = [...assignment.assignees];
+  const take = (match: (person: AssignmentAssignee) => boolean) => {
+    const at = remaining.findIndex(match);
+    return at >= 0 ? (remaining.splice(at, 1)[0] ?? null) : null;
+  };
+
+  // The seat's own person first: whoever was recorded as this shift's נהג.
   for (const seat of seats) {
     if (!seat.roleQualificationId) continue;
-    const index = remaining.findIndex((person) => person.role === seat.roleQualificationId);
-    if (index >= 0) seat.assignee = remaining.splice(index, 1)[0] ?? null;
+    seat.assignee = take((person) => person.role === seat.roleQualificationId);
   }
-  for (const seat of seats) {
-    if (seat.assignee || remaining.length === 0) continue;
+  // Then, only where we can tell, somebody qualified for the seat who was put
+  // on the shift without one.
+  for (const [index, seat] of seats.entries()) {
+    const role = seat.roleQualificationId;
+    if (seat.assignee || !role || !plan[index]?.named || !holds) continue;
+    seat.assignee = take((person) => !person.role && holds(person.personnelId, role));
+  }
+  // Everyone else fills the plain seats. A named seat left over stays empty —
+  // that is the truth, and printing a combatant in it is how the sheet came to
+  // say מפקד beside somebody the roster had never made one.
+  for (const [index, seat] of seats.entries()) {
+    if (seat.assignee || remaining.length === 0 || plan[index]?.named) continue;
     seat.assignee = remaining.shift() ?? null;
   }
   for (const person of remaining) {

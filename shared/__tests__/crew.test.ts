@@ -65,11 +65,63 @@ describe('the printed crew', () => {
       { ...patrol, assignees: [person('דנה', 'q_driver'), person('רון', null)] },
       name,
     );
+    // רון is on the shift without a seat, so he stands as a לוחם. The מפקד seat
+    // stays empty rather than printing his name under a role he does not hold.
     expect(crew.map((seat) => [seat.label, seat.assignee?.personnelName ?? null])).toEqual([
-      ['מפקד', 'רון'],
+      ['מפקד', null],
       ['נהג', 'דנה'],
+      ['לוחם', 'רון'],
       ['לוחם', null],
+    ]);
+  });
+
+  it('never prints a plain combatant in a named seat', () => {
+    // Four people, none of them recorded as the commander or the driver: the
+    // named seats are empty and every name reads לוחם, which is what they are.
+    const crew = buildCrew(
+      { ...patrol, assignees: ['א', 'ב', 'ג', 'ד'].map((id) => person(id, null)) },
+      name,
+    );
+    expect(crew.filter((seat) => seat.label === 'מפקד' || seat.label === 'נהג')).toEqual([
+      { roleQualificationId: 'q_cmd', label: 'מפקד', assignee: null },
+      { roleQualificationId: 'q_driver', label: 'נהג', assignee: null },
+    ]);
+    expect(crew.filter((seat) => seat.assignee).every((seat) => seat.label === 'לוחם')).toBe(true);
+    expect(crew.filter((seat) => seat.assignee)).toHaveLength(4);
+  });
+
+  it('seats somebody qualified for a named seat when it can tell they hold it', () => {
+    // Told who holds what, a driver put on the shift without a seat is shown in
+    // the driver's seat — and the person beside him, who holds nothing, is not.
+    const holds = (personnelId: string, qualificationId: string) =>
+      personnelId === 'דנה' && qualificationId === 'q_driver';
+    const crew = buildCrew(
+      { ...patrol, assignees: [person('רון', null), person('דנה', null)] },
+      name,
+      null,
+      holds,
+    );
+    expect(crew.map((seat) => [seat.label, seat.assignee?.personnelName ?? null])).toEqual([
+      ['מפקד', null],
+      ['נהג', 'דנה'],
+      ['לוחם', 'רון'],
       ['לוחם', null],
+    ]);
+  });
+
+  it('still fills a seat that names everyone, because it is not a named seat', () => {
+    // A חמ״ל shift binds its one seat to חמ״ל; that is the post's requirement,
+    // not a role inside a crew, so whoever is on the shift is printed in it.
+    const crew = buildCrew(
+      {
+        requiredHeadcount: 1,
+        requiredQualifications: [{ qualificationId: 'q_hamal', minCount: 0 }],
+        assignees: [person('נועה', null)],
+      },
+      name,
+    );
+    expect(crew.map((seat) => [seat.label, seat.assignee?.personnelName ?? null])).toEqual([
+      ['חמ״ל', 'נועה'],
     ]);
   });
 

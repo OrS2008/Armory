@@ -37,6 +37,12 @@ interface Props {
   timezone: string;
   /** The day this sheet is for; a turn belongs to the day it starts. */
   window: { from: number; to: number };
+  /**
+   * Whether a person holds a mark. Without it a named seat prints only the
+   * person recorded in it; with it, somebody qualified who was put on the shift
+   * without a seat can be shown there too. Nobody unqualified ever is.
+   */
+  holds?: (personnelId: string, qualificationId: string) => boolean;
   onOpen: (assignmentId: string) => void;
   /**
    * Rearranging the page. Absent when the reader may not change the posts.
@@ -88,10 +94,10 @@ const tone = (color: string) => postTone[color] ?? 'sheet-title-slate';
 /*
  * A seat is addressed by its place in the crew, not by the role it carries.
  *
- * Two plain לוחם seats carry the same role, and a person seated in the מפקד
- * seat may hold no מפקד mark of their own — `buildCrew` decides who sits where.
- * Addressing a seat by its role therefore pointed at the wrong person, and at
- * two seats at once. Its index says exactly one thing.
+ * Two plain לוחם seats carry the same role, and which of them a person occupies
+ * is decided by `buildCrew` rather than stored. Addressing a seat by its role
+ * therefore pointed at the wrong person, and at two seats at once. Its index
+ * says exactly one thing.
  */
 const seatKey = (assignmentId: string, index: number) => `${assignmentId}#${index}`;
 /** A crewless turn is one line for everyone on it, so it has no seat index. */
@@ -116,6 +122,7 @@ export function RosterBoard({
   qualifications,
   timezone,
   window: day,
+  holds,
   onOpen,
   onMoveCard,
   onMovePerson,
@@ -132,7 +139,7 @@ export function RosterBoard({
   for (const post of posts) {
     if (!post.crewed) continue;
     for (const shift of post.shifts) {
-      crews.set(shift.id, buildCrew(shift, qualificationName, post.crewRoleSuffix));
+      crews.set(shift.id, buildCrew(shift, qualificationName, post.crewRoleSuffix, holds));
     }
   }
 

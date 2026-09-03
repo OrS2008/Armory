@@ -1,0 +1,103 @@
+name: Check who fills the named seats
+
+# Only a driver drives, and only a commander commands.
+#
+# The app enforces that on the way in, but rows written before it did are still
+# in the table. This reads them out, and — only when told to — corrects them by
+# clearing the seat rather than removing anybody: the shift stays, and the
+# person stands it as a לוחם, which is what they were qualified for all along.
+on:
+  workflow_dispatch:
+    inputs:
+      fix:
+        description: Clear the seat on rows where the mark is not held. Leave off to only report.
+        type: boolean
+        default: false
+      database_name:
+        description: D1 database name
+        type: string
+        default: shabatzak
+
+concurrency:
+  group: crew-roles
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Report, then correct
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      DATABASE_NAME: ${{ inputs.database_name }}
+    steps:
+      - name: Check that the credentials are present
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo '::error::Add CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID under Settings, Secrets and variables, Actions. The token needs Account, D1, Edit.'
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - run: npm clean-install
+
+      # Always printed, whether or not anything is about to change.
+      - name: Who is in a seat they do not hold
+        run: |
+          npx wrangler d1 execute "$DATABASE_NAME" --remote --command "
+            SELECT p.display_name AS person,
+                   q.name         AS seat,
+                   at.name        AS post,
+                   datetime(ai.start_at/1000,'unixepoch') AS starts
+              FROM assignment_personnel ap
+              JOIN personnel p        ON p.id = ap.personnel_id
+              JOIN qualifications q   ON q.id = ap.role_qualification_id
+              JOIN assignment_instances ai ON ai.id = ap.assignment_id
+              JOIN assignment_types at ON at.id = ai.assignment_type_id
+             WHERE ap.role_qualification_id IS NOT NULL
+               AND NOT EXISTS (
+                     SELECT 1 FROM personnel_qualifications pq
+                      WHERE pq.personnel_id = ap.personnel_id
+                        AND pq.qualification_id = ap.role_qualification_id)
+             ORDER BY ai.start_at
+             LIMIT 200;"
+
+      - name: How many rows that is
+        run: |
+          npx wrangler d1 execute "$DATABASE_NAME" --remote --command "
+            SELECT COUNT(*) AS rows_to_correct
+              FROM assignment_personnel ap
+             WHERE ap.role_qualification_id IS NOT NULL
+               AND NOT EXISTS (
+                     SELECT 1 FROM personnel_qualifications pq
+                      WHERE pq.personnel_id = ap.personnel_id
+                        AND pq.qualification_id = ap.role_qualification_id);"
+
+      # Nobody is unassigned: the seat is cleared, and they stand as a לוחם.
+      - name: Clear the seats that are not theirs
+        if: ${{ inputs.fix }}
+        run: |
+          npx wrangler d1 execute "$DATABASE_NAME" --remote --command "
+            UPDATE assignment_personnel
+               SET role_qualification_id = NULL
+             WHERE role_qualification_id IS NOT NULL
+               AND NOT EXISTS (
+                     SELECT 1 FROM personnel_qualifications pq
+                      WHERE pq.personnel_id = assignment_personnel.personnel_id
+                        AND pq.qualification_id = assignment_personnel.role_qualification_id);"
+
+      - name: What is left
+        if: ${{ inputs.fix }}
+        run: |
+          npx wrangler d1 execute "$DATABASE_NAME" --remote --command "
+            SELECT COUNT(*) AS still_wrong
+              FROM assignment_personnel ap
+             WHERE ap.role_qualification_id IS NOT NULL
+               AND NOT EXISTS (
+                     SELECT 1 FROM personnel_qualifications pq
+                      WHERE pq.personnel_id = ap.personnel_id
+                        AND pq.qualification_id = ap.role_qualification_id);"

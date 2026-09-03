@@ -22,6 +22,7 @@ import { Select } from '@/components/ui/Input';
 import {
   queryKeys,
   useAssignPersonnel,
+  usePersonnel,
   useQualifications,
   useUnassignPersonnel,
 } from '@/hooks/queries';
@@ -56,6 +57,9 @@ export function AssignmentDetailDialog({
   // which is also what the API reads as "no named role".
   const [seat, setSeat] = useState('');
   const qualifications = useQualifications();
+  // Who holds what, so a named seat can only be offered the people who may
+  // stand it. The roster is already loaded by the board behind this dialog.
+  const personnel = usePersonnel({}, can(Permissions.assignmentsAssign));
 
   const candidates = useQuery({
     queryKey: queryKeys.candidates(assignment?.id ?? ''),
@@ -66,6 +70,10 @@ export function AssignmentDetailDialog({
   });
 
   const all = useMemo(() => candidates.data ?? [], [candidates.data]);
+  const marksHeld = useMemo(
+    () => new Map((personnel.data ?? []).map((person) => [person.id, person.qualificationIds])),
+    [personnel.data],
+  );
   /*
    * "במועמדים המוצעים לשיבוץ, תן לי אפשרות לחפש את החייל שאני רוצה."
    *
@@ -83,14 +91,15 @@ export function AssignmentDetailDialog({
     if (!needle) return all;
     return all.filter((candidate) => candidate.displayName.toLowerCase().includes(needle));
   }, [all, search]);
-  const shown = useMemo(() => selectVisibleCandidates(filtered, VISIBLE_CANDIDATES), [filtered]);
 
   if (!assignment) return null;
 
   const missing = assignment.requiredHeadcount - assignment.assignees.length;
   const qualificationName = (id: string) =>
     qualifications.data?.find((item) => item.id === id)?.name ?? id;
-  const seats = buildCrew(assignment, qualificationName, assignment.crewRoleSuffix);
+  const holds = (personnelId: string, qualificationId: string) =>
+    (marksHeld.get(personnelId) ?? []).includes(qualificationId);
+  const seats = buildCrew(assignment, qualificationName, assignment.crewRoleSuffix, holds);
   const openSeats = openSeatRoles({
     requiredHeadcount: assignment.requiredHeadcount,
     requiredQualifications: assignment.requiredQualifications,
@@ -103,6 +112,21 @@ export function AssignmentDetailDialog({
   // A seat that has since been taken must not stay selected: the server would
   // refuse the assignment for a reason the reader never chose.
   const chosenSeat = seat && namedOpenSeats.includes(seat) ? seat : '';
+
+  /*
+   * A named seat is offered only to the people who may stand it.
+   *
+   * The server refuses the rest outright, so listing them here would be
+   * offering a button that cannot work — and, worse, ranking them, which is how
+   * a reader ends up pressing one. Choose נהג and the list is the drivers;
+   * choose the plain seat and it is everybody, as before.
+   */
+  const forSeat = chosenSeat
+    ? filtered.filter((candidate) =>
+        (marksHeld.get(candidate.personnelId) ?? []).includes(chosenSeat),
+      )
+    : filtered;
+  const shown = selectVisibleCandidates(forSeat, VISIBLE_CANDIDATES);
 
   const handleAssign = (personnelId: string, reason?: string) => {
     assign.mutate(
@@ -301,6 +325,11 @@ export function AssignmentDetailDialog({
                 </Select>
               </label>
             ) : null}
+            {chosenSeat ? (
+              <p className="mb-2 text-xs text-ink-muted">
+                {t('schedule.seatOnlyForHolders', { qualification: qualificationName(chosenSeat) })}
+              </p>
+            ) : null}
 
             <label className="mb-2 flex items-center gap-2">
               <span className="sr-only">{t('schedule.candidateSearch')}</span>
@@ -318,23 +347,25 @@ export function AssignmentDetailDialog({
             {!candidates.isLoading && all.length === 0 ? (
               <p className="text-sm text-ink-muted">{t('assignments.noCandidates')}</p>
             ) : null}
-            {!candidates.isLoading && all.length > 0 && filtered.length === 0 ? (
+            {!candidates.isLoading && all.length > 0 && forSeat.length === 0 ? (
               <p className="text-sm text-ink-muted">{t('schedule.candidatesNoMatch')}</p>
             ) : null}
-            {filtered.length > shown.length ? (
+            {forSeat.length > shown.length ? (
               <p className="mb-2 text-xs text-ink-faint">
-                {t('schedule.candidatesShown', { shown: shown.length, total: filtered.length })}
+                {t('schedule.candidatesShown', { shown: shown.length, total: forSeat.length })}
               </p>
             ) : null}
 
-            <ul className="flex flex-col gap-2">
+            <ul className="flex flex-col gap-2" data-candidate-list>
               {shown.map((candidate) => (
                 <li
                   key={candidate.personnelId}
                   className="rounded-[var(--radius-control)] border border-border-subtle p-3"
                 >
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-medium">{candidate.displayName}</span>
+                    <span className="font-medium" data-candidate-name>
+                      {candidate.displayName}
+                    </span>
                     <Badge tone={candidate.eligible ? 'success' : 'danger'}>
                       {candidate.eligible ? t('assignments.eligible') : t('assignments.ineligible')}
                     </Badge>

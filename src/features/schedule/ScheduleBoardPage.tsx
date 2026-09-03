@@ -154,6 +154,28 @@ export function ScheduleBoardPage() {
   };
 
   const movePerson = (move: PersonMove) => {
+    // A named seat is its qualification's, and nobody else's. Saying so here
+    // costs nothing and answers with the seat's own name.
+    if (move.to.role && !holds(move.personnelId, move.to.role)) {
+      toast.push(
+        'error',
+        t('schedule.seatNeedsQualification', {
+          name: move.personnelName,
+          qualification: qualificationName(move.to.role),
+        }),
+      );
+      return;
+    }
+    if (move.displaced && move.from.role && !holds(move.displaced.personnelId, move.from.role)) {
+      toast.push(
+        'error',
+        t('schedule.seatNeedsQualification', {
+          name: move.displaced.personnelName,
+          qualification: qualificationName(move.from.role),
+        }),
+      );
+      return;
+    }
     void (async () => {
       try {
         await runMove(move);
@@ -233,6 +255,24 @@ export function ScheduleBoardPage() {
   const shownPersonnel = (personnel.data ?? []).filter(
     (person) => !unitId || person.unitId === unitId,
   );
+
+  /*
+   * Who holds which mark.
+   *
+   * A נהג seat may only be stood by a driver and a מפקד seat by a commander;
+   * everybody else is a לוחם. The server refuses the rest outright, and this is
+   * the same fact on the reader's side — so the sheet never prints somebody in
+   * a seat they may not stand, and a drag onto one is turned back here rather
+   * than by a round trip that ends in a red toast.
+   */
+  const marksHeld = useMemo(
+    () => new Map((personnel.data ?? []).map((person) => [person.id, person.qualificationIds])),
+    [personnel.data],
+  );
+  const holds = (personnelId: string, qualificationId: string) =>
+    (marksHeld.get(personnelId) ?? []).includes(qualificationId);
+  const qualificationName = (id: string) =>
+    (qualifications.data ?? []).find((item) => item.id === id)?.name ?? id;
 
   const seatsNeeded = assignments.reduce((total, item) => total + item.requiredHeadcount, 0);
   const seatsFilled = assignments.reduce(
@@ -513,6 +553,7 @@ export function ScheduleBoardPage() {
               qualifications={qualifications.data ?? []}
               timezone={timezone}
               window={{ from: boardWindow.from, to: boardWindow.to }}
+              holds={holds}
               onOpen={setOpenAssignmentId}
               {...(can(Permissions.assignmentTypesWrite) ? { onMoveCard: moveCard } : {})}
               {...(can(Permissions.assignmentsAssign) ? { onMovePerson: movePerson } : {})}
@@ -530,6 +571,7 @@ export function ScheduleBoardPage() {
                 qualifications={qualifications.data ?? []}
                 timezone={timezone}
                 window={{ from: boardWindow.from, to: boardWindow.to }}
+                holds={holds}
                 onOpen={setOpenAssignmentId}
               />
             </div>

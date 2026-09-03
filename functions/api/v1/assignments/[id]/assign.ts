@@ -75,8 +75,26 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env, params }
     });
   }
 
-  // Re-run the engine with the person added — the same code the board uses.
+  /*
+   * A named seat belongs to its qualification, and that is not negotiable.
+   *
+   * The conflict engine says the same thing, but it says it as a rule: a rule
+   * can be switched off in settings, and a blocking one can be overridden with
+   * a reason by anybody allowed to override. Neither is what "only a driver
+   * drives" means. This check is not a rule — it stands outside the engine,
+   * before anything is written, and there is no way past it.
+   */
   const qualifications = await engineQualifications(env);
+  if (input.role && !person.qualificationIds.includes(input.role)) {
+    const label = qualifications.qualificationNames[input.role] ?? input.role;
+    return fail(422, ErrorCodes.VALIDATION_FAILED, {
+      fields: {
+        role: `${person.displayName} אינו מחזיק בהכשיר ${label} ולכן אינו יכול למלא תפקיד זה`,
+      },
+    });
+  }
+
+  // Re-run the engine with the person added — the same code the board uses.
   const engineAssignments = evaluation.assignments.map((assignment) => {
     const engine = toEngineAssignment(assignment);
     return assignment.id === assignmentId
