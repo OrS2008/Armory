@@ -13,6 +13,7 @@ import { useToast } from '@/components/ui/toast-context';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { useMySchedule } from '@/hooks/queries';
 import { useAuth } from '@/hooks/auth-context';
+import { CalendarFeedCard } from './CalendarFeedCard';
 
 export function MySchedulePage() {
   const { user } = useAuth();
@@ -144,6 +145,8 @@ export function MySchedulePage() {
                 ))}
               </ul>
             </Card>
+
+            <CalendarFeedCard linked={linked} timezone={timezone} />
           </div>
         </QueryState>
       ) : null}

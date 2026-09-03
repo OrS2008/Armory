@@ -35,6 +35,8 @@ export const AuditActions = {
   REPLACEMENT_DECIDED: 'REPLACEMENT_DECIDED',
   USER_CREATED: 'USER_CREATED',
   USER_UPDATED: 'USER_UPDATED',
+  CALENDAR_ISSUED: 'CALENDAR_ISSUED',
+  CALENDAR_REVOKED: 'CALENDAR_REVOKED',
 } as const;
 
 export type AuditAction = (typeof AuditActions)[keyof typeof AuditActions];

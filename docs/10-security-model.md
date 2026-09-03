@@ -148,3 +148,21 @@ Stated plainly rather than implied:
    holding the authenticator.
 4. Enable D1 point-in-time recovery and confirm a restore.
 5. Review this gap list with whoever owns the unit's security policy.
+
+## The one unauthenticated endpoint
+
+`GET /api/v1/calendar/:token.ics` answers without a session, because a calendar
+app cannot sign in. The token in the path is therefore the whole credential,
+and the design follows from that:
+
+| Decision | Why |
+| --- | --- |
+| 24 random bytes, hex | Not guessable, and short enough to paste on a phone |
+| Only the SHA-256 is stored | A copy of the `users` table is not a set of working links, exactly as for a session token |
+| Read-only, one person | The most a leaked link can do is show when its owner is on duty |
+| Issuing a new one retires the old | "I shared it by mistake" and "I lost it" have the same, single answer |
+| A malformed or unknown token answers 404, like a revoked one | Nothing distinguishes "never existed" from "no longer valid" |
+| `Cache-Control: private, no-store`, `X-Robots-Tag: noindex` | Nothing in front of it keeps a copy, and nothing indexes it |
+
+The screen shows the link once, at the moment it is issued, and says so — the
+hash is all we keep, so there is nothing to show a second time.

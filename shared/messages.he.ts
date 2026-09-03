@@ -165,6 +165,8 @@ export const auditActionLabels: Record<string, string> = {
   REPLACEMENT_DECIDED: 'החלטה בבקשת החלפה',
   USER_CREATED: 'יצירת משתמש',
   USER_UPDATED: 'עדכון משתמש',
+  CALENDAR_ISSUED: 'הפקת קישור יומן',
+  CALENDAR_REVOKED: 'ביטול קישור יומן',
 };
 
 export const auditEntityLabels: Record<string, string> = {

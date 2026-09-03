@@ -101,10 +101,12 @@ listed in `shared/errors.ts`, messages in `shared/messages.he.ts`.
 | GET | `/dashboard` | session | Today's counts, upcoming assignments, conflicts, recent changes |
 | GET | `/conflicts` | `assignments.read` | `from`, `to`, `severity` |
 | GET | `/me/schedule` | session | Own assignments and availability; drafts withheld |
+| GET / POST / DELETE | `/me/calendar` | session | Whether a calendar link exists / issue one (returned once) / revoke |
+| GET | `/calendar/:token.ics` | **none** | One person's duty times as iCalendar; the token is the whole credential |
 | GET | `/notifications` | session | With `unreadCount` |
 | POST | `/notifications/read` | session | `?id=` for one, omitted for all |
 | GET / POST | `/replacements` | see matrix | |
-| PATCH | `/replacements/:id` | `replacements.decide` | Approval swaps the two people in one batch |
+| PATCH | `/replacements/:id` | `replacements.decide` | Approval swaps the two people in one batch, through the same gate as an assignment |
 | GET | `/rules` | `rules.read` | |
 | PATCH | `/rules/:code` | `rules.write` | Merges `config`, updates severity, enabled, overridable |
 | GET | `/reports/workload` | `reports.read` | Per-person workload and staffing gaps |
