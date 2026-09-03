@@ -14,6 +14,13 @@
  * `seat` is a qualification code. The mark is granted to the member as well as
  * recorded on their seat: a named seat belongs to its mark, so a crew member
  * who does not hold it would be refused the seat their own crew gives them.
+ *
+ * A member may carry `"create": true`, which enrols them if the roster has
+ * nobody active under that name. It has to be asked for per member and never
+ * inferred, because the ordinary reason a name does not match is that it was
+ * typed differently — and guessing there would answer a typo by inventing a
+ * second person rather than by finding the first. `crew-check.mjs` reports
+ * which names the roster has, so the gap is seen before this is flipped.
  */
 const raw = process.env.CREWS_JSON;
 if (!raw) {
@@ -43,9 +50,20 @@ spec.crews.forEach((crew, index) => {
     `INSERT INTO assignment_type_crews (id, assignment_type_id, name, position, active, created_at, updated_at)`,
     `  SELECT ${crewId}, ${postId}, ${q(crew.name)}, ${index + 1}, 1, 0, 0;`,
   );
-  for (const member of crew.members ?? []) {
+  for (const [seatIndex, member] of (crew.members ?? []).entries()) {
     const person = q(member.person);
     const personId = `(SELECT id FROM personnel WHERE display_name = ${person} AND status = 'active' LIMIT 1)`;
+    if (member.create) {
+      // Only where the roster has nobody by that name: running this twice must
+      // not leave the company with the same soldier standing twice.
+      const newId = q(`prs_${Date.now().toString(36)}${index}${seatIndex}`);
+      lines.push(
+        `INSERT INTO personnel (id, org_id, display_name, status, created_at, updated_at)`,
+        `  SELECT ${newId}, (SELECT id FROM organizations LIMIT 1), ${person}, 'active', 0, 0`,
+        `   WHERE NOT EXISTS (SELECT 1 FROM personnel`,
+        `                      WHERE display_name = ${person} AND status = 'active');`,
+      );
+    }
     const seat = member.seat
       ? `(SELECT id FROM qualifications WHERE code = ${q(member.seat)} LIMIT 1)`
       : 'NULL';
