@@ -170,6 +170,11 @@ export const assignmentTypeSchema = z.object({
   section: optionalText(80),
   sheetLabel: optionalText(120),
   crewRoleSuffix: optionalText(40),
+  /**
+   * How long one unbroken run here may be, in hours, when the post's own turn
+   * is longer than the company rule. Empty keeps the rule.
+   */
+  maxContinuousHours: optionalNumber(z.number().int().min(1).max(72)),
   sheetColumn: optionalNumber(z.number().int().min(1).max(3)),
 });
 export type AssignmentTypeInput = z.infer<typeof assignmentTypeSchema>;

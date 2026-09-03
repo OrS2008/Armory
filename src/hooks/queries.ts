@@ -1,6 +1,6 @@
 /** TanStack Query hooks — the single place server state is fetched. */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { Conflict, SchedulingRule } from '@shared/conflicts';
+import type { Conflict, EngineCrew, SchedulingRule } from '@shared/conflicts';
 import type { SheetPlacement } from '@shared/crew';
 import type {
   AdminUser,
@@ -35,6 +35,7 @@ export const queryKeys = {
   notifications: ['notifications'] as const,
   replacements: ['replacements'] as const,
   volunteers: ['volunteers'] as const,
+  crews: ['crews'] as const,
   openSeats: ['open-seats'] as const,
   audit: (filters: Record<string, string | number | undefined>) => ['audit', filters] as const,
   rules: ['rules'] as const,
@@ -230,6 +231,21 @@ export function useReplacements(status?: string) {
     queryKey: [...queryKeys.replacements, status] as const,
     queryFn: () => api.get<{ replacements: ReplacementRequest[] }>('/replacements', { status }),
     select: (data) => data.replacements,
+  });
+}
+
+/**
+ * The fixed crews of every post that has any.
+ *
+ * Auto-fill runs in the browser and has to know them, or it proposes a crew
+ * the server will then take apart.
+ */
+export function useCrews() {
+  return useQuery({
+    queryKey: queryKeys.crews,
+    queryFn: () => api.get<{ crewsByType: Record<string, EngineCrew[]> }>('/crews'),
+    select: (data) => data.crewsByType,
+    staleTime: 300_000,
   });
 }
 

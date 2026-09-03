@@ -191,11 +191,28 @@ still run so that rows written before this, and the board, can show it.
 
 ### Which crew a shift *is*
 
-Reporting "the others" needs an answer that does not depend on the order rows
-came back in: the crew most of the shift belongs to, earliest in the rotation
-where that is a tie. Two against two would otherwise blame whichever pair
-SQLite happened to list second, and the same shift would read differently on
-two loads.
+The crew most of the shift belongs to, and on a tie the one that was on it
+first.
+
+The tie-break is not decoration. Ranking a candidate asks "does adding this
+person break the crew", and it asks by appending them to the shift — so a crew
+of one being offered somebody from the other crew is a one-all tie. Breaking
+that by rotation order names the **newcomer** the standing crew and reports the
+person already on the shift instead: the candidate comes back eligible, and
+auto-fill cheerfully mixes the two. A test pins it.
+
+### A long turn is not a stacked one
+
+`MAX_CONTINUOUS` refuses a run of touching shifts longer than eight hours —
+the company's "eight on, sixteen off" stated as a rule. It could not tell that
+from a post whose *single* turn is twenty-four hours, so every candidate for
+חפ״ק, קצין מוצב, חובש תורן or כיתת כוננות came back blocked, and auto-fill
+proposed nobody at all for a post it was meant to fill.
+
+`assignment_types.max_continuous_minutes` lets the post say its own allowance.
+NULL keeps the company rule, so nothing changes for the eight-hour posts, which
+is where the rule earns its keep. A run takes the largest allowance among the
+shifts in it: the long turn is the reason the run is long.
 
 ### The rotations alternate on their own
 

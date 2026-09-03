@@ -26,9 +26,10 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       `INSERT INTO assignment_types (id, org_id, name, category, default_duration_minutes,
                                      required_headcount, priority, color, instructions,
                                      briefing_minutes_before, section, sheet_label,
-                                     crew_role_suffix, sheet_column, active, standing, shift_hours,
+                                     crew_role_suffix, max_continuous_minutes, sheet_column,
+                                     active, standing, shift_hours,
                                      shift_start_hour, shift_start_minute, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).bind(
       id,
       DEFAULT_ORG_ID,
@@ -43,6 +44,9 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
       input.section ?? null,
       input.sheetLabel ?? null,
       input.crewRoleSuffix ?? null,
+      // Stored in minutes like every other duration; spoken in hours, because
+      // nobody says "a turn is 1,440 minutes".
+      input.maxContinuousHours ? input.maxContinuousHours * 60 : null,
       input.sheetColumn ?? null,
       boolToInt(input.active, 1),
       boolToInt(input.standing, 0),

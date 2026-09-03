@@ -84,6 +84,13 @@ export interface EngineAssignment {
    * as a requirement on anybody else, so it is stated here.
    */
   excludedQualificationIds?: string[];
+  /**
+   * How long one unbroken run on this post may be, in minutes, when that is
+   * longer than the company rule. A post handed over once a day is not
+   * somebody stacking turns, and MAX_CONTINUOUS cannot tell the two apart on
+   * its own. Absent means the rule's own limit.
+   */
+  maxContinuousMinutes?: number | null;
   assigneeIds: string[];
   /**
    * Which seat each assignee fills, keyed by personnel id: the qualification
@@ -574,22 +581,34 @@ export function detectConflicts(input: EngineInput): Conflict[] {
       }
 
       /*
-       * Which crew this shift *is*: the one most of it belongs to, earliest in
-       * the rotation where that is a tie. Reporting "the others" needs an
-       * answer that does not depend on the order the rows came back in — two
-       * against two would otherwise blame whichever pair SQLite listed second.
+       * Which crew this shift *is*: the one most of it belongs to, and on a tie
+       * the one that was on it first.
+       *
+       * The tie-break is not decoration. Ranking a candidate asks "does adding
+       * this person break the crew", and it asks by appending them to the
+       * shift — so a crew of one being offered somebody from the other crew is
+       * a one-all tie. Breaking that by rotation order names the *newcomer* the
+       * standing crew and reports the person already on the shift instead,
+       * which is both wrong and silent: the candidate comes back eligible and
+       * auto-fill cheerfully mixes the two.
+       *
+       * First on the shift is also the better answer for a real two-and-two,
+       * and it is stable: assignees come back in the order they were seated.
        */
       const tally = new Map<string, number>();
-      for (const personnelId of assignment.assigneeIds) {
+      const seatedAt = new Map<string, number>();
+      for (const [index, personnelId] of assignment.assigneeIds.entries()) {
         const crew = crewOf.get(personnelId);
-        if (crew) tally.set(crew.id, (tally.get(crew.id) ?? 0) + 1);
+        if (!crew) continue;
+        tally.set(crew.id, (tally.get(crew.id) ?? 0) + 1);
+        if (!seatedAt.has(crew.id)) seatedAt.set(crew.id, index);
       }
       const standing = crews
         .filter((crew) => tally.has(crew.id))
         .sort(
           (left, right) =>
             (tally.get(right.id) ?? 0) - (tally.get(left.id) ?? 0) ||
-            left.position - right.position,
+            (seatedAt.get(left.id) ?? 0) - (seatedAt.get(right.id) ?? 0),
         )[0];
 
       const memberRule = rule('CREW_MEMBER_ONLY');
@@ -674,26 +693,39 @@ export function detectConflicts(input: EngineInput): Conflict[] {
         // shorten or hand to somebody else.
         let last: EngineAssignment | null = null;
 
+        /*
+         * What this run is allowed, which is not always the company's eight
+         * hours: a run made of a post whose turn is a full day by design gets
+         * that post's own allowance. The largest one in the run wins, because
+         * the long turn is the reason the run is long.
+         */
+        let runLimit = limit;
+
         const report = () => {
           if (!last) return;
           const minutes = minutesBetween(runStart, runEnd);
-          if (minutes > limit) {
+          if (minutes > runLimit) {
             add('MAX_CONTINUOUS', continuousRule, last, personnelId, {
               person: personName(personnelId),
               actual: formatHours(minutes / 60),
-              required: formatHours(limit / 60),
+              required: formatHours(runLimit / 60),
             });
           }
         };
 
+        const allowanceOf = (assignment: EngineAssignment) =>
+          Math.max(limit, assignment.maxContinuousMinutes ?? 0);
+
         for (const assignment of sorted) {
           if (last && assignment.startAt <= runEnd) {
             runEnd = Math.max(runEnd, assignment.endAt);
+            runLimit = Math.max(runLimit, allowanceOf(assignment));
             last = assignment;
           } else {
             report();
             runStart = assignment.startAt;
             runEnd = assignment.endAt;
+            runLimit = allowanceOf(assignment);
             last = assignment;
           }
         }

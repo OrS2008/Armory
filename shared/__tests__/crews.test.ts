@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { buildAutofillProposal } from '../autofill';
 import { DEFAULT_RULES, detectConflicts, type EngineAssignment } from '../conflicts';
 
 /*
@@ -74,16 +75,101 @@ describe('a post stood by fixed crews', () => {
     expect(blamed(other)).toEqual(['a4']);
   });
 
-  it('takes the earlier rotation when a shift is split evenly', () => {
-    const conflicts = run(shift(['a1', 'a2', 'b1', 'b2']), ['a1', 'a2', 'b1', 'b2']);
+  it('takes the crew that was on it first when a shift is split evenly', () => {
+    const conflicts = run(shift(['b1', 'b2', 'a1', 'a2']), ['b1', 'b2', 'a1', 'a2']);
     const blamed = conflicts
       .filter((one) => one.code === 'CREW_NO_MIX')
       .map((one) => one.personnelId);
-    expect(blamed).toEqual(['b1', 'b2']);
+    expect(blamed).toEqual(['a1', 'a2']);
   });
 
   it('leaves a post with no crews exactly as it was', () => {
     const conflicts = run(shift(['x1', 'x2'], 'atp_shag'), ['x1', 'x2']);
     expect(conflicts.filter((one) => one.code.startsWith('CREW_'))).toEqual([]);
+  });
+});
+
+describe('auto-fill on a post stood by fixed crews', () => {
+  /*
+   * Four named seats for four people, and two crews that each hold exactly one
+   * of every mark. Nothing here picks a crew: the first seat taken makes the
+   * other crew ineligible for the rest of the shift, so one whole crew falls
+   * out of the ranking that was already there.
+   */
+  const MARKS = { cmd: 'מפקד', drv: 'נהג', med: 'חובש', mrk: 'קלע' };
+  const crewOf = (prefix: string) => [
+    { id: `${prefix}1`, displayName: `${prefix} מפקד`, qualificationIds: ['cmd'] },
+    { id: `${prefix}2`, displayName: `${prefix} נהג`, qualificationIds: ['drv'] },
+    { id: `${prefix}3`, displayName: `${prefix} חובש`, qualificationIds: ['med'] },
+    { id: `${prefix}4`, displayName: `${prefix} קלע`, qualificationIds: ['mrk'] },
+  ];
+  const roster = [...crewOf('a'), ...crewOf('b')];
+  const crews = {
+    atp_hafak: [
+      { id: 'crew_a', name: 'סבב א׳', position: 1, memberIds: ['a1', 'a2', 'a3', 'a4'] },
+      { id: 'crew_b', name: 'סבב ב׳', position: 2, memberIds: ['b1', 'b2', 'b3', 'b4'] },
+    ],
+  };
+  const hafak: EngineAssignment = {
+    id: 'asg_hafak',
+    assignmentTypeId: 'atp_hafak',
+    title: 'חפ״ק',
+    startAt: Date.UTC(2026, 8, 10, 0, 0),
+    endAt: Date.UTC(2026, 8, 11, 0, 0),
+    // Handed over once a day, and the post says so — otherwise MAX_CONTINUOUS
+    // reads a designed twenty-four-hour turn as somebody stacking three.
+    maxContinuousMinutes: 1440,
+    requiredHeadcount: 4,
+    requiredQualifications: [
+      { qualificationId: 'cmd', minCount: 1 },
+      { qualificationId: 'drv', minCount: 1 },
+      { qualificationId: 'med', minCount: 1 },
+      { qualificationId: 'mrk', minCount: 1 },
+    ],
+    assigneeIds: [],
+    publicationState: 'draft',
+  };
+
+  const fill = (assignment: EngineAssignment) =>
+    buildAutofillProposal({
+      assignments: [assignment],
+      personnel: roster,
+      absences: [],
+      rules: DEFAULT_RULES,
+      qualificationNames: MARKS,
+      crewsByType: crews,
+    });
+
+  it('fills all four seats with one crew and no one from the other', () => {
+    const { proposed, gaps } = fill(hafak);
+    expect(gaps).toEqual([]);
+    expect(proposed).toHaveLength(4);
+    const prefixes = new Set(proposed.map((one) => one.personnelId[0]));
+    expect(prefixes.size).toBe(1);
+    // Every seat is the one that person's mark names.
+    for (const pick of proposed) {
+      const person = roster.find((one) => one.id === pick.personnelId);
+      expect(person?.qualificationIds).toContain(pick.role);
+    }
+  });
+
+  it('follows the crew already on the shift rather than starting a second', () => {
+    const started = { ...hafak, assigneeIds: ['b1'], assigneeRoles: { b1: 'cmd' } };
+    const { proposed } = fill(started);
+    expect(proposed).toHaveLength(3);
+    expect(proposed.every((one) => one.personnelId.startsWith('b'))).toBe(true);
+  });
+
+  it('proposes nobody at all when the post has crews and the roster is outside them', () => {
+    const outsiders = buildAutofillProposal({
+      assignments: [hafak],
+      personnel: [{ id: 'x1', displayName: 'זר', qualificationIds: ['cmd', 'drv', 'med', 'mrk'] }],
+      absences: [],
+      rules: DEFAULT_RULES,
+      qualificationNames: MARKS,
+      crewsByType: crews,
+    });
+    expect(outsiders.proposed).toEqual([]);
+    expect(outsiders.gaps).toHaveLength(1);
   });
 });

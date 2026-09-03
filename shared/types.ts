@@ -120,6 +120,12 @@ export interface AssignmentType {
   sheetLabel: string | null;
   /** Appended to every seat label here: 'סיור' makes מפקד read מפקד סיור. */
   crewRoleSuffix: string | null;
+  /**
+   * How long one unbroken run here may be, when the post's own turn is longer
+   * than the company's rule — a post handed over once a day is not somebody
+   * stacking turns. Null keeps the rule's limit.
+   */
+  maxContinuousMinutes: number | null;
   /** Which of the sheet's three columns this post prints in, right to left. */
   sheetColumn: number | null;
   requiredQualifications: { qualificationId: string; minCount: number }[];
@@ -165,6 +171,8 @@ export interface Assignment {
   section: string | null;
   sheetLabel: string | null;
   crewRoleSuffix: string | null;
+  /** The post's own allowance for one unbroken run, or null for the rule's. */
+  maxContinuousMinutes: number | null;
   sheetColumn: number | null;
   /**
    * Whether the post is still stood. A retired post keeps the shifts it was

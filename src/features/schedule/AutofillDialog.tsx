@@ -15,7 +15,12 @@ import { Dialog } from '@/components/ui/Dialog';
 import { IconButton } from '@/components/ui/IconButton';
 import { EmptyState } from '@/components/ui/States';
 import { useToast } from '@/components/ui/toast-context';
-import { useAssignments, useAvailability, useScheduleInvalidation } from '@/hooks/queries';
+import {
+  useAssignments,
+  useAvailability,
+  useCrews,
+  useScheduleInvalidation,
+} from '@/hooks/queries';
 
 interface Props {
   open: boolean;
@@ -53,6 +58,7 @@ const toEngineAssignment = (assignment: Assignment): EngineAssignment => ({
   assignmentTypeId: assignment.assignmentTypeId,
   title: assignment.title ?? assignment.assignmentTypeName,
   excludedQualificationIds: assignment.excludedQualificationIds,
+  maxContinuousMinutes: assignment.maxContinuousMinutes,
   startAt: assignment.startAt,
   endAt: assignment.endAt,
   requiredHeadcount: assignment.requiredHeadcount,
@@ -107,6 +113,7 @@ export function AutofillDialog({
   const context = { from: window.from - CONTEXT_DAYS * DAY, to: window.to + CONTEXT_DAYS * DAY };
   const around = useAssignments(context, open);
   const availability = useAvailability({ ...context, status: 'approved' }, open);
+  const crews = useCrews();
 
   const proposal = useMemo(() => {
     if (!open) return null;
@@ -127,6 +134,9 @@ export function AutofillDialog({
       exclusiveQualificationIds: qualifications
         .filter((qualification) => qualification.exclusive)
         .map((qualification) => qualification.id),
+      // A post stood by fixed crews fills with one whole crew: the first seat
+      // taken makes every other crew ineligible for the rest of the shift.
+      crewsByType: crews.data ?? {},
       blockingQualificationIds: qualifications
         .filter((qualification) => qualification.blocksScheduling)
         .map((qualification) => qualification.id),
@@ -138,6 +148,7 @@ export function AutofillDialog({
     around.data,
     personnel,
     availability.data,
+    crews.data,
     qualifications,
     rules,
     timezone,

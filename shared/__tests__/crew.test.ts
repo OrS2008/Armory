@@ -158,6 +158,7 @@ const shift = (over: Partial<Assignment>): Assignment => ({
   section: null,
   sheetLabel: null,
   crewRoleSuffix: null,
+  maxContinuousMinutes: null,
   sheetColumn: null,
   postActive: true,
   color: 'amber',

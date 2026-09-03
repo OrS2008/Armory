@@ -118,6 +118,8 @@ export function AssignmentTypesPage() {
             section: type.section,
             sheetLabel: type.sheetLabel,
             crewRoleSuffix: type.crewRoleSuffix,
+            maxContinuousHours:
+              type.maxContinuousMinutes === null ? null : type.maxContinuousMinutes / 60,
             sheetColumn: type.sheetColumn,
           }
         : {
@@ -134,6 +136,7 @@ export function AssignmentTypesPage() {
             section: null,
             sheetLabel: null,
             crewRoleSuffix: null,
+            maxContinuousHours: null,
             sheetColumn: null,
           },
     );
@@ -552,6 +555,21 @@ export function AssignmentTypesPage() {
               error={form.formState.errors.crewRoleSuffix?.message}
             >
               {({ id }) => <Input id={id} {...form.register('crewRoleSuffix')} />}
+            </Field>
+            <Field
+              label={t('assignments.maxContinuous')}
+              hint={t('assignments.maxContinuousHint')}
+              error={form.formState.errors.maxContinuousHours?.message}
+            >
+              {({ id }) => (
+                <Input
+                  id={id}
+                  type="number"
+                  min={1}
+                  max={72}
+                  {...form.register('maxContinuousHours')}
+                />
+              )}
             </Field>
             <Field
               label={t('assignments.sheetColumn')}

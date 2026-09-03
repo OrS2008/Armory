@@ -13,7 +13,13 @@
 import { rankCandidates } from './candidates';
 import { namedSeatMarks, openSeatRoles } from './crew';
 import { DEFAULT_CREW_ROLE } from './messages.he';
-import type { EngineAbsence, EngineAssignment, EnginePerson, SchedulingRule } from './conflicts';
+import type {
+  EngineAbsence,
+  EngineAssignment,
+  EngineCrew,
+  EnginePerson,
+  SchedulingRule,
+} from './conflicts';
 import type { FairnessWeights } from './fairness';
 import { DEFAULT_TIMEZONE, HOUR } from './time';
 
@@ -26,6 +32,16 @@ export interface AutofillInput {
   qualificationNames?: Record<string, string> | undefined;
   exclusiveQualificationIds?: string[] | undefined;
   blockingQualificationIds?: string[] | undefined;
+  /**
+   * The fixed crews of each post that has any.
+   *
+   * Without them a proposal happily mixes סבב א׳ with סבב ב׳ — and the server
+   * then drops half of it, so the reviewer approves a full crew and gets two
+   * people. With them, ranking makes the wrong crew ineligible the moment the
+   * first seat is taken, and the rest of the shift can only come from the crew
+   * that person belongs to. Nothing here picks a crew: one falls out.
+   */
+  crewsByType?: Record<string, EngineCrew[]> | undefined;
   weights?: FairnessWeights | undefined;
   timezone?: string | undefined;
   /** Restrict filling to these assignments; defaults to every understaffed one. */
@@ -172,6 +188,7 @@ export function buildAutofillProposal(input: AutofillInput): AutofillProposal {
       ...(input.blockingQualificationIds
         ? { blockingQualificationIds: input.blockingQualificationIds }
         : {}),
+      ...(input.crewsByType ? { crewsByType: input.crewsByType } : {}),
       ...(input.weights ? { weights: input.weights } : {}),
       timezone,
     });
@@ -219,6 +236,7 @@ export function buildAutofillProposal(input: AutofillInput): AutofillProposal {
       ...(input.blockingQualificationIds
         ? { blockingQualificationIds: input.blockingQualificationIds }
         : {}),
+      ...(input.crewsByType ? { crewsByType: input.crewsByType } : {}),
       ...(input.weights ? { weights: input.weights } : {}),
       timezone,
     });

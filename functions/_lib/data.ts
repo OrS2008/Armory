@@ -329,6 +329,7 @@ export async function loadAssignmentTypes(env: Env): Promise<AssignmentType[]> {
             t.priority, t.color, t.instructions, t.briefing_minutes_before, t.active, t.standing,
             t.shift_hours, t.shift_start_hour, t.shift_start_minute,
             t.section, t.sheet_label, t.crew_role_suffix, t.sheet_column,
+            t.max_continuous_minutes,
             (SELECT COUNT(*) FROM assignment_instances a WHERE a.assignment_type_id = t.id)
               AS usage_count
        FROM assignment_types t WHERE t.org_id = ? ORDER BY t.priority, t.name`,
@@ -352,6 +353,7 @@ export async function loadAssignmentTypes(env: Env): Promise<AssignmentType[]> {
       section: string | null;
       sheet_label: string | null;
       crew_role_suffix: string | null;
+      max_continuous_minutes: number | null;
       sheet_column: number | null;
       usage_count: number;
     }>();
@@ -379,6 +381,7 @@ export async function loadAssignmentTypes(env: Env): Promise<AssignmentType[]> {
     section: row.section,
     sheetLabel: row.sheet_label,
     crewRoleSuffix: row.crew_role_suffix,
+    maxContinuousMinutes: row.max_continuous_minutes,
     sheetColumn: row.sheet_column,
     usageCount: row.usage_count,
   }));
@@ -536,7 +539,8 @@ export async function loadAssignments(
 
   const rows = await env.DB.prepare(
     `SELECT a.id, a.schedule_id, a.assignment_type_id, t.name AS type_name, t.priority, t.color,
-            t.section, t.sheet_label, t.crew_role_suffix, t.sheet_column, t.active AS type_active,
+            t.section, t.sheet_label, t.crew_role_suffix, t.sheet_column,
+            t.max_continuous_minutes, t.active AS type_active,
             a.unit_id, t.instructions, a.title, a.start_at, a.end_at, a.required_headcount,
             a.status, a.publication_state, a.notes, a.updated_at
        FROM assignment_instances a
@@ -555,6 +559,7 @@ export async function loadAssignments(
       section: string | null;
       sheet_label: string | null;
       crew_role_suffix: string | null;
+      max_continuous_minutes: number | null;
       sheet_column: number | null;
       type_active: number;
       unit_id: string | null;
@@ -632,6 +637,7 @@ export async function loadAssignments(
     section: row.section,
     sheetLabel: row.sheet_label,
     crewRoleSuffix: row.crew_role_suffix,
+    maxContinuousMinutes: row.max_continuous_minutes,
     sheetColumn: row.sheet_column,
     postActive: row.type_active === 1,
     unitId: row.unit_id,
@@ -716,6 +722,7 @@ export function toEngineAssignment(assignment: Assignment): EngineAssignment {
     requiredHeadcount: assignment.requiredHeadcount,
     requiredQualifications: assignment.requiredQualifications,
     excludedQualificationIds: assignment.excludedQualificationIds,
+    maxContinuousMinutes: assignment.maxContinuousMinutes,
     assigneeIds: assignment.assignees.map((assignee) => assignee.personnelId),
     assigneeRoles: Object.fromEntries(
       assignment.assignees.map((assignee) => [assignee.personnelId, assignee.role]),

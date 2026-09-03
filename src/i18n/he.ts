@@ -381,6 +381,9 @@ export const he = {
   'assignments.sheetLabelHint': 'מה שיודפס בשורת הכותרת, אם שונה משם העמדה.',
   'assignments.crewRoleSuffix': 'סיומת לתפקידי הצוות',
   'assignments.crewRoleSuffixHint': 'למשל ״סיור״ — ואז מפקד נקרא מפקד סיור בעמדה הזו בלבד.',
+  'assignments.maxContinuous': 'אורך תורנות מרבי (שעות)',
+  'assignments.maxContinuousHint':
+    'למשימה שנמסרת פעם ביום — 24. ריק משאיר את כלל הפלוגה (8 שעות), ואז שיבוץ אוטומטי לא ישבץ אף אחד למשמרת ארוכה ממנו.',
   'assignments.sheetColumn': 'עמודה בגיליון',
   'assignments.sheetColumnAuto': 'לפי מקום פנוי',
   'assignments.sheetColumnOption': 'עמודה {column}',
