@@ -53,11 +53,13 @@ jobs:
 
       # Always printed. A name the roster cannot match is a crew member who
       # would be silently dropped, and that has to be seen before it happens.
+      # --command rather than --file: the file path reports how many queries ran
+      # and how many rows they read, and never prints the rows themselves —
+      # which is the entire point of asking.
       - name: Which of the named people the roster has
         run: |
-          node scripts/crew-check.mjs > /tmp/check.sql
-          cat /tmp/check.sql
-          npx wrangler d1 execute "$DATABASE_NAME" --remote --file=/tmp/check.sql
+          npx wrangler d1 execute "$DATABASE_NAME" --remote \
+            --command "$(node scripts/crew-check.mjs)"
 
       - name: The crews as they stand now
         run: |
