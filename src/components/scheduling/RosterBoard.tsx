@@ -45,6 +45,17 @@ interface Props {
   onMoveCard?: (placements: SheetPlacement[], previous: SheetPlacement[]) => void;
   /** Moving somebody between seats. Absent when the reader may not assign. */
   onMovePerson?: (move: PersonMove) => void;
+  /** Opening the post itself, from its title bar. Absent when there is nothing there to do. */
+  onOpenPost?: (post: SheetPost) => void;
+}
+
+/** How a card names the post behind it, for whoever opens it. */
+export interface SheetPost {
+  assignmentTypeId: string;
+  /** The post's own name, which is what an act on it is reported against. */
+  name: string;
+  /** What the title bar printed, which is what the reader pressed. */
+  title: string;
 }
 
 /** What a press on the sheet may be carrying. */
@@ -108,6 +119,7 @@ export function RosterBoard({
   onOpen,
   onMoveCard,
   onMovePerson,
+  onOpenPost,
 }: Props) {
   const names = new Map(qualifications.map((item) => [item.id, item.name]));
   const qualificationName = (id: string) => names.get(id) ?? id;
@@ -211,6 +223,7 @@ export function RosterBoard({
                 canArrange={Boolean(onMoveCard)}
                 canMovePeople={Boolean(onMovePerson)}
                 onOpen={onOpen}
+                {...(onOpenPost ? { onOpenPost } : {})}
               />
             ))}
           </div>
@@ -293,6 +306,7 @@ function PostCard({
   canArrange,
   canMovePeople,
   onOpen,
+  onOpenPost,
 }: {
   post: PostGroup;
   conflicts: Conflict[];
@@ -302,6 +316,7 @@ function PostCard({
   canArrange: boolean;
   canMovePeople: boolean;
   onOpen: (assignmentId: string) => void;
+  onOpenPost?: (post: SheetPost) => void;
 }) {
   // A crewed post carries the הערות column, because that is where its briefing
   // and handover lines live. A crewless one is a time/name list, so a note is
@@ -315,6 +330,30 @@ function PostCard({
   // on, so it goes beside the title instead.
   const titleOnly = post.shifts.every(isFullDay);
   const titleSpan = titleOnly && hasNotes ? columns - 1 : columns;
+
+  /*
+   * The title bar is both a handle and a way in. A press that turned into a
+   * drag is not also a click on what it started from — the same guard the shift
+   * names use, because the bar is the biggest drag target on the card.
+   */
+  const openPost = (event: React.MouseEvent) => {
+    if (drag.suppressClick()) {
+      event.preventDefault();
+      return;
+    }
+    onOpenPost?.({
+      assignmentTypeId: post.assignmentTypeId,
+      name: post.name,
+      title: post.title,
+    });
+  };
+
+  const title = (
+    <>
+      {canArrange ? <GripVertical className="sheet-grip size-3.5" aria-hidden /> : null}
+      {post.title}
+    </>
+  );
 
   return (
     <table className="sheet roster-card" data-sheet-card={post.assignmentTypeId}>
@@ -337,8 +376,18 @@ function PostCard({
                 : undefined
             }
           >
-            {canArrange ? <GripVertical className="sheet-grip size-3.5" aria-hidden /> : null}
-            {post.title}
+            {onOpenPost ? (
+              <button
+                type="button"
+                className="sheet-title-open"
+                title={t('schedule.openPostHint')}
+                onClick={openPost}
+              >
+                {title}
+              </button>
+            ) : (
+              title
+            )}
           </th>
           {titleSpan < columns ? (
             <th className="sheet-note-head">{t('schedule.notesColumn')}</th>

@@ -37,9 +37,11 @@ const ROUTES = [
  * what this caught the day deleting a used post became possible — leaves every
  * later spec, and the phone project that runs after this one, with a roster that
  * no longer offers it. Both are covered directly, and deliberately, by
- * `assignment-types.spec.ts`.
+ * `assignment-types.spec.ts` and `roster-post.spec.ts`, on posts they stand up
+ * themselves.
  */
-const SKIP = /התנתקות|החשבון שלי|ייצוא PDF|השבתת סוג המשימה|מחיקת סוג המשימה/;
+const SKIP =
+  /התנתקות|החשבון שלי|ייצוא PDF|השבתת סוג המשימה|מחיקת סוג המשימה|משמרות היום מהלוח|מחיקת המשימה מכל הימים/;
 
 /** A 401 on the login screen is the app asking who you are, not a failure. */
 const EXPECTED = /Failed to load resource/;

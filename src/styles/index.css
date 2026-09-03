@@ -378,6 +378,23 @@
 }
 
 /*
+ * The title bar's own button. It fills the bar so the whole width stays a drag
+ * handle, and inherits the bar's colour so opening the post is a thing you can
+ * do rather than a second thing the card is trying to say.
+ */
+.sheet-title-open {
+  display: block;
+  width: 100%;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.sheet-title-open:hover {
+  text-decoration: underline;
+}
+
+/*
  * The three columns of the sheet, read right to left.
  *
  * Which column a post prints in is decided in `sheetColumns`, not here: the

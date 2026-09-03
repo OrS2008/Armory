@@ -296,12 +296,21 @@ export function useMySchedule(enabled = true) {
   });
 }
 
-/** Invalidate everything that depends on the schedule after a write. */
+/**
+ * Invalidate everything that depends on the schedule after a write.
+ *
+ * The posts list is in here because a post carries `usageCount` — how many
+ * shifts stand behind it — which every shift created or removed changes. A
+ * stale count is not a cosmetic problem: it is what the sheet's own delete
+ * offers to spend, so left unrefreshed it can say a post costs nothing while
+ * the server refuses to remove it.
+ */
 export function useScheduleInvalidation() {
   const queryClient = useQueryClient();
   return () => {
     for (const key of [
       'assignments',
+      'assignment-types',
       'conflicts',
       'dashboard',
       'schedule',

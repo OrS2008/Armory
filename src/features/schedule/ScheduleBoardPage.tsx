@@ -27,7 +27,7 @@ import { useToast } from '@/components/ui/toast-context';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { StepsHint } from '@/components/layout/StepsHint';
 import { DayTimeline } from '@/components/scheduling/DayTimeline';
-import { RosterBoard, type PersonMove } from '@/components/scheduling/RosterBoard';
+import { RosterBoard, type PersonMove, type SheetPost } from '@/components/scheduling/RosterBoard';
 import { PersonnelTimeline } from '@/components/scheduling/PersonnelTimeline';
 import { WeekGrid } from '@/components/scheduling/WeekGrid';
 import {
@@ -47,6 +47,7 @@ import { AssignmentDetailDialog } from './AssignmentDetailDialog';
 import { AssignmentEditDialog } from './AssignmentEditDialog';
 import { AssignmentFormDialog } from './AssignmentFormDialog';
 import { AutofillDialog } from './AutofillDialog';
+import { PostActionsDialog } from './PostActionsDialog';
 import { StandingRosterDialog } from './StandingRosterDialog';
 
 type View = 'roster' | 'day' | 'week' | 'personnel';
@@ -62,6 +63,8 @@ export function ScheduleBoardPage() {
   const [creating, setCreating] = useState(false);
   const [openAssignmentId, setOpenAssignmentId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  /** The post whose title bar was pressed on the sheet, as the card named it. */
+  const [openPost, setOpenPost] = useState<SheetPost | null>(null);
   const [autofilling, setAutofilling] = useState(false);
   const [layingOut, setLayingOut] = useState(false);
 
@@ -106,6 +109,19 @@ export function ScheduleBoardPage() {
   const blockingCount = conflicts.filter((conflict) => conflict.severity === 'blocking').length;
   const openAssignment = assignments.find((item) => item.id === openAssignmentId) ?? null;
   const editingAssignment = assignments.find((item) => item.id === editingId) ?? null;
+  /*
+   * The turns the opened card is printing — read off the board rather than
+   * fetched, so what the dialog offers to remove is exactly what is in front of
+   * the reader. Sorted as the card prints them, which is the order they go.
+   */
+  const openPostShifts = openPost
+    ? assignments
+        .filter(
+          (item) =>
+            item.assignmentTypeId === openPost.assignmentTypeId && item.status !== 'cancelled',
+        )
+        .sort((left, right) => left.startAt - right.startAt)
+    : [];
   /*
    * Moving somebody is two acts, not one: a seat is taken once, so whoever is
    * in the target has to stand up before anybody sits down. If the second half
@@ -500,6 +516,9 @@ export function ScheduleBoardPage() {
               onOpen={setOpenAssignmentId}
               {...(can(Permissions.assignmentTypesWrite) ? { onMoveCard: moveCard } : {})}
               {...(can(Permissions.assignmentsAssign) ? { onMovePerson: movePerson } : {})}
+              {...(can(Permissions.assignmentsWrite) || can(Permissions.assignmentTypesWrite)
+                ? { onOpenPost: setOpenPost }
+                : {})}
             />
           ) : null}
           {/* Whatever is on screen, the PDF is the duty sheet. */}
@@ -594,6 +613,15 @@ export function ScheduleBoardPage() {
         assignment={editingAssignment}
         timezone={timezone}
         onClose={() => setEditingId(null)}
+      />
+
+      <PostActionsDialog
+        post={openPost}
+        shifts={openPostShifts}
+        timezone={timezone}
+        canRemoveShifts={can(Permissions.assignmentsWrite)}
+        canDeletePost={can(Permissions.assignmentTypesWrite)}
+        onClose={() => setOpenPost(null)}
       />
     </>
   );
