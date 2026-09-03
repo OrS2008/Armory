@@ -16,6 +16,7 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { useMySchedule } from '@/hooks/queries';
 import { useAuth } from '@/hooks/auth-context';
 import { MyReplacementsCard } from './MyReplacementsCard';
+import { OpenSeatsCard } from './OpenSeatsCard';
 import { CalendarFeedCard } from './CalendarFeedCard';
 import { ReplacementRequestDialog } from './ReplacementRequestDialog';
 
@@ -145,6 +146,8 @@ export function MySchedulePage() {
                 ))}
               </ul>
             </Card>
+
+            <OpenSeatsCard linked={linked} timezone={timezone} />
 
             <CalendarFeedCard linked={linked} timezone={timezone} />
           </div>

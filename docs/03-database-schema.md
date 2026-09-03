@@ -48,7 +48,8 @@ Cloudflare D1 (SQLite). One migration, `migrations/0001_init.sql`, applied with
 | `assignment_instances` | A concrete occurrence, with `status` and `publication_state` |
 | `assignment_personnel` | Who is on it, who assigned them, acknowledgement, override reason |
 | `scheduling_rules` | The configurable policy: enabled, severity, overridable, JSON config |
-| `replacement_requests` | Swap workflow |
+| `replacement_requests` | Swap workflow, including the stand-in a requester named and whether that person agreed |
+| `shift_volunteers` | Offers to stand a seat nobody is on. Not a replacement: there is nobody to replace |
 | `notifications` | Per-user in-app notifications |
 | `audit_events` | Append-only trail |
 

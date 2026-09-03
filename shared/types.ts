@@ -220,6 +220,24 @@ export interface ReplacementRequest {
   acceptedAt: number | null;
 }
 
+export type VolunteerStatus = 'offered' | 'accepted' | 'declined' | 'withdrawn';
+
+/** Somebody putting their name down for a seat nobody is standing. */
+export interface VolunteerOffer {
+  id: string;
+  assignmentId: string;
+  assignmentTitle: string;
+  startAt: number;
+  endAt: number;
+  personnelId: string;
+  personnelName: string;
+  roleQualificationId: string | null;
+  status: VolunteerStatus;
+  note: string | null;
+  createdAt: number;
+  decidedAt: number | null;
+}
+
 export interface Notification {
   id: string;
   type: string;

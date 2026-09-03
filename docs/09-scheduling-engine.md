@@ -332,6 +332,30 @@ A commander may still approve a stand-in who has not answered — ordering
 somebody onto a shift is a thing a commander does. The screen says which it is,
 because ordering and accepting an arrangement are different acts.
 
+### Putting your name down for an open seat
+
+A shift short of people is a hole the commander is trying to fill; somebody
+free who would take it is the answer. The two used to live in different places
+— the hole on the board, the offer in a chat nobody reads twice — so the offer
+was made late or not at all.
+
+`GET /me/open-seats` closes that. It looks a week ahead, takes the nearest
+sixty understaffed shifts, and for each asks which of its open seats this
+person could stand — the same `verifySeat` that would refuse the assignment.
+Offering somebody a shift the roster would then refuse is worse than offering
+nothing.
+
+The cost is the reason for the shape. Whether somebody may take a seat depends
+on **their own shifts and the seat**, and on nothing else, so each check is
+handed those rather than the whole window — the same fact the auto-fill budget
+turns on. Without it, examining sixty shifts means running the engine over the
+fortnight sixty times, which is not a thing a request may spend.
+
+An offer is not an assignment: the commander still decides who stands where.
+Accepting one goes through the gate again rather than trusting the check made
+when the offer was filed, because a week can pass in between and what was true
+then need not be now.
+
 ## Conflict shape
 
 Every conflict answers the four questions the plan asks for:

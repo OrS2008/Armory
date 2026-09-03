@@ -77,6 +77,10 @@ the granted unit ids; an empty scope means company-wide.
   it is not a decision. `PATCH /replacements/:id` accepts `cancelled` from the
   requester while the request is still undecided; everything else about it
   still needs `replacements.decide`.
+- Offering to stand an open seat, and withdrawing that offer, need no
+  permission beyond a session with a linked person: an offer is not an
+  assignment. Accepting one writes the assignment and so needs
+  `assignments.assign`.
 - `POST /replacements/:id/respond` is authorised by **identity rather than
   permission**: only the person named as the stand-in may answer. A system
   administrator holds every permission there is and is refused here, because

@@ -344,6 +344,17 @@ export const replacementResponseSchema = z.object({
   accept: z.boolean(),
 });
 
+export const volunteerSchema = z.object({
+  assignmentId: idSchema,
+  /** The seat being offered for. Omitted or null is a plain one. */
+  role: optionalId(),
+  note: optionalText(300),
+});
+
+export const volunteerDecisionSchema = z.object({
+  status: z.enum(['accepted', 'declined']),
+});
+
 export const replacementDecisionSchema = z.object({
   status: z.enum(['proposed', 'approved', 'rejected', 'cancelled']),
   replacementPersonnelId: optionalId(),

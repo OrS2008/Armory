@@ -15,6 +15,7 @@ import type {
   Schedule,
   Severity,
   Unit,
+  VolunteerOffer,
 } from '@shared/types';
 import { api } from '@/lib/api';
 
@@ -33,6 +34,8 @@ export const queryKeys = {
   schedule: (id: string) => ['schedule', id] as const,
   notifications: ['notifications'] as const,
   replacements: ['replacements'] as const,
+  volunteers: ['volunteers'] as const,
+  openSeats: ['open-seats'] as const,
   audit: (filters: Record<string, string | number | undefined>) => ['audit', filters] as const,
   rules: ['rules'] as const,
   workload: (window: { from: number; to: number }) => ['workload', window] as const,
@@ -227,6 +230,35 @@ export function useReplacements(status?: string) {
     queryKey: [...queryKeys.replacements, status] as const,
     queryFn: () => api.get<{ replacements: ReplacementRequest[] }>('/replacements', { status }),
     select: (data) => data.replacements,
+  });
+}
+
+/** Offers to stand a seat nobody is on: a soldier's own, or everyone's. */
+export function useVolunteers(status?: string) {
+  return useQuery({
+    queryKey: [...queryKeys.volunteers, status] as const,
+    queryFn: () => api.get<{ volunteers: VolunteerOffer[] }>('/volunteers', { status }),
+    select: (data) => data.volunteers,
+  });
+}
+
+export interface OpenSeat {
+  assignmentId: string;
+  title: string;
+  section: string | null;
+  startAt: number;
+  endAt: number;
+  role: string | null;
+  roleLabel: string | null;
+  missing: number;
+}
+
+export function useOpenSeats(enabled = true) {
+  return useQuery({
+    enabled,
+    queryKey: queryKeys.openSeats,
+    queryFn: () => api.get<{ seats: OpenSeat[] }>('/me/open-seats'),
+    select: (data) => data.seats,
   });
 }
 

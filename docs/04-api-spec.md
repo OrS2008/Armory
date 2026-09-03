@@ -108,6 +108,10 @@ listed in `shared/errors.ts`, messages in `shared/messages.he.ts`.
 | GET / POST | `/replacements` | see matrix | `status=open` is the two undecided states together, and what the screen asks for. POST accepts `replacementPersonnelId`: a stand-in the requester found, checked against the engine before the request is filed |
 | POST | `/replacements/:id/respond` | **identity, not permission** | The named stand-in's own answer. Refused with 403 for anybody else, an administrator included |
 | GET | `/me/cover?assignmentId=` | session | Who could stand a shift the caller is on — names only, ranked |
+| GET | `/me/open-seats` | session | Seats nobody is standing in the coming week that the caller actually could, filtered by the engine |
+| POST / DELETE | `/me/volunteer` | session | Offer to stand one, or withdraw the offer |
+| GET | `/volunteers` | session | A soldier's own offers; everyone's with `assignments.assign` |
+| PATCH | `/volunteers/:id` | `assignments.assign` | Accepting writes the assignment, through the same gate as any other |
 | PATCH | `/replacements/:id` | `replacements.decide` | Approval swaps the two people in one batch, through the same gate as an assignment |
 | GET | `/rules` | `rules.read` | |
 | PATCH | `/rules/:code` | `rules.write` | Merges `config`, updates severity, enabled, overridable |

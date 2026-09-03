@@ -15,6 +15,7 @@ import { useToast } from '@/components/ui/toast-context';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { usePersonnel, useReplacements } from '@/hooks/queries';
 import { useAuth } from '@/hooks/auth-context';
+import { VolunteersCard } from './VolunteersCard';
 
 const statusLabels: Record<ReplacementStatus, string> = {
   pending: t('replacements.statusPending'),
@@ -206,23 +207,27 @@ export function ReplacementsPage() {
         }
       />
 
-      <div className="card p-0">
-        <QueryState
-          isLoading={replacements.isLoading}
-          error={replacements.error}
-          isEmpty={requests.length === 0}
-          emptyDescription={
-            filter === 'open' ? t('replacements.empty') : t('replacements.emptyFiltered')
-          }
-          onRetry={() => void replacements.refetch()}
-        >
-          <DataTable
-            rows={requests}
-            columns={columns}
-            rowKey={(request) => request.id}
-            caption={t('replacements.title')}
-          />
-        </QueryState>
+      <div className="flex flex-col gap-4">
+        <div className="card p-0">
+          <QueryState
+            isLoading={replacements.isLoading}
+            error={replacements.error}
+            isEmpty={requests.length === 0}
+            emptyDescription={
+              filter === 'open' ? t('replacements.empty') : t('replacements.emptyFiltered')
+            }
+            onRetry={() => void replacements.refetch()}
+          >
+            <DataTable
+              rows={requests}
+              columns={columns}
+              rowKey={(request) => request.id}
+              caption={t('replacements.title')}
+            />
+          </QueryState>
+        </div>
+
+        <VolunteersCard />
       </div>
     </>
   );
