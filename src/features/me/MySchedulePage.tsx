@@ -1,8 +1,10 @@
+import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { BadgeCheck, Repeat2 } from 'lucide-react';
 import { availabilityKindLabels } from '@shared/messages.he';
 import { formatRange, weekdayName } from '@shared/format';
 import { dayKey } from '@shared/time';
+import type { Assignment } from '@shared/types';
 import { t } from '@/i18n';
 import { ApiError, api } from '@/lib/api';
 import { Badge } from '@/components/ui/Badge';
@@ -13,7 +15,9 @@ import { useToast } from '@/components/ui/toast-context';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { useMySchedule } from '@/hooks/queries';
 import { useAuth } from '@/hooks/auth-context';
+import { MyReplacementsCard } from './MyReplacementsCard';
 import { CalendarFeedCard } from './CalendarFeedCard';
+import { ReplacementRequestDialog } from './ReplacementRequestDialog';
 
 export function MySchedulePage() {
   const { user } = useAuth();
@@ -39,17 +43,12 @@ export function MySchedulePage() {
       toast.push('error', error instanceof ApiError ? error.message : t('state.errorBody')),
   });
 
-  const requestReplacement = useMutation({
-    mutationFn: (assignmentId: string) =>
-      api.post('/replacements', {
-        assignmentId,
-        personnelId: user?.personnelId ?? '',
-        reason: null,
-      }),
-    onSuccess: () => toast.push('success', t('state.savedTitle')),
-    onError: (error) =>
-      toast.push('error', error instanceof ApiError ? error.message : t('state.errorBody')),
-  });
+  /*
+   * Asking for cover used to be one tap that filed a bare request and left the
+   * soldier with nothing to do but wait. Naming somebody is the part that
+   * actually moves it, so the button opens the choice rather than skipping it.
+   */
+  const [coverFor, setCoverFor] = useState<Assignment | null>(null);
 
   return (
     <>
@@ -64,6 +63,8 @@ export function MySchedulePage() {
           onRetry={() => void schedule.refetch()}
         >
           <div className="flex flex-col gap-4">
+            <MyReplacementsCard personnelId={user?.personnelId ?? ''} timezone={timezone} />
+
             <Card>
               <CardHeader title={t('me.upcoming')} />
               {assignments.length === 0 ? (
@@ -111,8 +112,7 @@ export function MySchedulePage() {
                             size="sm"
                             variant="ghost"
                             icon={<Repeat2 className="size-4" />}
-                            loading={requestReplacement.isPending}
-                            onClick={() => requestReplacement.mutate(assignment.id)}
+                            onClick={() => setCoverFor(assignment)}
                           >
                             {t('replacements.request')}
                           </Button>
@@ -150,6 +150,15 @@ export function MySchedulePage() {
           </div>
         </QueryState>
       ) : null}
+
+      <ReplacementRequestDialog
+        open={coverFor !== null}
+        assignment={coverFor}
+        personnelId={user?.personnelId ?? ''}
+        timezone={timezone}
+        onClose={() => setCoverFor(null)}
+        onSent={() => void schedule.refetch()}
+      />
     </>
   );
 }

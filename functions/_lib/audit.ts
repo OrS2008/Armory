@@ -37,6 +37,8 @@ export const AuditActions = {
   USER_UPDATED: 'USER_UPDATED',
   CALENDAR_ISSUED: 'CALENDAR_ISSUED',
   CALENDAR_REVOKED: 'CALENDAR_REVOKED',
+  REPLACEMENT_PROPOSED: 'REPLACEMENT_PROPOSED',
+  REPLACEMENT_ANSWERED: 'REPLACEMENT_ANSWERED',
 } as const;
 
 export type AuditAction = (typeof AuditActions)[keyof typeof AuditActions];
@@ -134,4 +136,19 @@ export async function usersForPersonnel(
   return new Map(
     pages.flatMap((page) => (page.results ?? []).map((row) => [row.personnel_id, row.id] as const)),
   );
+}
+
+/**
+ * The accounts that decide replacements.
+ *
+ * A soldier naming their own stand-in is only half an arrangement: somebody
+ * still has to approve it, and a request nobody is told about waits until
+ * whoever it is happens to open the screen.
+ */
+export async function usersWhoDecide(env: Env): Promise<string[]> {
+  const rows = await env.DB.prepare(
+    `SELECT id FROM users
+      WHERE active = 1 AND role IN ('system_admin','company_commander','unit_scheduler')`,
+  ).all<{ id: string }>();
+  return (rows.results ?? []).map((row) => row.id);
 }

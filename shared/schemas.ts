@@ -336,6 +336,12 @@ export const replacementSchema = z.object({
   assignmentId: idSchema,
   personnelId: idSchema,
   reason: optionalText(300),
+  /** A stand-in the requester found themselves. They still have to agree. */
+  replacementPersonnelId: optionalId(),
+});
+
+export const replacementResponseSchema = z.object({
+  accept: z.boolean(),
 });
 
 export const replacementDecisionSchema = z.object({

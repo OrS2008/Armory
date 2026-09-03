@@ -1,17 +1,17 @@
-import { ErrorCodes } from '../../../../shared/errors';
-import { Permissions, can } from '../../../../shared/rbac';
-import { replacementDecisionSchema } from '../../../../shared/schemas';
-import { DAY } from '../../../../shared/time';
+import { ErrorCodes } from '../../../../../shared/errors';
+import { Permissions, can } from '../../../../../shared/rbac';
+import { replacementDecisionSchema } from '../../../../../shared/schemas';
+import { DAY } from '../../../../../shared/time';
 import {
   AuditActions,
   auditStatement,
   notificationStatement,
   usersForPersonnel,
-} from '../../../_lib/audit';
-import { requireUser } from '../../../_lib/auth';
-import { engineQualifications, evaluateWindow } from '../../../_lib/data';
-import { verifySeat } from '../../../_lib/seat';
-import { checkOrigin, fail, newId, now, ok, readBody, type Env } from '../../../_lib/http';
+} from '../../../../_lib/audit';
+import { requireUser } from '../../../../_lib/auth';
+import { engineQualifications, evaluateWindow } from '../../../../_lib/data';
+import { verifySeat } from '../../../../_lib/seat';
+import { checkOrigin, fail, newId, now, ok, readBody, type Env } from '../../../../_lib/http';
 
 /**
  * Approving a replacement swaps the two people on the assignment in a single
@@ -26,7 +26,7 @@ import { checkOrigin, fail, newId, now, ok, readBody, type Env } from '../../../
 export const onRequestPatch: PagesFunction<Env> = async ({ request, env, params }) => {
   const origin = checkOrigin(request);
   if (origin) return origin;
-  const user = await requireUser(request, env, Permissions.replacementsDecide);
+  const user = await requireUser(request, env);
   if (user instanceof Response) return user;
   const id = String(params.id);
   const input = await readBody(request, replacementDecisionSchema);
@@ -51,6 +51,19 @@ export const onRequestPatch: PagesFunction<Env> = async ({ request, env, params 
       end_at: number;
     }>();
   if (!existing) return fail(404, ErrorCodes.NOT_FOUND);
+
+  /*
+   * Withdrawing a request you made yourself is not a decision, so it does not
+   * need the permission to decide. Without this a soldier whose plans changed
+   * could only leave the request standing and hope somebody noticed — and the
+   * commander's screen filled with cover nobody needed any more.
+   */
+  const own = Boolean(user.personnelId) && user.personnelId === existing.personnel_id;
+  const withdrawing =
+    input.status === 'cancelled' && own && ['pending', 'proposed'].includes(existing.status);
+  if (!withdrawing && !can(user, Permissions.replacementsDecide)) {
+    return fail(403, ErrorCodes.FORBIDDEN);
+  }
 
   const replacementId = input.replacementPersonnelId ?? existing.replacement_personnel_id;
   if (input.status === 'approved' && !replacementId) {

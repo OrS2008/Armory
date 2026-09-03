@@ -105,7 +105,9 @@ listed in `shared/errors.ts`, messages in `shared/messages.he.ts`.
 | GET | `/calendar/:token.ics` | **none** | One person's duty times as iCalendar; the token is the whole credential |
 | GET | `/notifications` | session | With `unreadCount` |
 | POST | `/notifications/read` | session | `?id=` for one, omitted for all |
-| GET / POST | `/replacements` | see matrix | `status=open` is the two undecided states together, and what the screen asks for |
+| GET / POST | `/replacements` | see matrix | `status=open` is the two undecided states together, and what the screen asks for. POST accepts `replacementPersonnelId`: a stand-in the requester found, checked against the engine before the request is filed |
+| POST | `/replacements/:id/respond` | **identity, not permission** | The named stand-in's own answer. Refused with 403 for anybody else, an administrator included |
+| GET | `/me/cover?assignmentId=` | session | Who could stand a shift the caller is on — names only, ranked |
 | PATCH | `/replacements/:id` | `replacements.decide` | Approval swaps the two people in one batch, through the same gate as an assignment |
 | GET | `/rules` | `rules.read` | |
 | PATCH | `/rules/:code` | `rules.write` | Merges `config`, updates severity, enabled, overridable |

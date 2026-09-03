@@ -73,6 +73,15 @@ the granted unit ids; an empty scope means company-wide.
 - A soldier may delete only their own still-pending availability request.
 - A replacement request may be opened for oneself, or by someone who can decide
   replacements.
+- Withdrawing a replacement request you opened yourself needs no permission:
+  it is not a decision. `PATCH /replacements/:id` accepts `cancelled` from the
+  requester while the request is still undecided; everything else about it
+  still needs `replacements.decide`.
+- `POST /replacements/:id/respond` is authorised by **identity rather than
+  permission**: only the person named as the stand-in may answer. A system
+  administrator holds every permission there is and is refused here, because
+  consent is not a permission — and a permission that could grant it would make
+  the record of the answer worth nothing.
 
 ## Not implemented
 

@@ -167,6 +167,8 @@ export const auditActionLabels: Record<string, string> = {
   USER_UPDATED: 'עדכון משתמש',
   CALENDAR_ISSUED: 'הפקת קישור יומן',
   CALENDAR_REVOKED: 'ביטול קישור יומן',
+  REPLACEMENT_PROPOSED: 'הצעת מחליף',
+  REPLACEMENT_ANSWERED: 'תשובת המחליף',
 };
 
 export const auditEntityLabels: Record<string, string> = {

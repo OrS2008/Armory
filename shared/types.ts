@@ -216,6 +216,8 @@ export interface ReplacementRequest {
   reason: string | null;
   createdAt: number;
   decidedAt: number | null;
+  /** When the named stand-in agreed, or null while nobody has asked them. */
+  acceptedAt: number | null;
 }
 
 export interface Notification {

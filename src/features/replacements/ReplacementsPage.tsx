@@ -87,8 +87,18 @@ export function ReplacementsPage() {
       key: 'replacement',
       header: t('replacements.replacement'),
       cell: (request) =>
-        request.replacementPersonnelName ??
-        (mayDecide && request.status === 'pending' ? (
+        request.replacementPersonnelName ? (
+          <>
+            <span>{request.replacementPersonnelName}</span>
+            {/* Whether the stand-in has actually agreed. A commander may still
+                approve one who has not, but ordering somebody onto a shift and
+                accepting an arrangement they made are different acts, and the
+                screen should not make them look the same. */}
+            <Badge className="ms-2" tone={request.acceptedAt ? 'success' : 'warning'}>
+              {request.acceptedAt ? t('replacements.accepted') : t('replacements.awaitingPeer')}
+            </Badge>
+          </>
+        ) : mayDecide && request.status === 'pending' ? (
           <>
             <Select
               className="w-auto"
@@ -115,7 +125,7 @@ export function ReplacementsPage() {
               </span>
             )}
           </>
-        ) : null),
+        ) : null,
     },
     {
       key: 'status',

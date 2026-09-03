@@ -307,6 +307,31 @@ The seat's mark travels with the seat: whoever comes in inherits the
 `role_qualification_id` the outgoing person stood in, and is refused if they do
 not hold it.
 
+### Finding your own cover
+
+Asking for cover used to be one tap that filed a bare request and left the
+soldier with nothing to do but wait, so the arrangement went on happening in
+the group chat — where nothing checks it, nothing records it, and the person
+doing the asking has no way of knowing who is even free.
+
+Three things move it here, and each is something a chat cannot do:
+
+| | |
+| --- | --- |
+| `GET /me/cover` | Who could actually stand this shift, ranked by the same engine the scheduler's list uses — but **names only**. The scores, the workload and the reasons behind them are the scheduler's to read, not a peer's. The shift is ranked as it would be *without* the requester, or the seat they are vacating never looks open |
+| `POST /replacements` with a stand-in | Checked before the request is filed rather than at approval, so nobody spends an evening arranging cover the roster was never going to take. A named seat's mark applies here as everywhere |
+| `POST /replacements/:id/respond` | The stand-in's own answer, authorised by **identity rather than permission**: an administrator holds every permission there is and still may not answer for somebody else |
+
+Neither answer decides anything. Agreeing hands a settled arrangement to
+whoever approves it — and the approval itself still goes through the gate above.
+Declining returns the request to the pile rather than closing it: the person who
+asked still needs cover, and a declined request that ended would leave them
+looking at an answered row while nobody stands their shift.
+
+A commander may still approve a stand-in who has not answered — ordering
+somebody onto a shift is a thing a commander does. The screen says which it is,
+because ordering and accepting an arrangement are different acts.
+
 ## Conflict shape
 
 Every conflict answers the four questions the plan asks for:
