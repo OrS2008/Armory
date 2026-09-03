@@ -622,6 +622,21 @@ export const he = {
   'settings.auditHint': 'כל פעולה במערכת נרשמת כאן ואי אפשר למחוק או לשנות רשומה.',
   'settings.addUnit': 'הוספת מסגרת',
   'settings.addQualification': 'הוספת הכשיר',
+  'settings.removeQualification': 'מחיקת ההכשיר',
+  'settings.removeQualificationHint':
+    'הכשיר שאף אחד לא מחזיק בו ושום משימה לא דורשת או פוסלת — נמחק. אחרת יש למזג אותו להכשיר אחר.',
+  'settings.qualificationInUse': 'ההכשיר בשימוש, ולכן אי אפשר פשוט למחוק אותו:',
+  'settings.usageHeldBy': '{count} אנשים מחזיקים בו',
+  'settings.usageRequiredBy': '{count} סוגי משימה דורשים אותו',
+  'settings.usageExcludedBy': '{count} סוגי משימה פוסלים אותו',
+  'settings.usageSeats': '{count} שיבוצים רשומים עליו כתפקיד',
+  'settings.mergeInto': 'מיזוג אל',
+  'settings.mergeIntoHint':
+    'שני הכשירים שמשמעותם אחת — מי שמחזיק בזה יחזיק בזה, וכל דרישה או פסילה עוברות אליו.',
+  'settings.mergeIntoNone': 'ללא מיזוג — מחיקה בלבד',
+  'settings.mergeAndRemove': 'מיזוג ומחיקה',
+  'settings.qualificationRemoved': 'ההכשיר נמחק.',
+  'settings.qualificationMerged': 'ההכשיר מוזג ונמחק.',
   'settings.exclusive': 'הכשיר ייעודי',
   'settings.exclusiveHint':
     'מי שמחזיק בהכשיר ייעודי משובץ אך ורק למשימות שדורשות אותו. כך חמ״ל עושה חמ״ל ולא כלום אחר.',

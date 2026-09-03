@@ -95,6 +95,29 @@ The company's marks, as seeded:
 All three are blocking and overridable, so a commander who has to can still say
 yes and the reason is recorded.
 
+### Removing a mark
+
+A mark could be created from the app and edited there, and never removed — so a
+typo, or a second copy of something that already existed, stayed on the list
+for good. The company ended up with two marks named קצין מוצב, three people
+holding one and four the other, meaning the same thing.
+
+Every table that points at a qualification cascades from it, so a plain delete
+does not merely remove a row: it strips the mark from everyone who holds it and
+from every post that requires or refuses it, silently. So a delete is refused
+while anything is attached, and answers with what — holders, requirements,
+exclusions, and seats already recorded on shifts that were stood.
+
+`?merge=<id>` is what a duplicate actually needs. Each move adds before it
+removes and ignores what is already there, so somebody holding both marks ends
+up holding the survivor once rather than failing the merge on a primary key.
+
+The seat is the exception. A named seat is takeable once per shift, so a shift
+where the survivor's seat is already filled cannot take a second: that row is
+left pointing at the retired mark, and then cleared. The person stays on the
+shift and stands it as the לוחם they were qualified for — the same answer
+`crew-roles.yml` gives to the same question.
+
 ## The fixed roster
 
 The company's standing posts are not decided each morning: they run round the

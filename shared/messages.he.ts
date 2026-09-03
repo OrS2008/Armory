@@ -144,6 +144,7 @@ export const auditActionLabels: Record<string, string> = {
   UNIT_UPDATED: 'עדכון מסגרת',
   QUALIFICATION_CREATED: 'יצירת הכשיר',
   QUALIFICATION_UPDATED: 'עדכון הכשיר',
+  QUALIFICATION_DELETED: 'מחיקת הכשיר',
   AVAILABILITY_CREATED: 'רישום זמינות',
   AVAILABILITY_UPDATED: 'עדכון זמינות',
   AVAILABILITY_DECIDED: 'החלטה בבקשת זמינות',

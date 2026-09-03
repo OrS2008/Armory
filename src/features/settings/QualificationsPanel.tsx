@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus } from 'lucide-react';
+import { Plus, Trash2 } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation } from '@tanstack/react-query';
@@ -18,12 +18,14 @@ import { QueryState } from '@/components/ui/States';
 import { useToast } from '@/components/ui/toast-context';
 import { useQualifications } from '@/hooks/queries';
 import { useAuth } from '@/hooks/auth-context';
+import { RemoveQualificationDialog } from './RemoveQualificationDialog';
 
 export function QualificationsPanel() {
   const { can } = useAuth();
   const toast = useToast();
   const qualifications = useQualifications();
   const [open, setOpen] = useState(false);
+  const [removing, setRemoving] = useState<Qualification | null>(null);
 
   const form = useForm<QualificationInput>({
     resolver: zodResolver(qualificationSchema),
@@ -78,6 +80,23 @@ export function QualificationsPanel() {
     },
   ];
 
+  if (can(Permissions.qualificationsWrite)) {
+    columns.push({
+      key: 'actions',
+      header: t('app.actions'),
+      cell: (item) => (
+        <Button
+          size="sm"
+          variant="ghost"
+          icon={<Trash2 className="size-4" />}
+          onClick={() => setRemoving(item)}
+        >
+          {t('settings.removeQualification')}
+        </Button>
+      ),
+    });
+  }
+
   return (
     <>
       <p className="mb-3 text-sm text-ink-muted">{t('settings.qualificationsHint')}</p>
@@ -107,6 +126,13 @@ export function QualificationsPanel() {
           />
         </QueryState>
       </div>
+
+      <RemoveQualificationDialog
+        qualification={removing}
+        others={items.filter((item) => item.id !== removing?.id)}
+        onClose={() => setRemoving(null)}
+        onRemoved={() => void qualifications.refetch()}
+      />
 
       <Dialog
         open={open}

@@ -41,7 +41,7 @@ const ROUTES = [
  * themselves.
  */
 const SKIP =
-  /התנתקות|החשבון שלי|ייצוא PDF|השבתת סוג המשימה|מחיקת סוג המשימה|משמרות היום מהלוח|מחיקת המשימה מכל הימים/;
+  /התנתקות|החשבון שלי|ייצוא PDF|השבתת סוג המשימה|מחיקת סוג המשימה|משמרות היום מהלוח|מחיקת המשימה מכל הימים|מחיקת ההכשיר|מיזוג ומחיקה/;
 
 /** A 401 on the login screen is the app asking who you are, not a failure. */
 const EXPECTED = /Failed to load resource/;

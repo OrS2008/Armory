@@ -49,6 +49,7 @@ listed in `shared/errors.ts`, messages in `shared/messages.he.ts`.
 | PATCH | `/units/:id` | `units.write` |
 | GET / POST | `/qualifications` | `qualifications.read` / `qualifications.write` |
 | PATCH | `/qualifications/:id` | `qualifications.write` |
+| DELETE | `/qualifications/:id` | `qualifications.write` | Refused with 409 `IN_USE` and the counts while anything is attached. `?merge=<id>` moves the holders, requirements, exclusions and recorded seats onto another mark first |
 
 ### Personnel
 
