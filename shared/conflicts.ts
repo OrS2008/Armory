@@ -800,7 +800,14 @@ export function detectConflicts(input: EngineInput): Conflict[] {
       if (restRule && previous) {
         const limit = restRule.config.minutes ?? 0;
         const gap = minutesBetween(previous.endAt, current.startAt);
-        if (limit > 0 && gap >= 0 && gap < limit) {
+        // A gap of nothing is not a short rest, it is the same duty still
+        // running, and MAX_CONTINUOUS is the rule that measures those. Reported
+        // here as well, the pair said two different things about one fact — "no
+        // rest" and "sixteen hours straight" — and a post whose crew holds it
+        // for a stated tour was refused for having no rest in the middle of it.
+        // Nothing stops being caught: a run too long for its post is still
+        // blocked, by the rule that knows how long the run is.
+        if (limit > 0 && gap > 0 && gap < limit) {
           add('MIN_REST', restRule, current, personnelId, {
             person: personName(personnelId),
             actual: formatHours(gap / 60),

@@ -1,0 +1,137 @@
+name: Seat a post's crews, a tour at a time
+
+# "סבב א׳ שבוע, סבב ב׳ שבוע" is a roster, not a search: given the date, the crew
+# that stands it is arithmetic. So it is written out rather than proposed — the
+# auto-fill weighs candidates against each other and there is nothing here to
+# weigh, and it runs in the browser a day at a time, which seventy days is not.
+#
+# Nobody's name appears here or in the SQL: the crews are already in the
+# database, and this only decides which of them holds which week.
+on:
+  workflow_dispatch:
+    inputs:
+      post:
+        description: The post's name, exactly as the app shows it
+        type: string
+        required: true
+      from_day:
+        description: First day to seat (YYYY-MM-DD)
+        type: string
+        required: true
+      to_day:
+        description: Last day to seat (YYYY-MM-DD)
+        type: string
+        required: true
+      anchor_day:
+        description: The day the first crew's first tour begins. Empty means the first day.
+        type: string
+        default: ''
+      period_days:
+        description: Days in one crew's tour
+        type: string
+        default: '7'
+      apply:
+        description: Write the seating. Leave off to report what it would do.
+        type: boolean
+        default: false
+      replace:
+        description: Also clear crew members already seated in the range first
+        type: boolean
+        default: false
+      database_name:
+        description: D1 database name
+        type: string
+        default: shabatzak
+
+concurrency:
+  group: rotation
+  cancel-in-progress: false
+
+jobs:
+  rotate:
+    name: Report, then seat
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      DATABASE_NAME: ${{ inputs.database_name }}
+      POST: ${{ inputs.post }}
+      FROM_DAY: ${{ inputs.from_day }}
+      TO_DAY: ${{ inputs.to_day }}
+      ANCHOR_DAY: ${{ inputs.anchor_day }}
+      PERIOD_DAYS: ${{ inputs.period_days }}
+      REPLACE: ${{ inputs.replace }}
+    steps:
+      - name: Check that the credentials are present
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo '::error::Add CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID under Settings, Secrets and variables, Actions.'
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - run: npm clean-install
+
+      # Printed before anything is written. A post with no crews, or a range
+      # with no shifts in it, writes nothing and says nothing unless it is
+      # asked — and "it ran and changed nothing" is the failure that looks
+      # exactly like success.
+      - name: What is there to seat
+        run: |
+          npx wrangler d1 execute "$DATABASE_NAME" --remote --command "
+            SELECT t.name AS post,
+                   (SELECT COUNT(*) FROM assignment_type_crews c
+                     WHERE c.assignment_type_id = t.id) AS crews,
+                   (SELECT COUNT(*) FROM assignment_type_crew_members m
+                      JOIN assignment_type_crews c ON c.id = m.crew_id
+                     WHERE c.assignment_type_id = t.id) AS members,
+                   t.required_headcount AS need,
+                   COUNT(i.id) AS shifts_in_range,
+                   SUM(CASE WHEN EXISTS (SELECT 1 FROM assignment_personnel ap
+                                          WHERE ap.assignment_id = i.id)
+                            THEN 1 ELSE 0 END) AS already_seated
+              FROM assignment_types t
+              LEFT JOIN assignment_instances i
+                     ON i.assignment_type_id = t.id
+                    AND date(i.start_at / 1000, 'unixepoch') BETWEEN '$FROM_DAY' AND '$TO_DAY'
+                    AND i.status <> 'cancelled'
+             WHERE t.name = '$POST' OR t.id = '$POST'
+             GROUP BY t.id;"
+
+      - name: Seat them
+        if: ${{ inputs.apply }}
+        run: |
+          node scripts/rotation-sql.mjs > /tmp/rotation.sql
+          npx wrangler d1 execute "$DATABASE_NAME" --remote --file=/tmp/rotation.sql
+
+      # Who ended up standing which week, one row per handover rather than one
+      # per day: seventy identical rows hide the thing being checked.
+      - name: Who holds which tour
+        if: ${{ inputs.apply }}
+        run: |
+          npx wrangler d1 execute "$DATABASE_NAME" --remote --command "
+            SELECT MIN(day) AS tour_from, MAX(day) AS tour_to, days, crew
+              FROM (SELECT date(i.start_at / 1000, 'unixepoch') AS day,
+                           COUNT(*) OVER (PARTITION BY (
+                             SELECT group_concat(p2.display_name, '+')
+                               FROM assignment_personnel a2
+                               JOIN personnel p2 ON p2.id = a2.personnel_id
+                              WHERE a2.assignment_id = i.id)) AS days,
+                           (SELECT group_concat(p.display_name, ' + ')
+                              FROM assignment_personnel ap
+                              JOIN personnel p ON p.id = ap.personnel_id
+                             WHERE ap.assignment_id = i.id) AS crew
+                      FROM assignment_instances i
+                      JOIN assignment_types t ON t.id = i.assignment_type_id
+                     WHERE (t.name = '$POST' OR t.id = '$POST')
+                       AND date(i.start_at / 1000, 'unixepoch') BETWEEN '$FROM_DAY' AND '$TO_DAY'
+                       AND i.status <> 'cancelled')
+             GROUP BY crew;"
+
+      - name: Say that nothing was written
+        if: ${{ !inputs.apply }}
+        run: echo 'Report only. Nothing was seated.' >> "$GITHUB_STEP_SUMMARY"

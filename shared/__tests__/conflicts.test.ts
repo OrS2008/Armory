@@ -593,6 +593,27 @@ describe('continuous duty across back-to-back shifts', () => {
     expect(conflicts[0]?.assignmentId).toBe('a2');
   });
 
+  it('leaves a touching pair to MAX_CONTINUOUS rather than reporting it twice', () => {
+    // Off at 14:00 and straight back on is one run, not a rest of zero. Both
+    // rules used to fire, saying different things about the same fact.
+    const conflicts = run(
+      [shift('a1', '06:00', '14:00'), shift('a2', '14:00', '22:00')],
+      eightHourLimit,
+    );
+
+    expect(conflicts.filter((item) => item.code === 'MIN_REST')).toHaveLength(0);
+    expect(conflicts.filter((item) => item.code === 'MAX_CONTINUOUS')).toHaveLength(1);
+  });
+
+  it('still reports a rest that is short but real', () => {
+    const conflicts = run(
+      [shift('a1', '06:00', '14:00'), shift('a2', '15:00', '22:00')],
+      eightHourLimit,
+    ).filter((item) => item.code === 'MIN_REST');
+
+    expect(conflicts).toHaveLength(1);
+  });
+
   it('leaves a single shift at the limit alone', () => {
     const conflicts = run([shift('a1', '06:00', '14:00')], eightHourLimit);
     expect(conflicts.some((conflict) => conflict.code === 'MAX_CONTINUOUS')).toBe(false);
@@ -647,6 +668,46 @@ describe('continuous duty across back-to-back shifts', () => {
 
     expect(conflicts).toHaveLength(1);
     expect(conflicts[0]?.message).toContain('48');
+  });
+
+  it('lets a crew hold a post for the tour the post declares', () => {
+    // חפ״ק: seven touching twenty-four-hour turns, one crew, handed over once a
+    // week. Before the post could state its tour this was a 168-hour run
+    // refused on every turn after the first, plus a MIN_REST on each of them —
+    // the roster the unit actually stands, reported as fourteen violations.
+    const week = Array.from({ length: 7 }, (_, day) =>
+      assignment({
+        id: `a${day}`,
+        startAt: at(`2026-09-0${3 + day}`, '05:00'),
+        endAt: at(`2026-09-0${4 + day}`, '05:00'),
+        maxContinuousMinutes: 7 * 24 * 60,
+      }),
+    );
+
+    const conflicts = run(week, eightHourLimit).filter(
+      (item) => item.code === 'MIN_REST' || item.code === 'MAX_CONTINUOUS',
+    );
+
+    expect(conflicts).toHaveLength(0);
+  });
+
+  it('still refuses an eighth day on a seven-day tour', () => {
+    // The tour is an allowance, not an exemption: one day past what the post
+    // says it stands is still a run too long, and the crew that should have
+    // handed over is still told so.
+    const eight = Array.from({ length: 8 }, (_, day) =>
+      assignment({
+        id: `a${day}`,
+        startAt: at(`2026-09-${String(3 + day).padStart(2, '0')}`, '05:00'),
+        endAt: at(`2026-09-${String(4 + day).padStart(2, '0')}`, '05:00'),
+        maxContinuousMinutes: 7 * 24 * 60,
+      }),
+    );
+
+    const conflicts = run(eight, eightHourLimit).filter((item) => item.code === 'MAX_CONTINUOUS');
+
+    expect(conflicts).toHaveLength(1);
+    expect(conflicts[0]?.message).toContain('192');
   });
 
   it('reports one conflict for a run, not one per shift', () => {
