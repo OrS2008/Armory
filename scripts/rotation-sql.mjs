@@ -15,9 +15,18 @@
  * the נהג seat, which is what makes the printed sheet name the right job
  * beside the right person.
  *
- * Existing seating on a shift is left alone unless REPLACE is set. A shift
+ * Without REPLACE a shift that already has anybody on it is left alone: a shift
  * somebody was deliberately put on is a decision, and a roster generator is not
- * entitled to overrule it silently.
+ * entitled to overrule it silently. The cost of that caution is that one stray
+ * name keeps the whole crew off the shift, which is how five days of חפ״ק ended
+ * up bare — seated by hand before the rotation existed, skipped by it, and then
+ * emptied by hand again.
+ *
+ * REPLACE is the answer to that, and it clears everyone in the range rather
+ * than only the crew members. On a post whose rule is that only its crews may
+ * stand it, somebody outside them is not a decision to preserve — it is the
+ * thing being corrected, and leaving it in place would go on blocking the crew
+ * it displaced.
  *
  *   POST='חפק' FROM_DAY=2026-09-03 TO_DAY=2026-11-11 \
  *   ANCHOR_DAY=2026-09-03 PERIOD_DAYS=7 node scripts/rotation-sql.mjs
@@ -84,14 +93,13 @@ const inRange = `i.assignment_type_id = ${postId}
 const lines = [];
 
 if (replace) {
-  // Only the seats this roster owns. Somebody put on the shift by hand outside
-  // the crews is a decision by a person and survives.
+  // Everyone, not only the crews. Clearing just the crew members would leave a
+  // stray name sitting there, and the insert below skips any shift that still
+  // has somebody — so the shift the correction was aimed at is exactly the one
+  // it would miss.
   lines.push(
     `DELETE FROM assignment_personnel`,
-    ` WHERE assignment_id IN (SELECT i.id FROM assignment_instances i WHERE ${inRange})`,
-    `   AND personnel_id IN (SELECT m.personnel_id FROM assignment_type_crew_members m`,
-    `                         JOIN assignment_type_crews c ON c.id = m.crew_id`,
-    `                        WHERE c.assignment_type_id = ${postId});`,
+    ` WHERE assignment_id IN (SELECT i.id FROM assignment_instances i WHERE ${inRange});`,
   );
 }
 
