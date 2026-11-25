@@ -1,14 +1,15 @@
-name = "palgate-grok"
+name = "heygate"
 main = "src/index.ts"
 compatibility_date = "2026-08-01"
 
-# KV namespace "GATE" (created with: npx wrangler kv namespace create GATE)
+# KV namespace (created with: npx wrangler kv namespace create HEYGATE)
 [[kv_namespaces]]
 binding = "GATE"
-id = "d6ce48cbe10c405aaaa76b8ff6d8ad38"
+id = "6f1ad79be7264720845f361cc9e9d48d"
 
 # Secrets (never put them here) — set with `npx wrangler secret put <NAME>`:
-#   ADMIN_PASSWORD   password for the /admin setup screens
+#   ENC_KEY      32 random bytes (base64url): master key, per-customer keys derive from it
+#   SETUP_CODE   one-time code that creates the super-admin account at /sa
 
 # Cloudflare's built-in rate limiting (per IP, per Cloudflare location, no KV writes).
 [[ratelimits]]

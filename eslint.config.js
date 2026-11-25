@@ -12,7 +12,7 @@ export default tseslint.config(
       'test-results',
       '.wrangler',
       'eslint.config.js',
-      'palgate-grok',
+      'heygate',
     ],
   },
   js.configs.recommended,

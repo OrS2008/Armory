@@ -17,7 +17,7 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./src/test/setup.ts'],
-    exclude: ['tests/e2e/**', 'node_modules/**', 'palgate-grok/**'],
+    exclude: ['tests/e2e/**', 'node_modules/**', 'heygate/**'],
     coverage: { reporter: ['text', 'html'] },
   },
 });

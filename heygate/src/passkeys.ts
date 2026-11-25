@@ -29,7 +29,9 @@ export interface Passkey {
   backedUp?: boolean; // synced passkey (iCloud / Google)
 }
 
-type Purpose = 'setup' | 'add' | 'login';
+export type RegPurpose = 'signup' | 'add' | 'sa-setup' | 'sa-add';
+export type AuthPurpose = 'login' | 'sa-login';
+type Purpose = RegPurpose | AuthPurpose;
 
 interface Challenge {
   challenge: string;
@@ -58,15 +60,16 @@ async function takeChallenge(env: Env, token: unknown, purpose: Purpose): Promis
 export async function registrationOptions(
   env: Env,
   url: URL,
-  purpose: 'setup' | 'add',
+  purpose: RegPurpose,
   existing: { userId: string; passkeys: Passkey[] } | null,
 ) {
+  const sa = purpose.startsWith('sa-');
   const userId = existing?.userId ?? b64u(randomBytes(16));
   const options = await generateRegistrationOptions({
-    rpName: 'פותחן השער',
+    rpName: 'HeyGate',
     rpID: rp(url).rpID,
-    userName: 'owner',
-    userDisplayName: 'בעלים — פותחן השער',
+    userName: sa ? 'heygate-admin' : 'heygate',
+    userDisplayName: sa ? 'HeyGate — ניהול מערכת' : 'HeyGate',
     userID: unb64u(userId),
     attestationType: 'none',
     excludeCredentials: (existing?.passkeys ?? []).map((p) => ({ id: p.id, transports: p.transports })),
@@ -80,7 +83,7 @@ export async function registrationOptions(
 export async function verifyRegistration(
   env: Env,
   url: URL,
-  purpose: 'setup' | 'add',
+  purpose: RegPurpose,
   token: unknown,
   response: unknown,
   name: string,
@@ -114,27 +117,40 @@ export async function verifyRegistration(
   }
 }
 
-export async function authenticationOptions(env: Env, url: URL, userId: string) {
+export async function authenticationOptions(env: Env, url: URL, purpose: AuthPurpose) {
   // Empty allowCredentials: the device offers its discoverable passkey for this
-  // site, so the owner never types a username.
+  // site, so nobody types a username. Which account it belongs to is decided by
+  // the server from the credential, never by the client.
   const options = await generateAuthenticationOptions({ rpID: rp(url).rpID, userVerification: 'required' });
-  const token = await storeChallenge(env, { challenge: options.challenge, purpose: 'login', userId });
+  const token = await storeChallenge(env, { challenge: options.challenge, purpose, userId: '' });
   return { token, options };
 }
 
-/** Returns the passkey used (with its updated counter) or null. */
-export async function verifyAuthentication(
+export interface Owner {
+  userId: string;
+  passkeys: Passkey[];
+}
+
+/**
+ * Verifies a sign-in. `findOwner` maps the presented credential id to the one
+ * account it was registered to (or null). Returns that owner and the updated
+ * passkey, or null.
+ */
+export async function verifyAuthentication<O extends Owner>(
   env: Env,
   url: URL,
+  purpose: AuthPurpose,
   token: unknown,
   response: unknown,
-  owner: { userId: string; passkeys: Passkey[] },
-): Promise<Passkey | null> {
-  const c = await takeChallenge(env, token, 'login');
-  if (!c || c.userId !== owner.userId || !response || typeof response !== 'object') return null;
+  findOwner: (credentialId: string) => Promise<O | null>,
+): Promise<{ owner: O; passkey: Passkey } | null> {
+  const c = await takeChallenge(env, token, purpose);
+  if (!c || !response || typeof response !== 'object') return null;
   const r = response as AuthenticationResponseJSON;
-  const pk = owner.passkeys.find((p) => p.id === r.id);
-  if (!pk) return null;
+  if (typeof r.id !== 'string' || r.id.length > 1400) return null;
+  const owner = await findOwner(r.id);
+  const pk = owner?.passkeys.find((p) => p.id === r.id);
+  if (!owner || !pk) return null;
   if (r.response?.userHandle && r.response.userHandle !== owner.userId) return null;
   try {
     const v = await verifyAuthenticationResponse({
@@ -146,7 +162,7 @@ export async function verifyAuthentication(
       requireUserVerification: true,
     });
     if (!v.verified) return null;
-    return { ...pk, counter: v.authenticationInfo.newCounter, lastUsedAt: new Date().toISOString() };
+    return { owner, passkey: { ...pk, counter: v.authenticationInfo.newCounter, lastUsedAt: new Date().toISOString() } };
   } catch {
     return null;
   }
