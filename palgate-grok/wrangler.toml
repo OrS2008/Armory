@@ -1,0 +1,12 @@
+name = "palgate-grok"
+main = "src/index.ts"
+compatibility_date = "2026-08-01"
+
+# Create once with:  npx wrangler kv namespace create GATE
+# then paste the printed id below.
+[[kv_namespaces]]
+binding = "GATE"
+id = "REPLACE_WITH_KV_NAMESPACE_ID"
+
+# Secrets (never put them here) — set with `npx wrangler secret put <NAME>`:
+#   ADMIN_PASSWORD   password for the /admin setup screens

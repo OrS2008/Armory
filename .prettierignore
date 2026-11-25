@@ -5,3 +5,4 @@ test-results
 .wrangler
 package-lock.json
 *.md
+palgate-grok
