@@ -1,0 +1,16 @@
+# Local QA only (npm run qa). Never deployed.
+name = "heygate-qa"
+main = "../src/index.ts"
+compatibility_date = "2026-08-01"
+
+[[kv_namespaces]]
+binding = "GATE"
+id = "qa00000000000000000000000000000000"
+
+# Rate limiters are left out on purpose: one run presses hundreds of buttons
+# from one machine. The limiter itself is covered by the unit tests.
+
+[vars]
+ENC_KEY = "qL3k0dqk1jzq7m2kq8F4l5s8u2yN0x9wQe1rT6yU7iA" # dummy key for the throwaway local store
+SETUP_CODE = "QA-SETUP"
+PALGATE_BASE = "http://127.0.0.1:8790/v1/bt/" # the local PalGate stand-in (qa/palgate-mock.cjs)

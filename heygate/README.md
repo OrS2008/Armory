@@ -67,5 +67,6 @@ CSP קשיח, מצב "דרוך" ל-Grok, התראות לטלפון, יומן, ו
 ```bash
 npm test          # 44 בדיקות: בידוד בין לקוחות, Passkey, מנהל מערכת, חוקי פתיחה
 npm run typecheck
+npm run qa        # QA בדפדפן: 118 בדיקות על כל כפתור, מול PalGate מדומה מקומי
 npm run dev       # .dev.vars עם ENC_KEY ו-SETUP_CODE (Passkey עובד ב-localhost)
 ```
