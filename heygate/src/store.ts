@@ -14,6 +14,7 @@
  */
 import type { Session } from './palgate/api';
 import { b64u, isSealed, open, randomToken, seal, sha256, unb64u } from './crypto';
+import { defaultNames, type Lang } from './i18n';
 
 export interface RateLimiter {
   limit(o: { key: string }): Promise<{ success: boolean }>;
@@ -70,6 +71,7 @@ export interface Config {
   channels: Channel[];
   cooldownSec: number;
   notifyUrl: string;
+  lang?: Lang; // language of notifications
 }
 
 export interface LogEntry {
@@ -170,8 +172,8 @@ export const tRaw = {
 export const getSession = (t: Tenant) => tGet<Session>(t, 'session');
 export const putSession = (t: Tenant, s: Session) => tPut(t, 'session', s);
 
-export function newChannel(kind: ChannelKind, name?: string): Channel {
-  const names: Record<ChannelKind, string> = { grok: 'Grok', car: 'מכשיר', phone: 'אוטומציה בטלפון' };
+export function newChannel(kind: ChannelKind, name?: string, lang: Lang = 'he'): Channel {
+  const names = defaultNames[lang];
   return {
     id: randomToken(6),
     kind,
@@ -185,13 +187,14 @@ export function newChannel(kind: ChannelKind, name?: string): Channel {
   };
 }
 
-export const freshConfig = (): Config => ({
+export const freshConfig = (lang: Lang = 'he'): Config => ({
   v: 2,
   enabled: true,
   gates: [],
-  channels: [newChannel('grok'), newChannel('phone')],
+  channels: [newChannel('grok', undefined, lang), newChannel('phone', undefined, lang)],
   cooldownSec: 8,
   notifyUrl: '',
+  lang,
 });
 
 export async function getConfig(t: Tenant): Promise<Config> {
@@ -220,7 +223,7 @@ export interface IndexEntry {
   ch?: string;
 }
 
-export type IndexKind = 'sec' | 'dev' | 'cred' | 'rec';
+export type IndexKind = 'sec' | 'dev' | 'cred' | 'rec' | 'user';
 
 /** Index keys hold a SHA-256 of the credential, never the credential itself. */
 const ixKey = async (kind: IndexKind, value: string, hashed = false) => `ix:${kind}:${hashed ? value : await sha256(value)}`;
@@ -275,8 +278,9 @@ export async function touch(env: Env, id: string) {
 }
 
 /** Removes every trace of a tenant: its slots, its indexes, its registry entry. */
-export async function deleteTenant(t: Tenant, credIds: string[], recoveryHash?: string) {
+export async function deleteTenant(t: Tenant, credIds: string[], recoveryHash?: string, username?: string) {
   const cfg = await getConfig(t);
+  if (username) await ixDel(t.env, 'user', username);
   for (const c of cfg.channels) await unindexChannel(t, c);
   for (const id of credIds) await ixDel(t.env, 'cred', id);
   if (recoveryHash) await ixDel(t.env, 'rec', recoveryHash, true);

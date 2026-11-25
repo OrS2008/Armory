@@ -77,3 +77,33 @@ export async function open<T>(secret: string, slot: string, sealed: Sealed): Pro
 
 export const isSealed = (x: unknown): x is Sealed =>
   !!x && typeof x === 'object' && (x as Sealed).v === 1 && typeof (x as Sealed).ct === 'string';
+
+// ------------------------------------------------------------ passwords
+
+export interface PasswordHash {
+  alg: 'pbkdf2-sha256';
+  iter: number;
+  salt: string;
+  hash: string;
+}
+
+const PBKDF2_ITER = 100_000; // the maximum workerd allows
+
+async function pbkdf2(password: string, salt: Uint8Array<ArrayBuffer>, iter: number) {
+  const base = await crypto.subtle.importKey('raw', te.encode(password), 'PBKDF2', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt, iterations: iter }, base, 256);
+  return b64u(new Uint8Array(bits));
+}
+
+export async function hashPassword(password: string): Promise<PasswordHash> {
+  const salt = randomBytes(16);
+  return { alg: 'pbkdf2-sha256', iter: PBKDF2_ITER, salt: b64u(salt), hash: await pbkdf2(password, salt, PBKDF2_ITER) };
+}
+
+export async function verifyPassword(password: string, h: PasswordHash): Promise<boolean> {
+  return safeEqual(await pbkdf2(password, unb64u(h.salt), h.iter), h.hash);
+}
+
+/** Same cost as a real check, so a missing username can't be told apart by timing. */
+const DUMMY: PasswordHash = { alg: 'pbkdf2-sha256', iter: PBKDF2_ITER, salt: 'AAAAAAAAAAAAAAAAAAAAAA', hash: 'x' };
+export const burnPasswordCheck = (password: string) => verifyPassword(password, DUMMY);

@@ -5,7 +5,7 @@
  * Sessions are server-side, in HttpOnly/Secure/SameSite=Strict __Host- cookies.
  * A session record names its tenant; nothing in a request can change that.
  */
-import { randomToken, sha256 } from './crypto';
+import { randomToken, sha256, type PasswordHash } from './crypto';
 import type { ClientMeta } from './http';
 import type { Passkey } from './passkeys';
 import { bump, count, getMeta, getSealed, putSealed, tenant, tGet, tPut, TENANT_ID_RE, type Env, type Tenant } from './store';
@@ -16,6 +16,14 @@ export interface OwnerRecord {
   epoch: number; // bump to invalidate every session
   createdAt: string;
   recoveryHash?: string; // SHA-256 of the current recovery code
+  username?: string; // lower-case; customers only
+  pw?: PasswordHash; // optional: customers may sign in with username + password
+}
+
+export const USERNAME_RE = /^[a-z0-9._-]{3,32}$/;
+export const normalizeUsername = (u: unknown) => (typeof u === 'string' ? u.trim().toLowerCase() : '');
+export function passwordOk(pw: unknown, username: string): pw is string {
+  return typeof pw === 'string' && pw.length >= 10 && pw.length <= 256 && pw.toLowerCase() !== username && !/^(.)\1+$/.test(pw);
 }
 
 export type Role = 'tenant' | 'sa';

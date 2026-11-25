@@ -76,11 +76,21 @@ class Browser {
   async api<T = Record<string, unknown>>(p: string, body: unknown = {}) {
     return (await this.post('/app/api/' + p, body)).json<T>();
   }
-  async signup() {
-    const o = await (await this.post('/app/signup/options')).json<{ token: string; options: never }>();
-    const r = await this.post('/app/signup/verify', { token: o.token, response: await this.device.create(o.options), name: 'iPhone' });
+  username = `user${ipCounter}x`;
+  password = 'correct horse battery staple';
+  async signup(withPasskey = false) {
+    const r = await this.post('/app/signup', { username: this.username, password: this.password });
     expect(r.status).toBe(200);
-    return (await r.json<{ recoveryCode: string }>()).recoveryCode;
+    const code = (await r.json<{ recoveryCode: string }>()).recoveryCode;
+    if (withPasskey) await this.addPasskey();
+    return code;
+  }
+  async addPasskey(device = this.device) {
+    const o = await this.api<{ token: string; options: never }>('passkey/options');
+    return this.post('/app/api/passkey/verify', { token: o.token, response: await device.create(o.options), name: 'iPhone' });
+  }
+  loginPassword(username = this.username, password = this.password) {
+    return this.post('/app/login/password', { username, password });
   }
   async login(path = '/app') {
     const o = await (await this.post(`${path}/login/options`)).json<{ token: string; options: { challenge: string; rpId: string } }>();
@@ -237,13 +247,13 @@ describe('isolation between customers', () => {
     expect(after.some((k) => k.includes(tidA))).toBe(false);
     expect(after.filter((k) => k.startsWith('ix:')).length).toBeLessThan(before.filter((k) => k.startsWith('ix:')).length);
     expect((await call(`/o/${ca.channels[0]!.secret}`)).status).toBe(404);
-    expect((await a.login()).status).toBe(401);
+    expect((await a.loginPassword()).status).toBe(401);
     expect((await call(`/o/${cb.channels[0]!.secret}`)).status).toBe(200);
   });
 
   it('a customer session cannot reach the admin panel, and vice versa', async () => {
     const a = new Browser();
-    await a.signup();
+    await a.signup(true);
     expect((await a.post('/sa/api/state')).status).toBe(401);
     const admin = await setupAdmin();
     expect((await admin.post('/app/api/state')).status).toBe(401);
@@ -273,7 +283,7 @@ describe('super admin', () => {
 
   it('blocking a customer stops their sessions, links and logins until unblocked', async () => {
     const a = new Browser();
-    await a.signup();
+    await a.signup(true);
     const cfg = await a.linkAndSetGate('A');
     const admin = await setupAdmin();
     const { tenants } = await (await admin.post('/sa/api/state')).json<{ tenants: { id: string }[] }>();
@@ -281,18 +291,20 @@ describe('super admin', () => {
     expect((await a.post('/app/api/state')).status).toBe(401);
     expect((await call(`/o/${cfg.channels[0]!.secret}`)).status).toBe(404);
     expect((await a.login()).status).toBe(401);
+    expect((await a.loginPassword()).status).toBe(401);
     await admin.post('/sa/api/tenant/status', { id: tenants[0]!.id, status: 'active' });
     expect((await a.login()).status).toBe(200);
+    expect((await a.loginPassword()).status).toBe(200);
   });
 
   it('can close sign-ups and enforces the daily cap', async () => {
     const admin = await setupAdmin();
     await admin.post('/sa/api/platform', { signupsOpen: false });
-    expect((await new Browser().post('/app/signup/options')).status).toBe(403);
-    expect(await (await call('/app')).text()).toContain('ההרשמה לחשבונות חדשים סגורה');
+    expect((await new Browser().post('/app/signup', { username: 'closed1', password: 'correct horse battery' })).status).toBe(403);
+    expect(await (await call('/app', { headers: { cookie: 'hg_lang=he' } })).text()).toContain('ההרשמה לחשבונות חדשים סגורה');
     await admin.post('/sa/api/platform', { signupsOpen: true, maxSignupsPerDay: 1 });
     await new Browser().signup();
-    expect((await new Browser().post('/app/signup/options')).status).toBe(429);
+    expect((await new Browser().post('/app/signup', { username: 'capped1', password: 'correct horse battery' })).status).toBe(429);
   });
 
   it('deletes a customer only with the id typed as confirmation', async () => {
@@ -307,9 +319,58 @@ describe('super admin', () => {
 
 // =====================================================================
 describe('customer accounts', () => {
-  it('signs in with the passkey; refuses replay, phishing origin, foreign key and strangers', async () => {
+  it('sign-up validates the username and password, and usernames are unique', async () => {
+    const b = new Browser();
+    expect((await b.post('/app/signup', { username: 'a b', password: 'correct horse battery' })).status).toBe(400);
+    expect((await b.post('/app/signup', { username: 'okname', password: 'short' })).status).toBe(400);
+    expect((await b.post('/app/signup', { username: 'samename1', password: 'samename1' })).status).toBe(400);
+    expect((await b.post('/app/signup', { username: 'Dupe.User', password: 'correct horse battery' })).status).toBe(200);
+    const r = await new Browser().post('/app/signup', { username: 'dupe.user', password: 'another long password' });
+    expect(r.status).toBe(409);
+  });
+
+  it('signs in with username + password; wrong and unknown users get the same answer', async () => {
     const a = new Browser();
     await a.signup();
+    a.cookies.clear();
+    const bad = await a.loginPassword(a.username, 'wrong password!!');
+    const unknown = await a.loginPassword('nobody-here', 'wrong password!!');
+    expect(bad.status).toBe(401);
+    expect(unknown.status).toBe(401);
+    expect((await bad.json<{ message: string }>()).message).toBe((await unknown.json<{ message: string }>()).message);
+    expect((await a.loginPassword(a.username.toUpperCase())).status).toBe(200);
+    expect((await a.post('/app/api/state')).status).toBe(200);
+  });
+
+  it('locks one account after 10 wrong passwords even from many IPs', async () => {
+    const a = new Browser();
+    await a.signup();
+    for (let i = 0; i < 10; i++) {
+      const attacker = new Browser();
+      await attacker.loginPassword(a.username, `guess number ${i}`);
+    }
+    const r = await new Browser().loginPassword(a.username, a.password);
+    expect(r.status).toBe(429);
+    // the owner gets back in with the recovery code
+  });
+
+  it('password change needs the current password and signs out other sessions', async () => {
+    const a = new Browser();
+    await a.signup();
+    const other = new Browser();
+    other.username = a.username;
+    await other.loginPassword();
+    expect((await a.post('/app/api/password', { current: 'nope nope nope', next: 'a brand new password' })).status).toBe(401);
+    expect((await a.post('/app/api/password', { current: a.password, next: 'short' })).status).toBe(400);
+    expect((await a.post('/app/api/password', { current: a.password, next: 'a brand new password' })).status).toBe(200);
+    expect((await a.post('/app/api/state')).status).toBe(200);
+    expect((await other.post('/app/api/state')).status).toBe(401);
+    expect((await new Browser().loginPassword(a.username, 'a brand new password')).status).toBe(200);
+  });
+
+  it('signs in with a passkey; refuses replay, phishing origin, foreign key and strangers', async () => {
+    const a = new Browser();
+    await a.signup(true);
     a.cookies.clear();
     expect((await a.login()).status).toBe(200);
     const o = await (await a.post('/app/login/options')).json<{ token: string; options: { challenge: string; rpId: string } }>();
@@ -325,11 +386,10 @@ describe('customer accounts', () => {
     expect((await stranger.login()).status).toBe(401);
   });
 
-  it('refuses an authenticator that skipped Face ID / PIN', async () => {
+  it('refuses a passkey from an authenticator that skipped Face ID / PIN', async () => {
     const a = new Browser();
-    a.device = new SoftAuthenticator({ origin: ORIGIN, userVerified: false });
-    const o = await (await a.post('/app/signup/options')).json<{ token: string; options: never }>();
-    expect((await a.post('/app/signup/verify', { token: o.token, response: await a.device.create(o.options) })).status).toBe(400);
+    await a.signup();
+    expect((await a.addPasskey(new SoftAuthenticator({ origin: ORIGIN, userVerified: false }))).status).toBe(400);
   });
 
   it('recovery code works once, rotates, and signs out other sessions', async () => {
@@ -345,28 +405,23 @@ describe('customer accounts', () => {
     expect((await new Browser().post('/app/recover', { code })).status).toBe(401);
   });
 
-  it('adds a second passkey; refuses deleting the last one', async () => {
+  it('passkeys can be added and removed; the password keeps the account reachable', async () => {
     const a = new Browser();
-    await a.signup();
-    const laptop = new SoftAuthenticator({ origin: ORIGIN });
-    const o = await a.api<{ token: string; options: never }>('passkey/options');
-    expect((await a.post('/app/api/passkey/verify', { token: o.token, response: await laptop.create(o.options), name: 'Mac' })).status).toBe(200);
-    const st = await a.api<{ passkeys: { id: string }[] }>('state');
+    await a.signup(true);
+    expect((await a.addPasskey(new SoftAuthenticator({ origin: ORIGIN }))).status).toBe(200);
+    const st = await a.api<{ passkeys: { id: string }[]; account: { hasPassword: boolean } }>('state');
     expect(st.passkeys).toHaveLength(2);
-    expect((await a.post('/app/api/passkey/delete', { id: st.passkeys[1]!.id })).status).toBe(200);
-    expect((await a.post('/app/api/passkey/delete', { id: st.passkeys[0]!.id })).status).toBe(400);
+    expect(st.account.hasPassword).toBe(true);
+    for (const p of st.passkeys) expect((await a.post('/app/api/passkey/delete', { id: p.id })).status).toBe(200);
+    expect((await new Browser().loginPassword(a.username, a.password)).status).toBe(200);
   });
 
   it('locks an IP out after 5 failures with a countdown', async () => {
     const a = new Browser();
     await a.signup();
     a.cookies.clear();
-    const bad = await SoftAuthenticator.foreignKey();
     let last!: Response;
-    for (let i = 0; i < 5; i++) {
-      const o = await (await a.post('/app/login/options')).json<{ token: string; options: { challenge: string; rpId: string } }>();
-      last = await a.post('/app/login/verify', { token: o.token, response: await a.device.get(o.options, undefined, bad) });
-    }
+    for (let i = 0; i < 5; i++) last = await a.loginPassword(a.username, `wrong ${i} attempt`);
     expect(last.status).toBe(429);
     expect(Number(last.headers.get('retry-after'))).toBeGreaterThan(800);
     expect(await (await a.get('/app')).text()).toMatch(/lock\(\d+\)/);
@@ -448,6 +503,62 @@ describe('opening rules', () => {
 });
 
 // =====================================================================
+describe('pages and languages', () => {
+  const pages = ['/', '/privacy', '/app', '/sa', '/car'];
+
+  it('every page carries the disclaimer, in the chosen language', async () => {
+    for (const p of pages) {
+      const he = await (await call(p, { headers: { cookie: 'hg_lang=he' } })).text();
+      expect(he).toContain('HeyGate אינו קשור ל-PalGate, ל-xAI או ל-Tesla');
+      expect(he).toContain('dir="rtl"');
+      const en = await (await call(p, { headers: { cookie: 'hg_lang=en' } })).text();
+      expect(en).toContain('HeyGate is not affiliated with PalGate, xAI or Tesla');
+      expect(en).toContain('dir="ltr"');
+    }
+    const a = new Browser();
+    await a.signup();
+    expect(await (await a.get('/app')).text()).toContain('HeyGate is not affiliated');
+  });
+
+  it('falls back to the browser language, and shows the day/night and language switches', async () => {
+    const en = await (await call('/', { headers: { 'accept-language': 'en-US,en;q=0.9' } })).text();
+    expect(en).toContain('lang="en"');
+    const he = await (await call('/', { headers: { 'accept-language': 'he-IL,he;q=0.9' } })).text();
+    expect(he).toContain('lang="he"');
+    for (const h of [en, he]) {
+      expect(h).toContain('data-theme-opt="dark"');
+      expect(h).toContain('data-lang="en"');
+      expect(h).toContain('data-lang="he"');
+    }
+  });
+
+  it('server messages arrive translated', async () => {
+    const he = await call('/app/signup', { method: 'POST', headers: { origin: ORIGIN, 'x-gate-csrf': '1', cookie: 'hg_lang=he' }, body: JSON.stringify({ username: 'x', password: 'y' }) });
+    expect((await he.json<{ message: string }>()).message).toMatch(/שם משתמש/);
+    const en = await call('/app/signup', { method: 'POST', ip: '10.9.9.9', headers: { origin: ORIGIN, 'x-gate-csrf': '1', cookie: 'hg_lang=en' }, body: JSON.stringify({ username: 'x', password: 'y' }) });
+    expect((await en.json<{ message: string }>()).message).toMatch(/^Username/);
+  });
+
+  it('every L.key used by page scripts exists in both languages', async () => {
+    const { UI } = await import('../src/ui-strings');
+    const src = (await import('node:fs')).readFileSync('src/pages.ts', 'utf8');
+    const used = new Set([...src.matchAll(/\bL\.([a-z0-9_]+)/g)].map((m) => m[1]!));
+    expect(used.size).toBeGreaterThan(100);
+    for (const k of used) {
+      expect(UI.he, `he.${k}`).toHaveProperty(k);
+      expect(UI.en, `en.${k}`).toHaveProperty(k);
+    }
+  });
+
+  it('new accounts get channel names in their language', async () => {
+    const a = new Browser();
+    a.cookies.set('hg_lang', 'en');
+    await a.signup();
+    const names = (await a.state()).config.channels.map((c) => c.name);
+    expect(names).toContain('Phone automation');
+  });
+});
+
 describe('pages', () => {
   it('serve the landing page, privacy page and security headers, with an early theme script', async () => {
     const home = await call('/');
