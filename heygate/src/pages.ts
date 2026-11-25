@@ -25,6 +25,7 @@ const CSS = `
 :root[data-theme=dark]{${DARK}}
 @media (prefers-color-scheme:dark){:root:not([data-theme=light]){${DARK}}}
 html{font-size:clamp(16px,calc(14.6px + .2vw),18px);-webkit-text-size-adjust:100%;text-size-adjust:100%}
+html,body{max-width:100%;overflow-x:hidden;overflow-x:clip}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--fg);font:1rem/1.55 var(--font);-webkit-font-smoothing:antialiased;transition:background-color .2s,color .2s;min-height:100vh;min-height:100dvh;display:flex;flex-direction:column}
 body>.page{flex:1}
@@ -42,8 +43,10 @@ button:active{transform:scale(.98)}button:focus-visible,input:focus-visible,sele
 .btn-danger{background:var(--bad);color:#fff}.btn-ok{background:var(--ok);color:#fff}
 .btn-block{width:100%}.btn-sm{min-height:38px;padding:7px 12px;font-size:.875rem}
 button[disabled]{opacity:.55;cursor:default}
-input,select{font:inherit;width:100%;min-height:48px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--bg);color:var(--fg)}
-label{display:block;font-weight:600;font-size:.94rem}label>input,label>select{margin-top:6px;font-weight:400}
+input,select,textarea{font:inherit;font-size:max(16px,1rem);width:100%;min-height:48px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--bg);color:var(--fg)}
+label{display:block;font-weight:600;font-size:.94rem}label>input,label>select{margin-top:6px;font-weight:400;font-size:max(16px,1rem)}
+input[type=checkbox],input[type=radio]{width:auto;min-height:0}
+input.mono,input.ltr{font-size:max(16px,1rem)}
 .hint{font-size:.8125rem;color:var(--muted);font-weight:400;margin-top:4px}
 .mono,code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.8125rem;direction:ltr;unicode-bidi:isolate;word-break:break-all}
 .ltr{direction:ltr;text-align:start}
