@@ -26,7 +26,8 @@ export function html(body: string, status = 200, extra: Record<string, string> =
     "default-src 'none'",
     `script-src 'nonce-${nonce}'`,
     "style-src 'unsafe-inline'",
-    'img-src data:',
+    "img-src 'self' data:",
+    "manifest-src 'self'",
     "connect-src 'self'",
     "form-action 'self'",
     "frame-ancestors 'none'",
@@ -62,12 +63,38 @@ export function clientMeta(req: Request): ClientMeta {
   };
 }
 
+const MAX_BODY = 16_384;
+
+/** Reads a JSON object body, capped at 16 KB however the client labels it. */
 export async function readJson<T>(req: Request): Promise<Partial<T>> {
-  if (Number(req.headers.get('content-length') ?? 0) > 16_384) throw new Error('body too large');
+  if (!req.body || req.method === 'GET') return {};
+  const reader = req.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > MAX_BODY) {
+      await reader.cancel();
+      return {};
+    }
+    chunks.push(value);
+  }
   try {
-    const v: unknown = await req.json();
-    return v && typeof v === 'object' ? (v as Partial<T>) : {};
+    const v: unknown = JSON.parse(new TextDecoder().decode(concat(chunks, size)));
+    return v && typeof v === 'object' && !Array.isArray(v) ? (v as Partial<T>) : {};
   } catch {
     return {};
   }
+}
+
+function concat(chunks: Uint8Array[], size: number) {
+  const out = new Uint8Array(size);
+  let o = 0;
+  for (const c of chunks) {
+    out.set(c, o);
+    o += c.byteLength;
+  }
+  return out;
 }

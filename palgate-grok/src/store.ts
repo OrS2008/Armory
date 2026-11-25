@@ -1,8 +1,19 @@
 import type { Session } from './palgate/api';
 import { isSealed, open, randomToken, seal } from './crypto';
 
+export interface RateLimiter {
+  limit(o: { key: string }): Promise<{ success: boolean }>;
+}
+
 export interface Env {
   GATE: KVNamespace;
+  /** Cloudflare's built-in per-key rate limiters (see wrangler.toml). */
+  RL_PUBLIC?: RateLimiter;
+  RL_ADMIN?: RateLimiter;
+  RL_AUTH?: RateLimiter;
+  /** Optional outer layer: Cloudflare Access in front of /admin. */
+  ACCESS_TEAM_DOMAIN?: string; // e.g. myteam.cloudflareaccess.com
+  ACCESS_AUD?: string;
   /** 32 random bytes, base64url. Encrypts everything sensitive in KV. */
   ENC_KEY?: string;
   /** One-time code that lets the owner create the admin account. Useless once set up. */
@@ -19,9 +30,13 @@ export interface Gate {
 export type ChannelKind = 'grok' | 'car' | 'phone';
 
 /**
- * A channel is one way of opening the gate, with its own secret link. Each one
- * can be disabled, rotated, country-restricted and rate-limited on its own, so
- * a link leaked from one place never forces you to redo the others.
+ * A channel is one way of opening the gate. Each one can be disabled, rotated,
+ * country-restricted and rate-limited on its own, so a credential leaked from
+ * one place never forces you to redo the others.
+ *  - grok:  a secret link (Grok can only "visit" URLs). Can require arming.
+ *  - phone: a secret link for automations, POST only.
+ *  - car:   a paired browser (the car's or a phone's); holds a device cookie,
+ *           nothing secret ever appears in a URL.
  */
 export interface Channel {
   id: string;
@@ -33,6 +48,11 @@ export interface Channel {
   maxPerHour: number;
   createdAt: string;
   lastUsedAt?: string;
+  /** grok only: open only while armed (e.g. by the phone on arriving home). */
+  requireArm?: boolean;
+  armMinutes?: number;
+  /** car only: SHA-256 of the paired device's cookie token. */
+  deviceHash?: string;
 }
 
 export interface Config {
@@ -92,7 +112,7 @@ export const putSession = (env: Env, s: Session) => putSealed(env, 'session', s)
 // ------------------------------------------------------------ config
 
 export function newChannel(kind: ChannelKind, name?: string): Channel {
-  const names: Record<ChannelKind, string> = { grok: 'Grok', car: 'מסך הרכב', phone: 'טלפון' };
+  const names: Record<ChannelKind, string> = { grok: 'Grok', car: 'מכשיר', phone: 'אוטומציה בטלפון' };
   return {
     id: randomToken(6),
     kind,
@@ -104,6 +124,7 @@ export function newChannel(kind: ChannelKind, name?: string): Channel {
     countries: kind === 'grok' ? [] : ['IL'],
     maxPerHour: 20,
     createdAt: new Date().toISOString(),
+    ...(kind === 'grok' ? { requireArm: false, armMinutes: 10 } : {}),
   };
 }
 
@@ -114,7 +135,7 @@ export async function getConfig(env: Env): Promise<Config> {
     v: 2,
     enabled: true,
     gates: [],
-    channels: [newChannel('grok'), newChannel('car'), newChannel('phone')],
+    channels: [newChannel('grok'), newChannel('phone')],
     cooldownSec: 8,
     notifyUrl: '',
   };
@@ -132,9 +153,14 @@ export async function getLog(env: Env): Promise<LogEntry[]> {
 }
 
 export async function addLog(env: Env, entry: Omit<LogEntry, 'at'>) {
-  const log = await getLog(env);
-  log.unshift({ at: new Date().toISOString(), ...entry });
-  await putSealed(env, 'log', log.slice(0, 200));
+  // Never let a logging failure (e.g. KV write quota) break the action itself.
+  try {
+    const log = await getLog(env);
+    log.unshift({ at: new Date().toISOString(), ...entry });
+    await putSealed(env, 'log', log.slice(0, 300));
+  } catch (e) {
+    console.error('audit log write failed', e);
+  }
 }
 
 // ------------------------------------------------------------ counters

@@ -118,7 +118,7 @@ async function linkAndConfigure() {
   await post('/admin/api/gates', { gates: [{ alias: 'Home!', label: 'שער ראשי', deviceId: 'DEV1', output: 1 }] });
   const s = await state();
   const ch = (kind: string) => s.config.channels.find((c) => c.kind === kind)!;
-  return { grok: ch('grok'), car: ch('car'), phone: ch('phone'), config: s.config };
+  return { grok: ch('grok'), phone: ch('phone'), config: s.config };
 }
 
 const opens = () => palCalls.filter((u) => u.includes('open-gate')).length;
@@ -128,10 +128,10 @@ describe('owner account', () => {
     expect(await (await call('/admin')).text()).toContain('הגדרת חשבון');
     await setupOwner();
     const anon = await (await call('/admin')).text();
-    expect(anon).toContain('כניסה לניהול');
-    expect(anon).not.toContain('פותחן שערים');
+    expect(anon).toContain('autocomplete="current-password"');
+    expect(anon).not.toContain('tab-home');
     const authed = await (await call('/admin', { headers: { cookie } })).text();
-    expect(authed).toContain('פותחן שערים');
+    expect(authed).toContain('tab-home');
   });
 
   it('cannot be set up twice and the setup code is useless afterwards', async () => {
@@ -212,13 +212,11 @@ describe('opening', () => {
     expect(opens()).toBe(1);
   });
 
-  it('car and phone links work only via POST and only from allowed countries', async () => {
-    const { car, phone } = await linkAndConfigure();
+  it('phone links work only via POST and only from allowed countries', async () => {
+    const { phone } = await linkAndConfigure();
     expect((await call(`/o/${phone.secret}`)).status).toBe(405); // GET refused
     expect((await call(`/o/${phone.secret}?json`, { method: 'POST', country: 'FR' })).status).toBe(403);
     expect((await call(`/o/${phone.secret}?json`, { method: 'POST' })).status).toBe(200);
-    expect((await call(`/car/${car.secret}`)).status).toBe(200);
-    expect((await call(`/car/${phone.secret}`)).status).toBe(404); // a phone secret is not a car page
     expect(opens()).toBe(1);
   });
 
@@ -264,5 +262,118 @@ describe('opening', () => {
   it('refuses to run without its secrets configured', async () => {
     env.ENC_KEY = undefined;
     expect((await call('/admin')).status).toBe(503);
+  });
+});
+
+describe('paired devices', () => {
+  const carPost = (path: string, body: unknown, c: string) =>
+    call(path, { method: 'POST', headers: { origin: ORIGIN, 'x-gate-csrf': '1', 'content-type': 'application/json', cookie: c }, body: JSON.stringify(body) });
+
+  it('pairs a car browser with a code approved by the owner, then opens with no secret in any URL', async () => {
+    await linkAndConfigure();
+    expect(await (await call('/car')).text()).toContain('צימוד המכשיר');
+    const start = await carPost('/car/pair/start', {}, '');
+    const { code } = await start.json<{ code: string }>();
+    expect(code).toMatch(/^[A-Z2-9]{6}$/);
+    const pairCookie = start.headers.get('set-cookie')!.split(';')[0]!;
+
+    // Not approved yet; and a different browser can't poll someone else's code.
+    expect(await (await carPost('/car/pair/status', { code }, pairCookie)).json()).toMatchObject({ done: false });
+    expect((await carPost('/car/pair/status', { code }, '__Host-gate_p=' + 'x'.repeat(32))).status).toBe(410);
+
+    expect((await post('/admin/api/pair/approve', { code, name: 'טסלה' })).status).toBe(200);
+    const done = await carPost('/car/pair/status', { code }, pairCookie);
+    expect(await done.json()).toMatchObject({ done: true });
+    const deviceCookie = done.headers.get('set-cookie')!;
+    expect(deviceCookie).toMatch(/__Host-gate_d=.+Secure; HttpOnly; SameSite=Strict; Max-Age=31536000/);
+    const dc = deviceCookie.split(';')[0]!;
+
+    expect(await (await call('/car', { headers: { cookie: dc } })).text()).toContain('טסלה');
+    expect((await carPost('/car/open', { alias: 'home' }, dc)).status).toBe(200);
+    expect(opens()).toBe(1);
+    // The code is single-use.
+    expect((await carPost('/car/pair/status', { code }, pairCookie)).status).toBe(410);
+    // The device hash never reaches the browser.
+    expect(JSON.stringify(await state())).not.toContain('deviceHash');
+
+    // Revoking the device works instantly.
+    const s = await state();
+    await post('/admin/api/channel/delete', { id: s.config.channels.find((c) => c.kind === 'car')!.id });
+    expect((await carPost('/car/open', { alias: 'home' }, dc)).status).toBe(401);
+  });
+
+  it('refuses a car open without CSRF header or from another origin', async () => {
+    await linkAndConfigure();
+    const r = await call('/car/open', { method: 'POST', headers: { origin: 'https://evil.example', 'content-type': 'text/plain' }, body: '{}' });
+    expect(r.status).toBe(403);
+  });
+});
+
+describe('arming (AI must not act without the owner)', () => {
+  it('Grok opens only within the window armed by the phone', async () => {
+    const { grok, phone } = await linkAndConfigure();
+    await post('/admin/api/channel/update', { id: grok.id, requireArm: true, armMinutes: 5 });
+    await post('/admin/api/settings', { cooldownSec: 0 });
+    expect((await call(`/o/${grok.secret}?json`)).status).toBe(403);
+    expect((await call(`/arm/${grok.secret}`, { method: 'POST' })).status).toBe(404); // only a phone link can arm
+    expect((await call(`/arm/${phone.secret}`, { method: 'POST' })).status).toBe(200);
+    expect((await call(`/o/${grok.secret}?json`)).status).toBe(200);
+    expect(opens()).toBe(1);
+  });
+});
+
+describe('hardening', () => {
+  it('shows a lockout countdown and Retry-After', async () => {
+    await setupOwner();
+    cookie = '';
+    let last: Response | undefined;
+    for (let i = 0; i < 5; i++) last = await post('/admin/login', { password: 'bad bad bad bad', code: '123456' });
+    expect(last!.status).toBe(429);
+    expect(Number(last!.headers.get('retry-after'))).toBeGreaterThan(800);
+    expect(await (await call('/admin')).text()).toMatch(/lock\(\d+\)/);
+  });
+
+  it('never leaks PalGate internals to Grok or the browser', async () => {
+    const { grok } = await linkAndConfigure();
+    vi.stubGlobal('fetch', async () => new Response(JSON.stringify({ err: 'x', status: 'failed', msg: 'INTERNAL-DB-ERROR at node 7' }), { status: 500 }));
+    const r = await call(`/o/${grok.secret}`);
+    const body = await r.text();
+    expect(r.status).toBe(502);
+    expect(body).not.toContain('INTERNAL-DB-ERROR');
+    expect(body).toMatch(/ref [A-Z0-9_-]+/i);
+  });
+
+  it('escapes stored values everywhere (no stored XSS)', async () => {
+    const { grok } = await linkAndConfigure();
+    await post('/admin/api/gates', { gates: [{ alias: 'home', label: '<img src=x onerror=alert(1)>', deviceId: 'DEV1', output: 1 }] });
+    await post('/admin/api/settings', { cooldownSec: 0 });
+    const page = await (await call(`/o/${grok.secret}`)).text();
+    expect(page).not.toContain('<img src=x');
+    expect(page).toContain('&lt;img');
+  });
+
+  it('rejects oversized bodies, odd paths and junk input', async () => {
+    await setupOwner();
+    const huge = await post('/admin/api/gates', { gates: [{ alias: 'a', label: 'x'.repeat(20_000), deviceId: 'D' }] });
+    expect(huge.status).toBe(400); // body dropped → "gates required"
+    expect((await call('/o/' + 'a'.repeat(250))).status).toBe(400);
+    const r = await post('/admin/api/gates', { gates: [{ alias: '../../etc', label: 1, deviceId: 'D<script>', output: 99 }] });
+    expect(r.status).toBe(200);
+    const g = (await state()).config.gates[0]!;
+    expect(g).toEqual({ alias: 'etc', label: '', deviceId: 'Dscript', output: 4 });
+  });
+
+  it('applies the Cloudflare rate limiter before doing any work', async () => {
+    const { grok } = await linkAndConfigure();
+    env.RL_PUBLIC = { limit: async () => ({ success: false }) };
+    expect((await call(`/o/${grok.secret}`)).status).toBe(429);
+    expect(opens()).toBe(0);
+  });
+
+  it('requires a valid Cloudflare Access token when that layer is configured', async () => {
+    env.ACCESS_TEAM_DOMAIN = 'team.cloudflareaccess.com';
+    env.ACCESS_AUD = 'aud123';
+    expect((await call('/admin')).status).toBe(403);
+    expect((await call('/admin', { headers: { 'cf-access-jwt-assertion': 'a.b.c' } })).status).toBe(403);
   });
 });

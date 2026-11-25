@@ -9,3 +9,19 @@ id = "d6ce48cbe10c405aaaa76b8ff6d8ad38"
 
 # Secrets (never put them here) — set with `npx wrangler secret put <NAME>`:
 #   ADMIN_PASSWORD   password for the /admin setup screens
+
+# Cloudflare's built-in rate limiting (per IP, per Cloudflare location, no KV writes).
+[[ratelimits]]
+name = "RL_PUBLIC" # /o, /arm, /car
+namespace_id = "7101"
+simple = { limit = 30, period = 60 }
+
+[[ratelimits]]
+name = "RL_ADMIN" # everything under /admin
+namespace_id = "7102"
+simple = { limit = 120, period = 60 }
+
+[[ratelimits]]
+name = "RL_AUTH" # login, setup and pairing attempts
+namespace_id = "7103"
+simple = { limit = 10, period = 60 }

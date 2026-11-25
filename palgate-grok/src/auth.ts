@@ -16,6 +16,8 @@ export interface AdminRecord {
 }
 
 const COOKIE = '__Host-gate_s';
+export const DEVICE_COOKIE = '__Host-gate_d';
+export const PAIR_COOKIE = '__Host-gate_p';
 export const SESSION_TTL = 12 * 3600;
 const MAX_FAILS_PER_IP = 5; // per 15 min
 const MAX_FAILS_GLOBAL = 30; // per hour, against distributed guessing
@@ -33,13 +35,24 @@ export function validatePassword(pw: unknown): string | null {
 
 const hour = () => new Date().toISOString().slice(0, 13);
 
-export async function lockedOut(env: Env, m: ClientMeta): Promise<boolean> {
-  const [ip, global] = await Promise.all([count(env, `lf:${m.ip}`), count(env, `lfg:${hour()}`)]);
-  return ip >= MAX_FAILS_PER_IP || global >= MAX_FAILS_GLOBAL;
+/** Seconds until this IP may try again, or 0 if it may try now. */
+export async function lockedOut(env: Env, m: ClientMeta): Promise<number> {
+  const [until, global] = await Promise.all([env.GATE.get(`lock:${m.ip}`), count(env, `lfg:${hour()}`)]);
+  const left = Math.ceil((Number(until) - Date.now()) / 1000);
+  if (left > 0) return left;
+  if (global >= MAX_FAILS_GLOBAL) return 3600 - Math.floor((Date.now() / 1000) % 3600);
+  return 0;
 }
 
-export async function recordFailure(env: Env, m: ClientMeta) {
-  await Promise.all([bump(env, `lf:${m.ip}`, 900), bump(env, `lfg:${hour()}`, 3600)]);
+/** Records a failure; returns the lockout in seconds if this one triggered it. */
+export async function recordFailure(env: Env, m: ClientMeta): Promise<number> {
+  const [n] = await Promise.all([bump(env, `lf:${m.ip}`, 900), bump(env, `lfg:${hour()}`, 3600)]);
+  if (n >= MAX_FAILS_PER_IP) {
+    await env.GATE.put(`lock:${m.ip}`, String(Date.now() + 900_000), { expirationTtl: 900 });
+    await env.GATE.delete(`lf:${m.ip}`);
+    return 900;
+  }
+  return 0;
 }
 
 // ------------------------------------------------------------ login
@@ -76,10 +89,13 @@ export async function createSession(env: Env, admin: AdminRecord, m: ClientMeta)
 
 export const clearCookie = `${COOKIE}=; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age=0`;
 
-function readCookie(req: Request): string | null {
-  const m = (req.headers.get('cookie') ?? '').match(new RegExp(`(?:^|;\\s*)${COOKIE}=([A-Za-z0-9_-]{20,})`));
+export function readCookie(req: Request, name = COOKIE): string | null {
+  const m = (req.headers.get('cookie') ?? '').match(new RegExp(`(?:^|;\\s*)${name}=([A-Za-z0-9_-]{20,64})(?:;|$)`));
   return m?.[1] ?? null;
 }
+
+export const cookie = (name: string, value: string, maxAge: number) =>
+  `${name}=${value}; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age=${maxAge}`;
 
 export async function currentSession(req: Request, env: Env): Promise<AdminRecord | null> {
   const token = readCookie(req);
