@@ -1,7 +1,6 @@
 import qrcode from 'qrcode-generator';
 import { accessEnabled, verifyAccess } from './access';
 import {
-  checkCredentials,
   clearCookie,
   cookie,
   createSession,
@@ -15,10 +14,10 @@ import {
   readCookie,
   recordFailure,
   sameOrigin,
-  validatePassword,
   type AdminRecord,
 } from './auth';
-import { base32, hashPassword, randomBytes, randomToken, safeEqual, sha256, verifyPassword, verifyTotp } from './crypto';
+import { randomBytes, randomToken, safeEqual, sha256 } from './crypto';
+import { authenticationOptions, registrationOptions, verifyAuthentication, verifyRegistration } from './passkeys';
 import { clientMeta, html, json, readJson, text, type ClientMeta } from './http';
 import { adminPage, carPage, iconSvg, loginPage, manifest, pairPage, resultPage, setupPage } from './pages';
 import { checkToken, listDevices, openGate, waitForLink } from './palgate/api';
@@ -318,11 +317,6 @@ async function carRoute(req: Request, env: Env, ctx: ExecutionContext, url: URL,
 
 // ---------------------------------------------------------------- admin
 
-interface PendingSetup {
-  pw: AdminRecord['pw'];
-  totp: string;
-}
-
 const tooMany = (seconds: number) =>
   json({ ok: false, message: 'יותר מדי ניסיונות', retryAfter: seconds }, 429, { 'retry-after': String(seconds) });
 
@@ -341,7 +335,7 @@ async function adminRoute(req: Request, env: Env, ctx: ExecutionContext, url: UR
   if (req.method !== 'POST') return json({ ok: false, message: 'not found' }, 404);
   if (!sameOrigin(req, url)) return json({ ok: false, message: 'cross-origin request refused' }, 403);
 
-  const isAuth = ['POST /setup/start', 'POST /setup/finish', 'POST /login'].includes(route);
+  const isAuth = ['POST /setup/options', 'POST /setup/verify', 'POST /login/options', 'POST /login/verify'].includes(route);
   if (isAuth) {
     if (!(await allowed(env.RL_AUTH, m.ip))) return tooMany(60);
     const wait = await lockedOut(env, m);
@@ -355,47 +349,44 @@ async function adminRoute(req: Request, env: Env, ctx: ExecutionContext, url: UR
     }
     return json({ ok: false, message }, status);
   };
+  const body = isAuth ? await readJson<{ setupCode: string; token: string; response: unknown; name: string }>(req) : {};
 
-  // ----- first-time setup: one-time code → own password → enrol authenticator
-  if (route === 'POST /setup/start' || route === 'POST /setup/finish') {
+  // ----- first-time setup: one-time code → create a passkey on this device
+  if (route === 'POST /setup/options') {
     if (admin) return json({ ok: false, message: 'already set up' }, 409);
-    const body = await readJson<{ setupCode: string; password: string; token: string; code: string }>(req);
-    if (route === 'POST /setup/start') {
-      if (typeof body.setupCode !== 'string' || !safeEqual(body.setupCode.trim().toUpperCase(), env.SETUP_CODE!.toUpperCase())) {
-        return fail(401, 'קוד התקנה שגוי');
-      }
-      const bad = validatePassword(body.password);
-      if (bad) return json({ ok: false, message: bad }, 400);
-      const totp = base32(randomBytes(20));
-      const token = randomToken(24);
-      await putSealed(env, `setup:${token}`, { pw: await hashPassword(body.password!), totp } satisfies PendingSetup, 900);
-      const uri = `otpauth://totp/PalGate%20Grok:owner?secret=${totp}&issuer=PalGate%20Grok&algorithm=SHA1&digits=6&period=30`;
-      return json({ ok: true, token, secret: totp, svg: qrSvg(uri), uri });
+    if (typeof body.setupCode !== 'string' || !safeEqual(body.setupCode.trim().toUpperCase(), env.SETUP_CODE!.toUpperCase())) {
+      return fail(401, 'קוד התקנה שגוי');
     }
-    if (typeof body.token !== 'string' || !SECRET_RE.test(body.token)) return json({ ok: false, message: 'פג תוקף, התחל מחדש' }, 400);
-    const pending = await getSealed<PendingSetup>(env, `setup:${body.token}`);
-    if (!pending) return json({ ok: false, message: 'פג תוקף, התחל מחדש' }, 400);
-    const step = await verifyTotp(pending.totp, String(body.code ?? ''));
-    if (step === null) return fail(401, 'קוד שגוי. ודא שהשעון בטלפון מכוון אוטומטית');
-    const rec: AdminRecord = { pw: pending.pw, totp: pending.totp, lastStep: step, epoch: 1, createdAt: new Date().toISOString() };
+    return json({ ok: true, ...(await registrationOptions(env, url, 'setup', null)) });
+  }
+  if (route === 'POST /setup/verify') {
+    if (admin) return json({ ok: false, message: 'already set up' }, 409);
+    const r = await verifyRegistration(env, url, 'setup', body.token, body.response, str(body.name, 40));
+    if (!r) return fail(400, 'יצירת ה-Passkey נכשלה. נסה שוב');
+    const rec: AdminRecord = { userId: r.userId, passkeys: [r.passkey], epoch: 1, createdAt: new Date().toISOString() };
     await putAdmin(env, rec);
-    await env.GATE.delete(`setup:${body.token}`);
-    await audit(env, ctx, null, m, 'account created');
+    await audit(env, ctx, null, m, `החשבון נוצר (Passkey: ${r.passkey.name})`);
     return json({ ok: true }, 200, { 'set-cookie': await createSession(env, rec, m) });
   }
 
-  if (route === 'POST /login') {
+  // ----- sign in with a passkey
+  if (route === 'POST /login/options') {
     if (!admin) return json({ ok: false, message: 'not set up' }, 409);
-    const body = await readJson<{ password: string; code: string }>(req);
-    const r = await checkCredentials(env, body.password, body.code);
+    return json({ ok: true, ...(await authenticationOptions(env, url, admin.userId)) });
+  }
+  if (route === 'POST /login/verify') {
+    if (!admin) return json({ ok: false, message: 'not set up' }, 409);
+    const used = await verifyAuthentication(env, url, body.token, body.response, admin);
     const cfg = await getConfig(env);
-    if (!r.ok) {
+    if (!used) {
       await addLog(env, { kind: 'admin', ok: false, detail: 'login failed', ip: m.ip, country: m.country });
       notify(ctx, cfg, `⚠️ ניסיון התחברות כושל לפאנל מ-${m.country} (${m.ip})`);
-      return fail(401, r.message);
+      return fail(401, 'ההתחברות נכשלה');
     }
-    await audit(env, ctx, cfg, m, 'התחברות לפאנל', true);
-    return json({ ok: true }, 200, { 'set-cookie': await createSession(env, r.admin, m) });
+    admin.passkeys = admin.passkeys.map((p) => (p.id === used.id ? used : p));
+    await putAdmin(env, admin);
+    await audit(env, ctx, cfg, m, `התחברות לפאנל (${used.name})`, true);
+    return json({ ok: true }, 200, { 'set-cookie': await createSession(env, admin, m) });
   }
 
   if (route === 'POST /logout') {
@@ -437,6 +428,7 @@ async function adminApi(
         // deviceHash is never sent to the browser
         config: { ...cfg, channels: cfg.channels.map(({ deviceHash: _d, ...c }) => c) },
         armed: Object.fromEntries(armed),
+        passkeys: admin.passkeys.map((p) => ({ id: p.id, name: p.name, createdAt: p.createdAt, lastUsedAt: p.lastUsedAt, backedUp: !!p.backedUp })),
         access: accessEnabled(env),
         origin: url.origin,
         log: entries.slice(0, 150),
@@ -600,18 +592,32 @@ async function adminApi(
       await log('ניתוק מכל המכשירים', true);
       return json({ ok: true }, 200, { 'set-cookie': clearCookie });
 
-    case 'POST /password': {
-      if (!(await verifyPassword(String(body.current ?? ''), admin.pw))) return json({ ok: false, message: 'הסיסמה הנוכחית שגויה' }, 401);
-      const step = await verifyTotp(admin.totp, String(body.code ?? ''), admin.lastStep);
-      if (step === null) return json({ ok: false, message: 'קוד אימות שגוי' }, 401);
-      const bad = validatePassword(body.next);
-      if (bad) return json({ ok: false, message: bad }, 400);
-      admin.pw = await hashPassword(String(body.next));
-      admin.lastStep = step;
-      admin.epoch += 1; // every other device is signed out
+    case 'POST /passkey/options':
+      if (admin.passkeys.length >= 10) return json({ ok: false, message: 'אפשר עד 10 Passkeys' }, 400);
+      return json({ ok: true, ...(await registrationOptions(env, url, 'add', admin)) });
+    case 'POST /passkey/verify': {
+      const r = await verifyRegistration(env, url, 'add', body.token, body.response, str(body.name, 40));
+      if (!r || r.userId !== admin.userId) return json({ ok: false, message: 'הוספת ה-Passkey נכשלה' }, 400);
+      admin.passkeys.push(r.passkey);
       await putAdmin(env, admin);
-      await log('הסיסמה הוחלפה', true);
-      return json({ ok: true }, 200, { 'set-cookie': await createSession(env, admin, m) });
+      await log(`נוסף Passkey: ${r.passkey.name}`, true);
+      return json({ ok: true });
+    }
+    case 'POST /passkey/rename': {
+      const pk = admin.passkeys.find((p) => p.id === body.id);
+      if (!pk || !str(body.name, 40)) return json({ ok: false, message: 'לא נמצא' }, 404);
+      pk.name = str(body.name, 40);
+      await putAdmin(env, admin);
+      return json({ ok: true });
+    }
+    case 'POST /passkey/delete': {
+      const pk = admin.passkeys.find((p) => p.id === body.id);
+      if (!pk) return json({ ok: false, message: 'לא נמצא' }, 404);
+      if (admin.passkeys.length === 1) return json({ ok: false, message: 'אי אפשר למחוק את ה-Passkey האחרון — הוסף קודם אחר' }, 400);
+      admin.passkeys = admin.passkeys.filter((p) => p.id !== pk.id);
+      await putAdmin(env, admin);
+      await log(`נמחק Passkey: ${pk.name}`, true);
+      return json({ ok: true });
     }
   }
   return json({ ok: false, message: 'not found' }, 404);

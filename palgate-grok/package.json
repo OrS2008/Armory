@@ -10,6 +10,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@simplewebauthn/server": "13.3.3",
     "qrcode-generator": "2.0.4"
   },
   "devDependencies": {

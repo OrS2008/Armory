@@ -1,16 +1,16 @@
 /**
- * Owner authentication: password (PBKDF2) + mandatory TOTP second factor,
- * server-side sessions in an HttpOnly/Secure/SameSite=Strict cookie, per-IP and
- * global lockouts, single-use codes, and "sign out everywhere".
+ * Owner authentication: passkeys only (see passkeys.ts), server-side sessions in
+ * an HttpOnly/Secure/SameSite=Strict cookie, per-IP and global lockouts, and
+ * "sign out everywhere". There is no password to phish, guess or leak.
  */
-import { hashPassword, randomToken, sha256, verifyPassword, verifyTotp, type PasswordHash } from './crypto';
+import { randomToken, sha256 } from './crypto';
 import type { ClientMeta } from './http';
+import type { Passkey } from './passkeys';
 import { bump, count, getSealed, putSealed, type Env } from './store';
 
 export interface AdminRecord {
-  pw: PasswordHash;
-  totp: string; // base32
-  lastStep: number; // last TOTP step used (replay protection)
+  userId: string; // WebAuthn user handle, base64url
+  passkeys: Passkey[];
   epoch: number; // bump to invalidate every session
   createdAt: string;
 }
@@ -22,14 +22,11 @@ export const SESSION_TTL = 12 * 3600;
 const MAX_FAILS_PER_IP = 5; // per 15 min
 const MAX_FAILS_GLOBAL = 30; // per hour, against distributed guessing
 
-export const getAdmin = (env: Env) => getSealed<AdminRecord>(env, 'admin');
-export const putAdmin = (env: Env, a: AdminRecord) => putSealed(env, 'admin', a);
-
-export function validatePassword(pw: unknown): string | null {
-  if (typeof pw !== 'string' || pw.length < 12) return 'הסיסמה חייבת להכיל לפחות 12 תווים';
-  if (pw.length > 256) return 'סיסמה ארוכה מדי';
-  return null;
+export async function getAdmin(env: Env): Promise<AdminRecord | null> {
+  const a = await getSealed<AdminRecord>(env, 'admin');
+  return a && Array.isArray(a.passkeys) ? a : null; // ignores records from the password era
 }
+export const putAdmin = (env: Env, a: AdminRecord) => putSealed(env, 'admin', a);
 
 // ------------------------------------------------------------ lockout
 
@@ -53,21 +50,6 @@ export async function recordFailure(env: Env, m: ClientMeta): Promise<number> {
     return 900;
   }
   return 0;
-}
-
-// ------------------------------------------------------------ login
-
-export type LoginResult = { ok: true; admin: AdminRecord } | { ok: false; message: string };
-
-export async function checkCredentials(env: Env, password: unknown, code: unknown): Promise<LoginResult> {
-  const admin = await getAdmin(env);
-  if (!admin) return { ok: false, message: 'not set up' };
-  const pwOk = typeof password === 'string' && (await verifyPassword(password, admin.pw));
-  const step = await verifyTotp(admin.totp, String(code ?? ''), admin.lastStep);
-  if (!pwOk || step === null) return { ok: false, message: 'סיסמה או קוד אימות שגויים' };
-  admin.lastStep = step;
-  await putAdmin(env, admin);
-  return { ok: true, admin };
 }
 
 // ------------------------------------------------------------ sessions

@@ -109,6 +109,17 @@ function ask(title,text,okLabel,danger){return new Promise(res=>{const d=documen
 document.addEventListener('click',e=>{const t=e.target.closest('[data-copy]');if(!t)return;
   navigator.clipboard.writeText(t.dataset.copy).then(()=>{const o=t.textContent;t.textContent='✓ הועתק';setTimeout(()=>t.textContent=o,1500);},()=>toast('ההעתקה נכשלה — סמן והעתק ידנית','bad'));});
 const copyBox=(v,label)=>'<div class="copy"><code>'+esc(v)+'</code><button class="btn-soft btn-sm" data-copy="'+esc(v)+'">'+(label||'העתק')+'</button></div>';
+const b64u=b=>{let s='';for(const x of new Uint8Array(b))s+=String.fromCharCode(x);return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');};
+const ub=s=>Uint8Array.from(atob(s.replace(/-/g,'+').replace(/_/g,'/')+'='.repeat((4-s.length%4)%4)),c=>c.charCodeAt(0));
+const pkSupported=()=>!!(window.PublicKeyCredential&&navigator.credentials);
+function pkError(e){if(e&&e.name==='NotAllowedError')return 'הפעולה בוטלה או שפג הזמן';if(e&&e.name==='InvalidStateError')return 'ה-Passkey הזה כבר רשום במכשיר';if(e&&e.name==='SecurityError')return 'הדפדפן חסם את הפעולה (נדרש HTTPS)';return e&&e.message||'שגיאה';}
+async function pkCreate(o){const c=await navigator.credentials.create({publicKey:{...o,challenge:ub(o.challenge),user:{...o.user,id:ub(o.user.id)},excludeCredentials:(o.excludeCredentials||[]).map(x=>({...x,id:ub(x.id)}))}});
+  return {id:c.id,rawId:b64u(c.rawId),type:c.type,authenticatorAttachment:c.authenticatorAttachment||undefined,clientExtensionResults:c.getClientExtensionResults(),
+    response:{clientDataJSON:b64u(c.response.clientDataJSON),attestationObject:b64u(c.response.attestationObject),transports:c.response.getTransports?c.response.getTransports():[]}};}
+async function pkGet(o){const c=await navigator.credentials.get({publicKey:{...o,challenge:ub(o.challenge),allowCredentials:(o.allowCredentials||[]).map(x=>({...x,id:ub(x.id)}))}});
+  return {id:c.id,rawId:b64u(c.rawId),type:c.type,authenticatorAttachment:c.authenticatorAttachment||undefined,clientExtensionResults:c.getClientExtensionResults(),
+    response:{clientDataJSON:b64u(c.response.clientDataJSON),authenticatorData:b64u(c.response.authenticatorData),signature:b64u(c.response.signature),userHandle:c.response.userHandle?b64u(c.response.userHandle):undefined}};}
+function deviceName(){const u=navigator.userAgent;if(/iPhone/.test(u))return 'iPhone';if(/iPad/.test(u))return 'iPad';if(/Android/.test(u))return 'Android';if(/Mac/.test(u))return 'Mac';if(/Windows/.test(u))return 'Windows';return 'מכשיר';}
 async function busy(btn,fn){const o=btn.innerHTML;btn.disabled=true;btn.innerHTML='<span aria-hidden="true">⏳</span> רגע…';try{return await fn();}finally{btn.disabled=false;btn.innerHTML=o;}}`;
 
 // ------------------------------------------------------------ public pages
@@ -178,50 +189,43 @@ const AUTH_CSS = `main{max-width:460px;margin:0 auto;padding:7vh 16px 40px}.bran
 .lock{background:var(--bad-soft);color:var(--bad);border-radius:14px;padding:16px;text-align:center}.lock b{font:700 34px ui-monospace,monospace;display:block;direction:ltr}`;
 const BRAND = `<div class="brand"><img src="/icon.svg" alt=""><div><h1>פותחן השער</h1><div class="muted small">PalGate × Grok</div></div></div>`;
 
+const NO_PK = '<div class="card" id="nopk" hidden><b class="bad">הדפדפן הזה לא תומך ב-Passkey.</b><p class="muted small">פתח את הפאנל ב-Safari באייפון, Chrome באנדרואיד, או דפדפן מעודכן במחשב.</p></div>';
+
 export function setupPage() {
-  const body = `<main>${BRAND}
-<div class="steps" aria-hidden="true"><i class="on" id="p1"></i><i id="p2"></i></div>
-<section class="card stack" id="s1"><h2>יצירת חשבון בעלים</h2><p class="muted small">עושים את זה פעם אחת. אחרי זה קוד ההתקנה מפסיק לעבוד.</p>
+  const body = `<main>${BRAND}${NO_PK}
+<section class="card stack" id="s1"><h2>יצירת חשבון בעלים</h2>
+<p class="muted small">בלי סיסמאות: נכנסים עם <b>Face ID / טביעת אצבע</b> דרך Passkey. אי אפשר לנחש אותו, אי אפשר לגנוב אותו בפישינג, והוא מסונכרן אוטומטית לשאר המכשירים שלך (iCloud / Google).</p>
 <form id="f1" class="stack"><label>קוד התקנה<input name="setupCode" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="XXXX-XXXX-XXXX-XXXX" required></label>
-<label>בחר סיסמה<input name="password" type="password" autocomplete="new-password" minlength="12" required><div class="hint" id="pwhint">לפחות 12 תווים. משפט קצר שקל לזכור עובד מצוין.</div></label>
-<label>הקלד שוב<input name="password2" type="password" autocomplete="new-password" minlength="12" required></label>
-<button class="btn-primary btn-block" type="submit">המשך</button></form></section>
-<section class="card stack" id="s2" hidden><h2>אימות דו-שלבי</h2>
-<p class="muted small">שכבת הגנה שנייה: גם מי שיודע את הסיסמה לא ייכנס בלי הטלפון שלך.</p>
-<a class="btn btn-soft btn-block" id="otplink" href="#">📱 פתח באפליקציית אימות בטלפון הזה</a>
-<details><summary>או סרוק ממכשיר אחר / הקלד ידנית</summary><div class="stack" style="text-align:center"><div class="qr" id="qr"></div><code id="sec"></code></div></details>
-<form id="f2" class="stack"><label>הקוד בן 6 הספרות שמופיע באפליקציה<input name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required style="font-size:24px;letter-spacing:.3em;text-align:center;direction:ltr"></label>
-<button class="btn-primary btn-block" type="submit">סיום והתחברות</button></form>
-<p class="hint">אין לך אפליקציה? Google Authenticator או Microsoft Authenticator — חינם ב-App Store / Google Play.</p></section>
+<button class="btn-primary btn-block" type="submit">🔐 צור Passkey עם Face ID</button></form>
+<p class="hint">קוד ההתקנה עובד פעם אחת בלבד.</p></section>
 <p id="err" class="bad" role="alert"></p></main>`;
   const js = `${CORE_JS}
-let token='';
+if(!pkSupported()){$('#nopk').hidden=false;$('#f1 button').disabled=true;}
 $('#f1').addEventListener('submit',e=>{e.preventDefault();const f=new FormData(e.target);$('#err').textContent='';
-  if(f.get('password')!==f.get('password2')){$('#err').textContent='הסיסמאות לא תואמות';return;}
-  busy(e.submitter,async()=>{try{const d=await post('/admin/setup/start',{setupCode:f.get('setupCode'),password:f.get('password')});token=d.token;
-    $('#qr').innerHTML=d.svg;$('#sec').textContent=d.secret.replace(/(.{4})/g,'$1 ').trim();$('#otplink').href=d.uri;
-    $('#s1').hidden=true;$('#s2').hidden=false;$('#p2').classList.add('on');}catch(err){$('#err').textContent=err.message;}});});
-$('#f2').addEventListener('submit',e=>{e.preventDefault();const f=new FormData(e.target);$('#err').textContent='';
-  busy(e.submitter,async()=>{try{await post('/admin/setup/finish',{token,code:f.get('code')});location.reload();}catch(err){$('#err').textContent=err.message;}});});`;
+  busy(e.submitter,async()=>{try{const o=await post('/admin/setup/options',{setupCode:f.get('setupCode')});
+    let cred;try{cred=await pkCreate(o.options);}catch(err){throw new Error(pkError(err));}
+    await post('/admin/setup/verify',{token:o.token,response:cred,name:deviceName()});location.reload();}catch(err){$('#err').textContent=err.message;}});});`;
   return shell('הגדרת חשבון', body, { css: AUTH_CSS, js });
 }
 
 export function loginPage(lockedSeconds = 0) {
-  const body = `<main>${BRAND}<section class="card stack">
+  const body = `<main>${BRAND}${NO_PK}<section class="card stack" style="text-align:center">
 <div class="lock" id="lock" hidden>🔒 יותר מדי ניסיונות.<br>נסה שוב בעוד<b id="lockt"></b></div>
-<form id="f" class="stack"><label>סיסמה<input name="password" type="password" autocomplete="current-password" required></label>
-<label>קוד מאפליקציית האימות<input name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required style="font-size:22px;letter-spacing:.3em;text-align:center;direction:ltr"></label>
-<button class="btn-primary btn-block" type="submit">כניסה</button></form></section>
+<div style="font-size:48px" aria-hidden="true">🔐</div><h2>כניסה לניהול השער</h2>
+<button class="btn-primary btn-block" id="go" style="min-height:58px;font-size:18px">כניסה עם Face ID / Passkey</button>
+<p class="hint">ה-Passkey נשמר במכשיר שבו יצרת את החשבון ומסונכרן ל-iCloud / Google.</p></section>
 <p id="err" class="bad" role="alert"></p></main>`;
   const js = `${CORE_JS}
 let lockTimer;
-function lock(s){const end=Date.now()+s*1000;$('#lock').hidden=false;$('#f').querySelector('button').disabled=true;clearInterval(lockTimer);
+function lock(s){const end=Date.now()+s*1000;$('#lock').hidden=false;$('#go').disabled=true;clearInterval(lockTimer);
   const tick=()=>{const l=Math.max(0,Math.round((end-Date.now())/1000));$('#lockt').textContent=String(Math.floor(l/60)).padStart(2,'0')+':'+String(l%60).padStart(2,'0');
-    if(!l){clearInterval(lockTimer);$('#lock').hidden=true;$('#f').querySelector('button').disabled=false;}};tick();lockTimer=setInterval(tick,1000);}
+    if(!l){clearInterval(lockTimer);$('#lock').hidden=true;$('#go').disabled=false;}};tick();lockTimer=setInterval(tick,1000);}
+if(!pkSupported()){$('#nopk').hidden=false;$('#go').disabled=true;}
 ${lockedSeconds > 0 ? `lock(${Math.floor(lockedSeconds)});` : ''}
-$('#f').addEventListener('submit',e=>{e.preventDefault();const f=new FormData(e.target);$('#err').textContent='';
-  busy(e.submitter,async()=>{try{await post('/admin/login',{password:f.get('password'),code:f.get('code')});location.reload();}
-  catch(err){if(err.status===429&&err.data.retryAfter){lock(err.data.retryAfter);}else{$('#err').textContent=err.message;}e.target.code.value='';}});});`;
+$('#go').addEventListener('click',e=>{$('#err').textContent='';busy(e.currentTarget,async()=>{
+  try{const o=await post('/admin/login/options');let cred;try{cred=await pkGet(o.options);}catch(err){throw new Error(pkError(err));}
+    await post('/admin/login/verify',{token:o.token,response:cred});location.reload();}
+  catch(err){if(err.status===429&&err.data&&err.data.retryAfter){lock(err.data.retryAfter);}else{$('#err').textContent=err.message;}}});});`;
   return shell('כניסה', body, { css: AUTH_CSS, js });
 }
 
@@ -385,18 +389,19 @@ function pairDialog(){const d=document.createElement('dialog');d.innerHTML='<for
 
 // ---------- security
 function security(){const el=$('#tab-security'),cfg=S.config;
-  const checks=[[true,'כניסה עם סיסמה + אימות דו-שלבי'],[true,'הצפנת כל הנתונים הרגישים (AES-256)'],[true,'חסימת ניחושים והגבלת קצב בקשות'],[true,'HTTPS בלבד + הגנות דפדפן (CSP, HSTS)'],
+  const checks=[[true,'כניסה עם Passkey בלבד (Face ID) — בלי סיסמה'],[S.passkeys.length>1||S.passkeys.some(p=>p.backedUp),'Passkey גיבוי (מסונכרן או מכשיר נוסף)','הוסף Passkey למכשיר נוסף — למטה'],[true,'הצפנת כל הנתונים הרגישים (AES-256)'],[true,'חסימת ניחושים והגבלת קצב בקשות'],[true,'HTTPS בלבד + הגנות דפדפן (CSP, HSTS)'],
     [!!cfg.notifyUrl,'התראות לטלפון על כל פעולה',cfg.notifyUrl?'':'מומלץ להפעיל — למטה'],[cfg.channels.filter(c=>c.kind==='grok').every(c=>c.requireArm),'Grok פותח רק כשדרוך','אופציונלי — בלשונית גישות'],[S.access,'שכבת Cloudflare Access לפאנל','אופציונלי — ראה README']];
-  const score=checks.filter(c=>c[0]).length;
+  const score=checks.filter(c=>c[0]).length;const good=checks.length-2;
   el.innerHTML='<div class="card stack"><div class="row between"><h2>מצב ההגנה</h2><span class="pill '+(score>=6?'ok':score>=5?'warn':'bad')+'">'+score+'/'+checks.length+'</span></div>'+
     checks.map(c=>'<div class="check"><span class="s">'+(c[0]?'✅':'⚪')+'</span><div>'+c[1]+(c[2]&&!c[0]?'<div class="hint">'+c[2]+'</div>':'')+'</div></div>').join('')+'</div>'+
   '<div class="card"><div class="row between"><div class="grow"><b>🚨 מתג חירום</b><div class="muted small">כיבוי משבית מיד את כל דרכי הפתיחה</div></div><label class="switch"><input type="checkbox" id="master" '+(cfg.enabled?'checked':'')+'><span></span><b class="sr">פתיחה פעילה</b></label></div></div>'+
   '<div class="card stack"><h2>🔔 התראות לטלפון</h2><p class="muted small">תקבל התראה מיידית על כל פתיחה, חסימה, התחברות ושינוי הגדרות.</p>'+
     '<ol class="small" style="padding-inline-start:20px;margin:0"><li>התקן את האפליקציה החינמית <b>ntfy</b></li><li>לחץ <b>+</b> והירשם לנושא: <span class="mono" id="topic"></span></li><li>שמור כאן:</li></ol>'+
     '<input id="notify" class="mono" placeholder="https://ntfy.sh/..." value="'+esc(cfg.notifyUrl)+'"><div class="row"><button class="btn-primary" id="sn">שמור</button><button class="btn-ghost" id="tn">שלח בדיקה</button></div></div>'+
-  '<div class="card stack"><h2>🔐 החלפת סיסמה</h2><form id="pwf" class="stack"><input name="current" type="password" placeholder="סיסמה נוכחית" autocomplete="current-password" required>'+
-    '<input name="next" type="password" placeholder="סיסמה חדשה (12+ תווים)" autocomplete="new-password" minlength="12" required>'+
-    '<input name="code" inputmode="numeric" placeholder="קוד אימות" maxlength="6" required style="direction:ltr;text-align:center"><button class="btn-primary" type="submit">החלף סיסמה</button></form></div>'+
+  '<div class="card stack"><div class="row between"><h2>🔐 Passkeys</h2><button class="btn-soft btn-sm" id="addpk">+ הוסף מכשיר</button></div>'+
+    '<p class="muted small">המכשירים שיכולים להיכנס לפאנל. מומלץ לפחות שניים (למשל אייפון + מחשב), למקרה שאחד אובד.</p>'+
+    S.passkeys.map(p=>'<div class="ev" data-pk="'+esc(p.id)+'"><span class="s" aria-hidden="true">🔑</span><div class="grow"><b>'+esc(p.name)+'</b>'+(p.backedUp?' <span class="pill ok">מסונכרן</span>':'')+
+      '<div class="muted small">נוצר '+fmt(p.createdAt)+' · שימוש אחרון: '+fmt(p.lastUsedAt)+'</div></div><button class="btn-ghost btn-sm pkren">שנה שם</button>'+(S.passkeys.length>1?'<button class="btn-ghost btn-sm pkdel" style="color:var(--bad)">מחק</button>':'')+'</div>').join('')+'</div>'+
   '<details class="card"><summary>מתקדם</summary><div class="stack" style="margin-top:10px"><label>השהיה בין פתיחות לאותו שער (שניות)<input id="cd" type="number" min="0" max="120" value="'+cfg.cooldownSec+'"><div class="hint">מונע פתיחה כפולה כש-Grok טוען פעמיים</div></label><button class="btn-ghost" id="scd">שמור</button>'+
     '<hr style="border:0;border-top:1px solid var(--line);width:100%"><b>ניתוק מכל המכשירים</b><p class="muted small">אם יש חשש שמישהו נכנס לפאנל. מכשירים מצומדים לפתיחה לא מושפעים.</p><button class="btn-danger" id="la">נתק את כולם</button></div></details>';
   const rnd=crypto.getRandomValues(new Uint8Array(10));const topic='gate-'+[...rnd].map(x=>x.toString(36)).join('').slice(0,18);
@@ -406,7 +411,11 @@ function security(){const el=$('#tab-security'),cfg=S.config;
   $('#tn').onclick=async()=>{await api('notify-test');toast('נשלחה התראת בדיקה');};
   $('#scd').onclick=async()=>{try{await api('settings',{cooldownSec:+$('#cd').value});toast('נשמר','ok');}catch(e){toast(e.message,'bad');}};
   $('#la').onclick=async()=>{if(await ask('לנתק את כל המכשירים מהפאנל?','כולל המכשיר הזה. תצטרך להתחבר מחדש.','נתק',true)){await api('logout-all');location.reload();}};
-  $('#pwf').addEventListener('submit',e=>{e.preventDefault();const f=new FormData(e.target);busy(e.submitter,async()=>{try{await api('password',{current:f.get('current'),next:f.get('next'),code:f.get('code')});e.target.reset();toast('✅ הסיסמה הוחלפה. שאר המכשירים נותקו','ok');}catch(err){toast(err.message,'bad');}});});}
+  $('#addpk').onclick=e=>busy(e.currentTarget,async()=>{try{const o=await api('passkey/options');let cred;try{cred=await pkCreate(o.options);}catch(err){throw new Error(pkError(err));}
+    await api('passkey/verify',{token:o.token,response:cred,name:deviceName()});toast('✅ Passkey נוסף','ok');await load();}catch(err){toast(err.message,'bad');}});
+  $$('[data-pk]').forEach(row=>{const id=row.dataset.pk,p=S.passkeys.find(x=>x.id===id);
+    row.querySelector('.pkren').onclick=async()=>{const n=prompt('שם חדש',p.name);if(!n)return;try{await api('passkey/rename',{id,name:n});await load();}catch(e){toast(e.message,'bad');}};
+    row.querySelector('.pkdel')?.addEventListener('click',async()=>{if(await ask('למחוק את "'+p.name+'"?','המכשיר הזה לא יוכל יותר להיכנס לפאנל.','מחק',true)){try{await api('passkey/delete',{id});toast('נמחק');await load();}catch(e){toast(e.message,'bad');}}});});}
 
 async function setMaster(on){if(!on&&!await ask('להשבית את כל הפתיחות?','Grok, המכשירים והאוטומציות לא יפתחו עד שתפעיל מחדש.','השבת',true)){render();return;}
   try{await api('settings',{enabled:on});toast(on?'🟢 הופעל':'⛔ הושבת',on?'ok':'bad');await load();}catch(e){toast(e.message,'bad');}}

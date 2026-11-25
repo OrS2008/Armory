@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { b64u, hotp, unbase32 } from '../src/crypto';
+import { b64u } from '../src/crypto';
+import { SoftAuthenticator } from './soft-authenticator';
 import worker, { type Config, type Env } from '../src/index';
 
 class MemKV {
@@ -19,13 +20,12 @@ class MemKV {
 
 const ORIGIN = 'https://gate.test';
 const SESSION_HEX = '00112233445566778899aabbccddeeff';
-const PASSWORD = 'correct horse battery';
 let kv: MemKV;
 let env: Env;
 let palCalls: string[];
 let notifications: string[];
 let cookie = '';
-let totpSecret = '';
+let device: SoftAuthenticator;
 let now = Date.UTC(2026, 10, 25, 12, 0, 0);
 
 const ctx = { waitUntil: (p: Promise<unknown>) => void p, passThroughOnException() {} } as unknown as ExecutionContext;
@@ -44,9 +44,6 @@ const post = (path: string, body: unknown, extra: Record<string, string> = {}) =
     body: JSON.stringify(body),
   });
 
-async function code(offsetSteps = 0) {
-  return hotp(unbase32(totpSecret), Math.floor(now / 30_000) + offsetSteps);
-}
 
 const saveCookie = (r: Response) => {
   const c = r.headers.get('set-cookie');
@@ -96,15 +93,27 @@ function tick(seconds: number) {
 }
 
 async function setupOwner() {
-  const r1 = await post('/admin/setup/start', { setupCode: 'setup-code-123', password: PASSWORD });
+  device = new SoftAuthenticator({ origin: ORIGIN });
+  const r1 = await post('/admin/setup/options', { setupCode: 'setup-code-123' });
   expect(r1.status).toBe(200);
-  const d = await r1.json<{ token: string; secret: string; svg: string }>();
-  expect(d.svg).toContain('<svg');
-  totpSecret = d.secret;
-  const r2 = await post('/admin/setup/finish', { token: d.token, code: await code() });
+  const d = await r1.json<{ token: string; options: { challenge: string; rp: { id: string }; user: { id: string }; authenticatorSelection: { userVerification: string; residentKey: string } } }>();
+  expect(d.options.rp.id).toBe('gate.test');
+  expect(d.options.authenticatorSelection).toMatchObject({ userVerification: 'required', residentKey: 'required' });
+  const r2 = await post('/admin/setup/verify', { token: d.token, response: await device.create(d.options), name: 'iPhone' });
   expect(r2.status).toBe(200);
   expect(r2.headers.get('set-cookie')).toMatch(/__Host-gate_s=.+; Path=\/; Secure; HttpOnly; SameSite=Strict/);
   saveCookie(r2);
+}
+
+async function passkeyLogin(dev = device, opts: { origin?: string; key?: CryptoKey; ip?: string } = {}) {
+  const o = await (await call('/admin/login/options', { method: 'POST', ip: opts.ip, headers: { origin: ORIGIN, 'x-gate-csrf': '1', 'content-type': 'application/json' }, body: '{}' })).json<{ token: string; options: { challenge: string; rpId: string } }>();
+  const response = await dev.get(o.options, opts.origin, opts.key);
+  return { token: o.token, response, res: await call('/admin/login/verify', {
+    method: 'POST',
+    ip: opts.ip,
+    headers: { origin: ORIGIN, 'x-gate-csrf': '1', 'content-type': 'application/json' },
+    body: JSON.stringify({ token: o.token, response }),
+  }) };
 }
 
 async function state() {
@@ -128,7 +137,7 @@ describe('owner account', () => {
     expect(await (await call('/admin')).text()).toContain('הגדרת חשבון');
     await setupOwner();
     const anon = await (await call('/admin')).text();
-    expect(anon).toContain('autocomplete="current-password"');
+    expect(anon).toContain('כניסה עם Face ID');
     expect(anon).not.toContain('tab-home');
     const authed = await (await call('/admin', { headers: { cookie } })).text();
     expect(authed).toContain('tab-home');
@@ -136,35 +145,74 @@ describe('owner account', () => {
 
   it('cannot be set up twice and the setup code is useless afterwards', async () => {
     await setupOwner();
-    const again = await post('/admin/setup/start', { setupCode: 'setup-code-123', password: 'another long password' });
-    expect(again.status).toBe(409);
+    expect((await post('/admin/setup/options', { setupCode: 'setup-code-123' })).status).toBe(409);
   });
 
-  it('rejects a wrong setup code and short passwords', async () => {
-    expect((await post('/admin/setup/start', { setupCode: 'nope', password: PASSWORD })).status).toBe(401);
-    expect((await post('/admin/setup/start', { setupCode: 'setup-code-123', password: 'short' })).status).toBe(400);
+  it('rejects a wrong setup code', async () => {
+    expect((await post('/admin/setup/options', { setupCode: 'nope' })).status).toBe(401);
   });
 
-  it('needs both password and a fresh TOTP code, and a code works only once', async () => {
+  it('signs in with the passkey; no password route exists at all', async () => {
     await setupOwner();
     cookie = '';
-    tick(60);
-    expect((await post('/admin/login', { password: 'wrong password!!', code: await code() })).status).toBe(401);
-    expect((await post('/admin/login', { password: PASSWORD, code: '000000' })).status).toBe(401);
-    const c = await code();
-    const ok = await post('/admin/login', { password: PASSWORD, code: c });
-    expect(ok.status).toBe(200);
-    // Replay of the same code is refused.
-    expect((await post('/admin/login', { password: PASSWORD, code: c })).status).toBe(401);
+    const { res } = await passkeyLogin();
+    expect(res.status).toBe(200);
+    expect(res.headers.get('set-cookie')).toContain('__Host-gate_s=');
+    for (const c of ['', cookie]) expect((await post('/admin/login', { password: 'x', code: '123456' }, { cookie: c })).status).not.toBe(200);
   });
 
-  it('locks an IP out after 5 failures, even with correct credentials', async () => {
+  it('rejects a challenge replay, a phishing origin, a foreign key and a missing user verification', async () => {
     await setupOwner();
     cookie = '';
-    for (let i = 0; i < 5; i++) await post('/admin/login', { password: 'bad bad bad bad', code: '123456' });
-    tick(60);
-    const r = await post('/admin/login', { password: PASSWORD, code: await code() });
-    expect(r.status).toBe(429);
+    const { token, response } = await passkeyLogin();
+    // replay the exact same signed response with its (now burned) challenge
+    const replay = await post('/admin/login/verify', { token, response });
+    expect(replay.status).toBe(401);
+    // signed for a look-alike phishing site
+    expect((await passkeyLogin(device, { origin: 'https://gate.test.evil.example' })).res.status).toBe(401);
+    // signed by a key that is not the registered one
+    expect((await passkeyLogin(device, { key: await SoftAuthenticator.foreignKey() })).res.status).toBe(401);
+  });
+
+  it('refuses an authenticator that skipped Face ID / PIN (user verification)', async () => {
+    device = new SoftAuthenticator({ origin: ORIGIN, userVerified: false });
+    const d = await (await post('/admin/setup/options', { setupCode: 'setup-code-123' })).json<{ token: string; options: never }>();
+    expect((await post('/admin/setup/verify', { token: d.token, response: await device.create(d.options) })).status).toBe(400);
+  });
+
+  it('a credential from another device cannot sign in', async () => {
+    await setupOwner();
+    cookie = '';
+    const stranger = new SoftAuthenticator({ origin: ORIGIN });
+    await stranger.create({ challenge: 'x', rp: { id: 'gate.test' }, user: { id: 'AAAA' } });
+    expect((await passkeyLogin(stranger)).res.status).toBe(401);
+  });
+
+  it('locks an IP out after 5 failures, even with a valid passkey', async () => {
+    await setupOwner();
+    cookie = '';
+    const bad = await SoftAuthenticator.foreignKey();
+    for (let i = 0; i < 5; i++) await passkeyLogin(device, { key: bad, ip: '6.6.6.6' });
+    const opts = await call('/admin/login/options', { method: 'POST', ip: '6.6.6.6', headers: { origin: ORIGIN, 'x-gate-csrf': '1' }, body: '{}' });
+    expect(opts.status).toBe(429);
+    // another IP is unaffected
+    expect((await passkeyLogin(device, { ip: '10.9.9.9' })).res.status).toBe(200);
+  });
+
+  it('adds a second passkey, and refuses to delete the last one', async () => {
+    await setupOwner();
+    const laptop = new SoftAuthenticator({ origin: ORIGIN });
+    const o = await (await post('/admin/api/passkey/options', {})).json<{ token: string; options: { challenge: string; rp: { id: string }; user: { id: string }; excludeCredentials: unknown[] } }>();
+    expect(o.options.excludeCredentials).toHaveLength(1);
+    expect((await post('/admin/api/passkey/verify', { token: o.token, response: await laptop.create(o.options), name: 'Mac' })).status).toBe(200);
+    const s1 = await (await post('/admin/api/state', {})).json<{ passkeys: { id: string; name: string }[] }>();
+    expect(s1.passkeys.map((p) => p.name)).toEqual(['iPhone', 'Mac']);
+    expect(JSON.stringify(s1)).not.toContain('publicKey');
+    cookie = '';
+    expect((await passkeyLogin(laptop)).res.status).toBe(200);
+    saveCookie((await passkeyLogin(device)).res);
+    expect((await post('/admin/api/passkey/delete', { id: s1.passkeys[1]!.id })).status).toBe(200);
+    expect((await post('/admin/api/passkey/delete', { id: s1.passkeys[0]!.id })).status).toBe(400);
   });
 
   it('refuses cross-site requests (CSRF) even with a valid cookie', async () => {
@@ -193,7 +241,7 @@ describe('owner account', () => {
     const dump = [...kv.m.values()].join('\n');
     expect(dump).not.toContain(SESSION_HEX);
     expect(dump).not.toContain('972501234567');
-    expect(dump).not.toContain(totpSecret);
+    expect(dump).not.toContain(Buffer.from(device.credId).toString('base64url'));
     expect(dump).not.toContain('DEV1');
     for (const k of ['session', 'config2', 'admin', 'log']) expect(JSON.parse(kv.m.get(k)!)).toHaveProperty('ct');
   });
@@ -326,8 +374,9 @@ describe('hardening', () => {
   it('shows a lockout countdown and Retry-After', async () => {
     await setupOwner();
     cookie = '';
+    const bad = await SoftAuthenticator.foreignKey();
     let last: Response | undefined;
-    for (let i = 0; i < 5; i++) last = await post('/admin/login', { password: 'bad bad bad bad', code: '123456' });
+    for (let i = 0; i < 5; i++) last = (await passkeyLogin(device, { key: bad })).res;
     expect(last!.status).toBe(429);
     expect(Number(last!.headers.get('retry-after'))).toBeGreaterThan(800);
     expect(await (await call('/admin')).text()).toMatch(/lock\(\d+\)/);

@@ -1,8 +1,7 @@
 /**
  * Small, dependency-free crypto helpers on top of WebCrypto:
  *  - AES-256-GCM sealing of everything sensitive stored in KV (key = ENC_KEY secret)
- *  - PBKDF2-SHA256 password hashing
- *  - RFC 6238 TOTP (Google Authenticator / Authy / 1Password …)
+ *  - random tokens, hashing and constant-time comparison
  */
 
 const te = new TextEncoder();
@@ -14,7 +13,7 @@ export function b64u(b: Uint8Array): string {
   return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-export function unb64u(s: string): Uint8Array {
+export function unb64u(s: string): Uint8Array<ArrayBuffer> {
   const std = s.replace(/-/g, '+').replace(/_/g, '/');
   const bin = atob(std + '='.repeat((4 - (std.length % 4)) % 4));
   return Uint8Array.from(bin, (c) => c.charCodeAt(0));
@@ -78,99 +77,3 @@ export async function open<T>(secret: string, slot: string, sealed: Sealed): Pro
 
 export const isSealed = (x: unknown): x is Sealed =>
   !!x && typeof x === 'object' && (x as Sealed).v === 1 && typeof (x as Sealed).ct === 'string';
-
-// ------------------------------------------------------------ passwords
-
-export interface PasswordHash {
-  alg: 'pbkdf2-sha256';
-  iter: number;
-  salt: string;
-  hash: string;
-}
-
-const PBKDF2_ITER = 100_000; // the maximum workerd allows
-
-async function pbkdf2(password: string, salt: Uint8Array, iter: number) {
-  const base = await crypto.subtle.importKey('raw', te.encode(password), 'PBKDF2', false, ['deriveBits']);
-  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt, iterations: iter }, base, 256);
-  return b64u(new Uint8Array(bits));
-}
-
-export async function hashPassword(password: string): Promise<PasswordHash> {
-  const salt = randomBytes(16);
-  return { alg: 'pbkdf2-sha256', iter: PBKDF2_ITER, salt: b64u(salt), hash: await pbkdf2(password, salt, PBKDF2_ITER) };
-}
-
-export async function verifyPassword(password: string, h: PasswordHash): Promise<boolean> {
-  return safeEqual(await pbkdf2(password, unb64u(h.salt), h.iter), h.hash);
-}
-
-// ------------------------------------------------------------ TOTP
-
-const B32 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
-
-export function base32(b: Uint8Array): string {
-  let bits = 0;
-  let value = 0;
-  let out = '';
-  for (const x of b) {
-    value = (value << 8) | x;
-    bits += 8;
-    while (bits >= 5) {
-      out += B32[(value >>> (bits - 5)) & 31];
-      bits -= 5;
-    }
-  }
-  if (bits > 0) out += B32[(value << (5 - bits)) & 31];
-  return out;
-}
-
-export function unbase32(s: string): Uint8Array {
-  const clean = s.toUpperCase().replace(/[^A-Z2-7]/g, '');
-  let bits = 0;
-  let value = 0;
-  const out: number[] = [];
-  for (const c of clean) {
-    value = (value << 5) | B32.indexOf(c);
-    bits += 5;
-    if (bits >= 8) {
-      out.push((value >>> (bits - 8)) & 0xff);
-      bits -= 8;
-    }
-  }
-  return Uint8Array.from(out);
-}
-
-export async function hotp(secret: Uint8Array, counter: number): Promise<string> {
-  const msg = new Uint8Array(8);
-  let c = counter;
-  for (let i = 7; i >= 0; i--) {
-    msg[i] = c & 0xff;
-    c = Math.floor(c / 256);
-  }
-  const key = await crypto.subtle.importKey('raw', secret, { name: 'HMAC', hash: 'SHA-1' }, false, ['sign']);
-  const mac = new Uint8Array(await crypto.subtle.sign('HMAC', key, msg));
-  const off = mac[19]! & 0xf;
-  const bin = ((mac[off]! & 0x7f) << 24) | (mac[off + 1]! << 16) | (mac[off + 2]! << 8) | mac[off + 3]!;
-  return String(bin % 1_000_000).padStart(6, '0');
-}
-
-/**
- * Returns the matched time step, or null. Accepts ±1 step of clock drift and
- * refuses any step at or before `lastStep` (no code can be used twice).
- */
-export async function verifyTotp(
-  secretB32: string,
-  code: string,
-  lastStep = 0,
-  now = Date.now(),
-): Promise<number | null> {
-  if (!/^\d{6}$/.test(code)) return null;
-  const key = unbase32(secretB32);
-  const step = Math.floor(now / 30_000);
-  for (const s of [step - 1, step, step + 1]) {
-    if (s <= lastStep) continue;
-    if (safeEqual(await hotp(key, s), code)) return s;
-  }
-  return null;
-}

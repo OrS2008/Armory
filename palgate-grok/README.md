@@ -12,7 +12,7 @@
 ## אבטחה
 
 פירוט מלא, כולל הצ'קליסט של 20 הנקודות ותוצאות התקיפה העצמית: [SECURITY.md](SECURITY.md).
-בקצרה: סיסמה ואימות דו-שלבי חובה, הצפנת AES-256 לכל מה שרגיש, Rate Limiting של Cloudflare,
+בקצרה: כניסה עם Passkey בלבד (Face ID, בלי סיסמה), הצפנת AES-256 לכל מה שרגיש, Rate Limiting של Cloudflare,
 CSP קשיח, הרשאה נפרדת לכל דרך פתיחה, מצב "דרוך" ל-Grok, התראות לטלפון ויומן אבטחה.
 
 ## הערות
@@ -24,5 +24,5 @@ CSP קשיח, הרשאה נפרדת לכל דרך פתיחה, מצב "דרוך" 
 ```bash
 npm test          # בדיקות: AES מול node:crypto, תעתיק של pylgate, וזרימת השרת מול PalGate מדומה
 npm run typecheck
-npm run dev       # צריך .dev.vars עם ENC_KEY=... ו-SETUP_CODE=...
+npm run dev       # צריך .dev.vars עם ENC_KEY=... ו-SETUP_CODE=... (Passkey עובד גם ב-localhost)
 ```
