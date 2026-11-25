@@ -766,9 +766,20 @@ async function tenantApi(
     }
     case '/password': {
       // Set (if none yet) or change the password; changing signs out other sessions.
-      const username = owner.username ?? '';
       if (owner.pw && !(await verifyPassword(String(body.current ?? '').slice(0, 256), owner.pw))) return json({ ok: false, message: 'wrong_password' }, 401);
-      if (!username || !passwordOk(body.next, username)) return json({ ok: false, message: 'weak_password' }, 400);
+      // Accounts created with a passkey only pick their username here.
+      let username = owner.username ?? '';
+      const claiming = !username;
+      if (claiming) {
+        username = normalizeUsername(body.username);
+        if (!USERNAME_RE.test(username)) return json({ ok: false, message: 'bad_username' }, 400);
+      }
+      if (!passwordOk(body.next, username)) return json({ ok: false, message: 'weak_password' }, 400);
+      if (claiming) {
+        if (await ixGet(env, 'user', username)) return json({ ok: false, message: 'username_taken' }, 409);
+        await ixPut(env, 'user', username, { tid: t.id });
+        owner.username = username;
+      }
       owner.pw = await hashPassword(body.next);
       owner.epoch += 1;
       await putOwner(t, owner);

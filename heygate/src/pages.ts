@@ -554,6 +554,7 @@ function security(){const el=$('#tab-security'),cfg=S.config,acc=S.account,hasPk
   '<div class="card stack"><h2>'+L.account+'</h2>'+(acc.username?'<div class="row"><span class="muted small">'+L.username+':</span> <b class="mono">'+esc(acc.username)+'</b></div>':'')+
     '<form id="pwf" class="stack"><b>'+(acc.hasPassword?L.change_password:L.set_password)+'</b>'+(acc.hasPassword?'':'<p class="hint">'+L.no_password_yet+'</p>')+
     (acc.hasPassword?'<input name="current" type="password" placeholder="'+L.current_password+'" autocomplete="current-password" required>':'')+
+    (acc.username?'':'<input name="username" class="ltr" placeholder="'+L.username+'" autocomplete="username" autocapitalize="none" spellcheck="false" required minlength="3" maxlength="32"><div class="hint">'+L.username_hint+'</div>')+
     '<input name="next" type="password" placeholder="'+L.new_password+'" autocomplete="new-password" minlength="10" required><button class="btn-primary" type="submit">'+L.save+'</button></form></div>'+
   '<div class="card stack"><div class="row between"><h2>'+L.passkeys+'</h2><button class="btn-soft btn-sm" id="addpk" '+(pkSupported()?'':'hidden')+'>'+L.add_device+'</button></div>'+
     '<p class="muted small">'+L.passkeys_sub+'</p>'+(hasPk?'':'<p class="hint">'+L.no_passkeys+'</p>')+
@@ -572,7 +573,7 @@ function security(){const el=$('#tab-security'),cfg=S.config,acc=S.account,hasPk
   $('#sn').onclick=e=>busy(e.currentTarget,async()=>{try{await api('settings',{notifyUrl:$('#notify').value});toast(L.saved,'ok');load();}catch(err){toast(err.message,'bad');}});
   $('#tn').onclick=async()=>{await api('notify-test');toast(L.test_sent);};
   $('#scd').onclick=async()=>{try{await api('settings',{cooldownSec:+$('#cd').value});toast(L.saved,'ok');}catch(e){toast(e.message,'bad');}};
-  $('#pwf').addEventListener('submit',e=>{e.preventDefault();const f=new FormData(e.target);busy(e.submitter,async()=>{try{await api('password',{current:f.get('current'),next:f.get('next')});e.target.reset();toast(L.password_changed,'ok');load();}catch(err){toast(err.message,'bad');}});});
+  $('#pwf').addEventListener('submit',e=>{e.preventDefault();const f=new FormData(e.target);busy(e.submitter,async()=>{try{await api('password',{current:f.get('current'),next:f.get('next'),username:f.get('username')});e.target.reset();toast(L.password_changed,'ok');load();}catch(err){toast(err.message,'bad');}});});
   $('#newrec').onclick=async()=>{if(!await ask(L.recovery_q,L.recovery_q_text,L.create))return;try{const d=await api('recovery/new');showRecovery(d.recoveryCode,L.rec_new_title);}catch(e){toast(e.message,'bad');}};
   $('#delacc').onclick=async()=>{if(!await ask(L.del_account_q,L.del_account_text,L.del_forever,true))return;
     const typed=prompt(L.type_delete);if((typed||'').trim()!==L.delete_word){toast(L.cancelled);return;}try{await api('account/delete',{confirm:'DELETE'});location.href='/';}catch(e){toast(e.message,'bad');}};

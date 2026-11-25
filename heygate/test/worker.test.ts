@@ -368,6 +368,23 @@ describe('customer accounts', () => {
     expect((await new Browser().loginPassword(a.username, 'a brand new password')).status).toBe(200);
   });
 
+  it('an account created with a passkey only can later claim a username and password', async () => {
+    // Simulate a passkey-only owner from the previous version by dropping the credentials.
+    const a = new Browser();
+    await a.signup(true);
+    const tid = [...kv.m.keys()].find((k) => k.startsWith('tn:'))!.slice(3);
+    const t = await tenant(env, tid);
+    const { getOwner, putOwner } = await import('../src/auth');
+    const o = (await getOwner(t))!;
+    await kv.delete([...kv.m.keys()].find((k) => k.startsWith('ix:user:'))!);
+    delete o.username;
+    delete o.pw;
+    await putOwner(t, o);
+    expect((await a.post('/app/api/password', { next: 'a brand new password', username: 'bad name' })).status).toBe(400);
+    expect((await a.post('/app/api/password', { next: 'a brand new password', username: 'Claimed.Name' })).status).toBe(200);
+    expect((await new Browser().loginPassword('claimed.name', 'a brand new password')).status).toBe(200);
+  });
+
   it('signs in with a passkey; refuses replay, phishing origin, foreign key and strangers', async () => {
     const a = new Browser();
     await a.signup(true);
