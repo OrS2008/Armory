@@ -175,7 +175,7 @@ async function pkGet(o){const c=await navigator.credentials.get({publicKey:{...o
 function deviceName(){const u=navigator.userAgent;if(/iPhone/.test(u))return 'iPhone';if(/iPad/.test(u))return 'iPad';if(/Android/.test(u))return 'Android';if(/Macintosh/.test(u))return 'Mac';if(/Windows/.test(u))return 'Windows';return L.device;}
 async function addPasskey(){const o=await api('passkey/options');let cred;try{cred=await pkCreate(o.options);}catch(err){throw new Error(pkError(err));}
   await api('passkey/verify',{token:o.token,response:cred,name:deviceName()});}
-async function busy(btn,fn){const o=btn.innerHTML;btn.disabled=true;btn.innerHTML='<span aria-hidden="true">⏳</span> '+L.wait;try{return await fn();}finally{btn.disabled=false;btn.innerHTML=o;}}
+async function busy(btn,fn){const o=btn.innerHTML;btn.disabled=true;btn.innerHTML='<span aria-hidden="true">⏳</span> '+L.wait;try{return await fn();}finally{btn.innerHTML=o;btn.disabled=!!(window.LOCKED_UNTIL>Date.now()&&btn.classList.contains('needs-unlock'));}}
 function showRecovery(code,title,then){const d=document.createElement('dialog');
   d.innerHTML='<div class="stack"><h2>'+esc(title||L.rec_title)+'</h2><p class="muted small">'+L.rec_text+'</p>'+
   '<div class="reccode" dir="ltr">'+esc(code)+'</div><button class="btn-soft btn-block" data-copy="'+esc(code)+'">📋 '+L.copy+'</button>'+
@@ -281,7 +281,7 @@ function authLayout(lang: Lang, t: T, inner: string) {
 }
 
 const LOCK_JS = `let lockTimer;
-function lock(s){const end=Date.now()+s*1000;$('#lock')&&($('#lock').hidden=false);$$('.needs-unlock').forEach(b=>b.disabled=true);clearInterval(lockTimer);
+function lock(s){const end=Date.now()+s*1000;window.LOCKED_UNTIL=end;$('#lock')&&($('#lock').hidden=false);$$('.needs-unlock').forEach(b=>b.disabled=true);clearInterval(lockTimer);
   const tick=()=>{const l=Math.max(0,Math.round((end-Date.now())/1000));$('#lockt')&&($('#lockt').textContent=String(Math.floor(l/60)).padStart(2,'0')+':'+String(l%60).padStart(2,'0'));
     if(!l){clearInterval(lockTimer);$('#lock')&&($('#lock').hidden=true);$$('.needs-unlock').forEach(b=>b.disabled=false);}};tick();lockTimer=setInterval(tick,1000);}
 function onErr(err){if(err.status===429&&err.data&&err.data.retryAfter){view('login');lock(err.data.retryAfter);}else $('#err').textContent=err.message;}
@@ -315,8 +315,9 @@ ${signupsOpen ? `<p class="center small">${t.no_account} <a href="#signup" data-
 function view(v){if(!$('#v-'+v))v='login';$$('[id^=v-]').forEach(s=>s.hidden=s.id!=='v-'+v);$('#err').textContent='';const f=$('#v-'+v+' input');if(f&&matchMedia('(min-width:900px)').matches)f.focus();}
 document.addEventListener('click',e=>{const a=e.target.closest('[data-view]');if(a){e.preventDefault();view(a.dataset.view);history.replaceState(null,'','#'+a.dataset.view);}});
 let known=false;try{known=!!localStorage.getItem('hg_known')}catch{}
-view(location.hash==='#login'||known?'login':location.hash==='#signup'?'signup':'signup');
-const remember=()=>{try{localStorage.setItem('hg_known','1')}catch{}};
+view(location.hash==='#signup'?'signup':location.hash==='#login'||known?'login':'signup');
+window.addEventListener('hashchange',()=>view(location.hash==='#signup'?'signup':'login'));
+const remember=()=>{try{localStorage.setItem('hg_known','1')}catch{};history.replaceState(null,'','/app');};
 ${LOCK_JS}
 ${lockedSeconds > 0 ? `view('login');lock(${Math.floor(lockedSeconds)});` : ''}
 $('#sf')?.addEventListener('submit',e=>{e.preventDefault();const f=new FormData(e.target);$('#err').textContent='';
@@ -478,9 +479,12 @@ function step(n,t,d,isDone,isCur,action){return '<div class="step '+(isDone?'don
 
 async function linkFlow(){const d=document.createElement('dialog');d.innerHTML='<div class="stack center"><h2>'+L.link_title+'</h2>'+
   '<ol style="text-align:start;padding-inline-start:20px;margin:0"><li>'+L.link_1+'</li><li>'+L.link_2.replace('←',AR)+'</li><li>'+L.link_3+'</li></ol>'+
-  '<div class="qr" id="lq">⏳</div><p class="muted small" id="lm">'+L.link_waiting+'</p><button class="btn-ghost" id="lc">'+L.close+'</button></div>';
+  '<div id="lshare" class="stack" hidden><p class="small" style="text-align:start">'+L.link_same_phone+'</p><div class="copy"><code id="lurl" style="font-size:1rem;text-align:center"></code><button class="btn-soft btn-sm" id="lcopy">'+L.copy+'</button></div></div>'+
+  '<p class="muted small" id="lother" hidden>'+L.link_other_screen+'</p><div class="qr" id="lq">⏳</div><p class="muted small" id="lm">'+L.link_waiting+'</p><button class="btn-ghost" id="lc">'+L.close+'</button></div>';
   document.body.append(d);d.showModal();let open=true;const close=()=>{open=false;d.close();d.remove();};d.querySelector('#lc').onclick=close;d.addEventListener('cancel',close);
-  try{const {id,svg}=await api('link/start');d.querySelector('#lq').innerHTML=svg;
+  try{const {id,svg,share}=await api('link/start');d.querySelector('#lq').innerHTML=svg;
+    if(share){const u=location.origin+'/q/'+share;d.querySelector('#lurl').textContent=u.replace(/^https?:\/\//,'');d.querySelector('#lcopy').dataset.copy=u;d.querySelector('#lshare').hidden=false;d.querySelector('#lother').hidden=false;
+      if(matchMedia('(pointer:coarse)').matches)d.querySelector('#lq').before(d.querySelector('#lshare'));}
     for(let i=0;i<6&&open;i++){try{await api('link/wait',{id});close();toast(L.link_ok,'ok');DEV=null;load();return;}catch(e){if(e.status!==504){d.querySelector('#lm').innerHTML='<span class="bad">'+esc(e.message)+'</span>';return;}}}
     if(open)d.querySelector('#lm').textContent=L.link_timeout;}catch(e){d.querySelector('#lm').innerHTML='<span class="bad">'+esc(e.message)+'</span>';}}
 
@@ -609,7 +613,7 @@ function logTab(){const el=$('#tab-log');const FL={all:L.f_all,open:L.f_open,den
       '<div class="muted small">'+fmt(l.at)+(l.channel?' · '+esc(chName(l.channel)):'')+' · '+esc(l.country||'')+' <span class="mono">'+esc(l.ip||'')+'</span></div></div></div>').join(''):'<div class="empty"><div class="e">📭</div><p class="muted">'+L.no_events+'</p></div>')+'</div>';
   $$('[data-f]').forEach(b=>b.onclick=()=>{logFilter=b.dataset.f;logTab();});$('#rl').onclick=load;}
 
-$('#logout').onclick=async()=>{await post('/app/logout');location.reload();};
+$('#logout').onclick=async()=>{await post('/app/logout');history.replaceState(null,'','/app#login');location.reload();};
 try{const t=localStorage.getItem('tab');if(t&&$('[data-tab='+t+']'))$$('.tabs [role=tab]').forEach(b=>b.setAttribute('aria-selected',b.dataset.tab===t)),$$('main>section').forEach(s=>s.hidden=s.id!=='tab-'+t);}catch{}
 load().catch(e=>toast(e.message,'bad'));`;
 
@@ -641,7 +645,7 @@ function list(){const q=$('#q').value.trim(),T=S.tenants.filter(t=>!q||t.id.incl
     row.querySelector('.del').onclick=async()=>{if(!await ask(L.del_cust_q,L.del_cust_text,L.delete,true))return;const typed=prompt(L.type_id);if(typed!==id){toast(L.cancelled);return;}
       await api('tenant/delete',{id,confirm:id});toast(L.deleted);load();};});}
 $('#q').addEventListener('input',()=>S&&list());
-$('#logout').onclick=async()=>{await post('/sa/logout');location.reload();};
+$('#logout').onclick=async()=>{await post('/sa/logout');history.replaceState(null,'','/sa');location.reload();};
 load().catch(e=>toast(e.message,'bad'));`;
   return shell(lang, `${t.sa_title} · HeyGate`, body, { css: APP_CSS, js });
 }
@@ -696,4 +700,15 @@ export function privacyPage(lang: Lang) {
 <h2>${t.pv_share}</h2><p>${t.pv_share_t}</p>
 <h2>${t.pv_del}</h2><p>${t.pv_del_t.replace(/←/g, t.arrow)}</p></main>`;
   return shell(lang, `${t.pv_title} · HeyGate`, body);
+}
+
+/** The PalGate linking QR on a second screen (Tesla browser, computer). */
+export function qrSharePage(lang: Lang, svg: string | null) {
+  const t = tr(lang);
+  const css = `main{min-height:calc(100vh - 60px);display:grid;place-items:center;padding:16px}
+.qrbig svg{width:min(70vmin,460px);height:min(70vmin,460px);background:#fff;border-radius:18px;padding:8px}`;
+  const inner = svg
+    ? `<h1>${t.qs_title}</h1><p>${t.qs_steps.replace(/←/g, t.arrow)}</p><div class="qrbig">${svg}</div><p class="muted small">${t.qs_note}</p>`
+    : `<div style="font-size:44px">⌛</div><p>${t.qs_expired}</p>`;
+  return shell(lang, t.qs_title, `${floatControls(lang, t)}<main><div class="card stack center" style="max-width:640px;width:100%">${inner}</div></main>`, { css });
 }

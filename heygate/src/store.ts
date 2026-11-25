@@ -32,6 +32,8 @@ export interface Env {
   ENC_KEY?: string;
   /** One-time code that creates the super-admin account. Useless once set up. */
   SETUP_CODE?: string;
+  /** Development only: a local PalGate stand-in (must be http://127.0.0.1:PORT/). */
+  PALGATE_BASE?: string;
 }
 
 export interface Gate {

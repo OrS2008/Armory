@@ -28,9 +28,9 @@ import {
 import { burnPasswordCheck, hashPassword, randomBytes, randomToken, safeEqual, sha256, verifyPassword } from './crypto';
 import { logText, msg, note, pickLang, type Lang } from './i18n';
 import { clientMeta, html, json, readJson, text, type ClientMeta } from './http';
-import { appAuthPage, appPage, carPage, iconSvg, landingPage, manifest, pairPage, privacyPage, resultPage, saAuthPage, saPage } from './pages';
+import { appAuthPage, appPage, carPage, iconSvg, landingPage, manifest, pairPage, privacyPage, qrSharePage, resultPage, saAuthPage, saPage } from './pages';
 import { authenticationOptions, registrationOptions, verifyAuthentication, verifyRegistration, type AuthPurpose } from './passkeys';
-import { checkToken, listDevices, openGate, waitForLink } from './palgate/api';
+import { checkToken, configurePalgate, listDevices, openGate, waitForLink } from './palgate/api';
 import {
   addLog,
   bump,
@@ -243,6 +243,7 @@ export default {
     const parts = url.pathname.split('/').filter(Boolean);
     const m = clientMeta(req);
     const lang = pickLang(req);
+    configurePalgate(env.PALGATE_BASE);
     const res = await route(req, env, ctx, url, parts, m, lang);
     return localize(res, lang);
   },
@@ -283,6 +284,10 @@ async function route(req: Request, env: Env, ctx: ExecutionContext, url: URL, pa
         if (accessEnabled(env) && !(await verifyAccess(req, env))) return text('Cloudflare Access required', 403);
         return await saRoute(req, env, url, parts.slice(1), m, lang);
       }
+      if (top === 'q' && req.method === 'GET') {
+        if (!(await allowed(env.RL_PUBLIC, m.ip))) return text('Too many requests', 429);
+        return await qrShareRoute(env, parts[1] ?? '', m, lang);
+      }
       if (['o', 'arm', 'car'].includes(top)) {
         if (!(await allowed(env.RL_PUBLIC, m.ip))) return text('Too many requests', 429);
         if (top === 'o' && parts[1] && parts.length <= 4) return await openRoute(req, env, ctx, url, parts, m);
@@ -318,6 +323,18 @@ async function openRoute(req: Request, env: Env, ctx: ExecutionContext, url: URL
     resultPage(res.ok ? { ok: true, label: res.gate.label, repeated: res.repeated } : { ok: false, message: msg('en', res.message) }),
     res.ok ? 200 : res.status,
   );
+}
+
+/** GET /q/<code>: the PalGate linking QR, shown on a second screen. */
+async function qrShareRoute(env: Env, code: string, m: ClientMeta, lang: Lang) {
+  if ((await count(env, `bad:${m.ip}`)) >= BAD_SECRET_LIMIT) return text('Too many requests', 429);
+  const c = code.toUpperCase();
+  const rec = /^[A-Z2-9]{6}$/.test(c) ? await getSealed<{ id: string }>(env, `lq:${c}`) : null;
+  if (!rec) {
+    await bump(env, `bad:${m.ip}`, 3600);
+    return html(qrSharePage(lang, null), 404);
+  }
+  return html(qrSharePage(lang, qrSvg(`{"id": "${rec.id}"}`)));
 }
 
 async function armGrok(t: Tenant, cfg: Config) {
@@ -583,7 +600,11 @@ async function tenantApi(
 
     case '/link/start': {
       const id = crypto.randomUUID();
-      return json({ id, svg: qrSvg(`{"id": "${id}"}`) });
+      // A short-lived code that shows the same QR on another screen (the Tesla,
+      // a computer), for when HeyGate is open on the phone that must scan it.
+      const share = Array.from(randomBytes(6), (b) => PAIR_ALPHABET[b % 32]).join('');
+      await putSealed(env, `lq:${share}`, { id }, 600);
+      return json({ id, svg: qrSvg(`{"id": "${id}"}`), share });
     }
     case '/link/wait': {
       const id = str(body.id, 36);
@@ -778,7 +799,7 @@ async function tenantApi(
     }
     case '/password': {
       // Set (if none yet) or change the password; changing signs out other sessions.
-      if (owner.pw && !(await verifyPassword(String(body.current ?? '').slice(0, 256), owner.pw))) return json({ ok: false, message: 'wrong_password' }, 401);
+      if (owner.pw && !(await verifyPassword(String(body.current ?? '').slice(0, 256), owner.pw))) return json({ ok: false, message: 'wrong_password' }, 400); // not 401: that means "signed out"
       // Accounts created with a passkey only pick their username here.
       let username = owner.username ?? '';
       const claiming = !username;

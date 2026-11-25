@@ -198,6 +198,17 @@ describe('isolation between customers', () => {
     expect((await b.state()).config.channels[0]).toEqual(target);
   });
 
+  it('the linking QR can be shown on a second screen with a short, expiring code', async () => {
+    const a = new Browser();
+    await a.signup();
+    const { share, svg } = await a.api<{ share: string; svg: string }>('link/start');
+    expect(share).toMatch(/^[A-Z2-9]{6}$/);
+    const page = await call(`/q/${share.toLowerCase()}`);
+    expect(page.status).toBe(200);
+    expect(await page.text()).toContain(svg.slice(0, 60));
+    expect((await call('/q/ZZZZZZ')).status).toBe(404);
+  });
+
   it('a device paired by customer A belongs to A only', async () => {
     const a = new Browser();
     const b = new Browser();
@@ -360,7 +371,7 @@ describe('customer accounts', () => {
     const other = new Browser();
     other.username = a.username;
     await other.loginPassword();
-    expect((await a.post('/app/api/password', { current: 'nope nope nope', next: 'a brand new password' })).status).toBe(401);
+    expect((await a.post('/app/api/password', { current: 'nope nope nope', next: 'a brand new password' })).status).toBe(400);
     expect((await a.post('/app/api/password', { current: a.password, next: 'short' })).status).toBe(400);
     expect((await a.post('/app/api/password', { current: a.password, next: 'a brand new password' })).status).toBe(200);
     expect((await a.post('/app/api/state')).status).toBe(200);

@@ -1,6 +1,12 @@
 import { generateToken, hexToBytes, TokenType } from './token';
 
-const BASE = 'https://api1.pal-es.com/v1/bt/';
+const DEFAULT_BASE = 'https://api1.pal-es.com/v1/bt/';
+let BASE = DEFAULT_BASE;
+
+/** Local development only (PALGATE_BASE in .dev.vars) points at a PalGate stand-in. */
+export function configurePalgate(base: string | undefined) {
+  BASE = base && /^http:\/\/(127\.0\.0\.1|localhost):\d+\/([A-Za-z0-9_-]+\/)*$/.test(base) ? base : DEFAULT_BASE;
+}
 const UA = 'okhttp/4.9.3';
 
 export interface Session {
