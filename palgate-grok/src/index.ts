@@ -1,64 +1,64 @@
 import qrcode from 'qrcode-generator';
-import { checkToken, listDevices, openGate, PalGateError, waitForLink, type Session } from './palgate/api';
-import { adminPage, carPage, resultPage } from './pages';
+import {
+  checkCredentials,
+  clearCookie,
+  createSession,
+  currentSession,
+  destroySession,
+  getAdmin,
+  lockedOut,
+  putAdmin,
+  recordFailure,
+  sameOrigin,
+  validatePassword,
+  type AdminRecord,
+} from './auth';
+import { base32, hashPassword, randomBytes, randomToken, safeEqual, verifyPassword, verifyTotp } from './crypto';
+import { clientMeta, html, json, readJson, text, type ClientMeta } from './http';
+import { adminPage, carPage, loginPage, resultPage, setupPage } from './pages';
+import { checkToken, listDevices, openGate, PalGateError, waitForLink } from './palgate/api';
+import {
+  addLog,
+  bump,
+  count,
+  getConfig,
+  getLog,
+  getSealed,
+  getSession,
+  newChannel,
+  putConfig,
+  putSealed,
+  putSession,
+  type Channel,
+  type ChannelKind,
+  type Config,
+  type Env,
+  type Gate,
+} from './store';
 
-export interface Env {
-  GATE: KVNamespace;
-  ADMIN_PASSWORD?: string;
-}
+export type { Env, Gate, Config, Channel };
 
-export interface Gate {
-  alias: string; // url-safe, e.g. "home"
-  label: string; // shown to the driver, e.g. "שער החניה"
-  deviceId: string;
-  output: number;
-}
+const GLOBAL_MAX_PER_HOUR = 100;
+const BAD_SECRET_LIMIT = 20; // per IP per hour before that IP is ignored entirely
 
-export interface Config {
-  secret: string;
-  gates: Gate[];
-  cooldownSec: number; // ignore repeats of the same gate within this window
-  maxPerHour: number; // safety cap in case the link leaks
-}
+// Link-preview fetchers (WhatsApp, Telegram, iMessage…) must never open the gate
+// just because someone pasted a link into a chat.
+const PREVIEW_BOTS =
+  /facebookexternalhit|facebot|whatsapp|telegrambot|slackbot|twitterbot|discordbot|linkedinbot|skypeuripreview|redditbot|embedly|pinterest|googlebot|bingbot|yandex|baiduspider|duckduckbot|applebot/i;
 
-export interface LogEntry {
-  at: string;
-  gate: string;
-  ok: boolean;
-  via: string;
-  detail?: string;
-}
+const hour = () => new Date().toISOString().slice(0, 13);
 
-// ---------------------------------------------------------------- storage
+// ---------------------------------------------------------------- notifications
 
-const getSession = (env: Env) => env.GATE.get<Session>('session', 'json');
-
-async function getConfig(env: Env): Promise<Config> {
-  const cfg = await env.GATE.get<Config>('config', 'json');
-  if (cfg) return cfg;
-  const fresh: Config = { secret: newSecret(), gates: [], cooldownSec: 8, maxPerHour: 30 };
-  await env.GATE.put('config', JSON.stringify(fresh));
-  return fresh;
-}
-
-async function addLog(env: Env, entry: LogEntry) {
-  const log = (await env.GATE.get<LogEntry[]>('log', 'json')) ?? [];
-  log.unshift(entry);
-  await env.GATE.put('log', JSON.stringify(log.slice(0, 50)));
-}
-
-function newSecret() {
-  const b = crypto.getRandomValues(new Uint8Array(18));
-  return btoa(String.fromCharCode(...b)).replace(/\+/g, '-').replace(/\//g, '_');
-}
-
-function safeEqual(a: string, b: string) {
-  const ea = new TextEncoder().encode(a);
-  const eb = new TextEncoder().encode(b);
-  if (ea.length !== eb.length) return false;
-  let diff = 0;
-  for (let i = 0; i < ea.length; i++) diff |= ea[i]! ^ eb[i]!;
-  return diff === 0;
+function notify(env: Env, ctx: ExecutionContext, cfg: Config | null, message: string) {
+  const url = cfg?.notifyUrl;
+  if (!url) return;
+  ctx.waitUntil(
+    fetch(url, { method: 'POST', body: message, headers: { Title: 'Gate', Tags: 'door' } }).then(
+      () => undefined,
+      () => undefined,
+    ),
+  );
 }
 
 // ---------------------------------------------------------------- opening
@@ -67,223 +67,371 @@ export type OpenResult =
   | { ok: true; gate: Gate; repeated: boolean }
   | { ok: false; status: number; message: string };
 
-const hourKey = () => `count:${new Date().toISOString().slice(0, 13)}`;
+async function performOpen(
+  env: Env,
+  ctx: ExecutionContext,
+  cfg: Config,
+  alias: string | undefined,
+  who: { channel?: Channel; label: string },
+  m: ClientMeta,
+): Promise<OpenResult> {
+  const deny = async (status: number, message: string, gate?: string) => {
+    await addLog(env, { kind: 'denied', ok: false, gate, channel: who.label, ip: m.ip, country: m.country, detail: message });
+    return { ok: false as const, status, message };
+  };
 
-export async function openByAlias(env: Env, alias: string | undefined, via: string): Promise<OpenResult> {
-  const [session, cfg] = await Promise.all([getSession(env), getConfig(env)]);
-  if (!session) return { ok: false, status: 503, message: 'PalGate is not linked yet' };
+  if (!cfg.enabled) return deny(423, 'Opening is switched off (master switch)');
+  const ch = who.channel;
+  if (ch) {
+    if (!ch.enabled) return deny(403, 'This link is disabled');
+    if (ch.countries.length && !ch.countries.includes(m.country)) {
+      notify(env, ctx, cfg, `⚠️ ניסיון פתיחה נחסם: ${ch.name} מ-${m.country} (${m.ip})`);
+      return deny(403, `Not allowed from ${m.country}`);
+    }
+  }
+
+  const session = await getSession(env);
+  if (!session) return deny(503, 'PalGate is not linked yet');
   const gate = alias ? cfg.gates.find((g) => g.alias === alias) : cfg.gates[0];
-  if (!gate) return { ok: false, status: 404, message: 'No such gate' };
+  if (!gate) return deny(404, 'No gate configured');
 
   // A voice assistant or a flaky connection may fetch the same URL twice.
   const lastKey = `last:${gate.alias}`;
   const last = Number(await env.GATE.get(lastKey));
   if (last && Date.now() - last < cfg.cooldownSec * 1000) return { ok: true, gate, repeated: true };
 
-  const count = Number(await env.GATE.get(hourKey())) || 0;
-  if (count >= cfg.maxPerHour) {
-    await addLog(env, { at: new Date().toISOString(), gate: gate.alias, ok: false, via, detail: 'hourly cap' });
-    return { ok: false, status: 429, message: 'Hourly limit reached' };
+  if (ch && (await count(env, `cnt:${ch.id}:${hour()}`)) >= ch.maxPerHour) {
+    notify(env, ctx, cfg, `⚠️ ${ch.name}: הגיע למגבלת הפתיחות לשעה`);
+    return deny(429, 'Hourly limit reached for this link', gate.alias);
   }
+  if ((await count(env, `cnt:all:${hour()}`)) >= GLOBAL_MAX_PER_HOUR) return deny(429, 'Global hourly limit reached', gate.alias);
 
   try {
     await openGate(session, gate.deviceId, gate.output);
   } catch (e) {
-    const detail = e instanceof Error ? e.message : String(e);
-    await addLog(env, { at: new Date().toISOString(), gate: gate.alias, ok: false, via, detail });
-    return { ok: false, status: 502, message: detail };
+    return deny(502, e instanceof Error ? e.message : String(e), gate.alias);
   }
-  await Promise.all([
+
+  const writes: Promise<unknown>[] = [
     env.GATE.put(lastKey, String(Date.now()), { expirationTtl: 60 }),
-    env.GATE.put(hourKey(), String(count + 1), { expirationTtl: 7200 }),
-    addLog(env, { at: new Date().toISOString(), gate: gate.alias, ok: true, via }),
-  ]);
+    bump(env, `cnt:all:${hour()}`, 7200),
+    addLog(env, { kind: 'open', ok: true, gate: gate.alias, channel: who.label, ip: m.ip, country: m.country }),
+  ];
+  if (ch) {
+    writes.push(bump(env, `cnt:${ch.id}:${hour()}`, 7200));
+    ch.lastUsedAt = new Date().toISOString();
+    writes.push(putConfig(env, cfg));
+  }
+  await Promise.all(writes);
+  notify(env, ctx, cfg, `🚪 ${gate.label || gate.alias} נפתח — ${who.label} (${m.country})`);
   return { ok: true, gate, repeated: false };
 }
 
-// Link-preview fetchers (WhatsApp, Telegram, iMessage…) must never open the gate
-// just because someone pasted the link into a chat.
-const PREVIEW_BOTS =
-  /facebookexternalhit|facebot|whatsapp|telegrambot|slackbot|twitterbot|discordbot|linkedinbot|skypeuripreview|redditbot|embedly|pinterest|googlebot|bingbot|yandex|baiduspider|duckduckbot/i;
-
-function viaFrom(req: Request) {
-  const ua = req.headers.get('user-agent') ?? '';
-  if (/grok|xai/i.test(ua)) return 'grok';
-  if (/tesla|QtCarBrowser/i.test(ua)) return 'tesla-browser';
-  return ua.slice(0, 60) || 'unknown';
+/** Resolves a secret from the URL to its channel, with per-IP throttling of wrong guesses. */
+async function resolveChannel(env: Env, secret: string, m: ClientMeta) {
+  if ((await count(env, `bad:${m.ip}`)) >= BAD_SECRET_LIMIT) return { throttled: true as const };
+  const cfg = await getConfig(env);
+  let found: Channel | undefined;
+  for (const c of cfg.channels) if (safeEqual(c.secret, secret)) found = c;
+  if (!found) await bump(env, `bad:${m.ip}`, 3600);
+  return { cfg, channel: found };
 }
-
-// ---------------------------------------------------------------- http helpers
-
-const NO_STORE = {
-  'cache-control': 'no-store, max-age=0',
-  'x-robots-tag': 'noindex, nofollow, noarchive',
-  'referrer-policy': 'no-referrer',
-};
-
-const html = (body: string, status = 200) =>
-  new Response(body, { status, headers: { 'content-type': 'text/html; charset=utf-8', ...NO_STORE } });
-
-const json = (data: unknown, status = 200) =>
-  new Response(JSON.stringify(data), {
-    status,
-    headers: { 'content-type': 'application/json; charset=utf-8', ...NO_STORE },
-  });
-
-function adminAuthorized(req: Request, env: Env) {
-  if (!env.ADMIN_PASSWORD) return false;
-  const h = req.headers.get('authorization') ?? '';
-  if (!h.startsWith('Basic ')) return false;
-  try {
-    const [, pass = ''] = atob(h.slice(6)).split(/:(.*)/s);
-    return safeEqual(pass, env.ADMIN_PASSWORD);
-  } catch {
-    return false;
-  }
-}
-
-const unauthorized = () =>
-  new Response('Authentication required', {
-    status: 401,
-    headers: { 'www-authenticate': 'Basic realm="gate-admin", charset="UTF-8"', ...NO_STORE },
-  });
 
 // ---------------------------------------------------------------- router
 
 export default {
-  async fetch(req: Request, env: Env): Promise<Response> {
+  async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(req.url);
     const parts = url.pathname.split('/').filter(Boolean);
+    const m = clientMeta(req);
 
     if (url.pathname === '/robots.txt') {
       // Allowed on purpose: some AI fetchers refuse URLs that robots.txt disallows.
-      return new Response('User-agent: *\nAllow: /\n', { headers: { 'content-type': 'text/plain' } });
+      return text('User-agent: *\nAllow: /\n');
     }
+    if (url.protocol === 'http:' && !['localhost', '127.0.0.1'].includes(url.hostname)) {
+      return Response.redirect(url.toString().replace(/^http:/, 'https:'), 301);
+    }
+    if (!env.ENC_KEY || !env.SETUP_CODE) return text('Server is not configured (ENC_KEY / SETUP_CODE missing)', 503);
 
-    // /o/<secret>[/<alias>][/<anything, e.g. a cache-buster>]  → open
-    if (parts[0] === 'o' && parts[1]) {
-      const cfg = await getConfig(env);
-      if (!safeEqual(parts[1], cfg.secret)) return html(resultPage({ ok: false, message: 'Not found' }), 404);
-      if (req.method === 'HEAD' || req.method === 'OPTIONS') return new Response(null, { headers: NO_STORE });
-      if (PREVIEW_BOTS.test(req.headers.get('user-agent') ?? '')) {
-        return html(resultPage({ ok: false, message: 'Preview fetch ignored' }), 403);
+    try {
+      if (parts[0] === 'o' && parts[1]) return await openRoute(req, env, ctx, url, parts, m);
+      if (parts[0] === 'car' && parts[1]) {
+        const r = await resolveChannel(env, parts[1], m);
+        if ('throttled' in r) return text('Too many requests', 429);
+        if (!r.channel || r.channel.kind !== 'car') return html(resultPage({ ok: false, message: 'Not found' }), 404);
+        return html(carPage(r.channel.secret, r.cfg.gates, r.channel.enabled && r.cfg.enabled));
       }
-      const alias = parts[2] && cfg.gates.some((g) => g.alias === parts[2]) ? parts[2] : undefined;
-      const r = await openByAlias(env, alias, viaFrom(req));
-      if (url.searchParams.has('json') || req.headers.get('accept')?.includes('application/json')) {
-        return json(r.ok ? { ok: true, gate: r.gate.label, repeated: r.repeated } : r, r.ok ? 200 : r.status);
-      }
-      return html(
-        resultPage(r.ok ? { ok: true, label: r.gate.label, repeated: r.repeated } : { ok: false, message: r.message }),
-        r.ok ? 200 : r.status,
-      );
+      if (parts[0] === 'admin') return await adminRoute(req, env, ctx, url, parts.slice(1), m);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      const detail = e instanceof PalGateError ? e.body : undefined;
+      return json({ ok: false, message, body: parts[0] === 'admin' ? detail : undefined }, 502);
     }
-
-    // /car/<secret> → big-button page for the Tesla touchscreen browser
-    if (parts[0] === 'car' && parts[1]) {
-      const cfg = await getConfig(env);
-      if (!safeEqual(parts[1], cfg.secret)) return html(resultPage({ ok: false, message: 'Not found' }), 404);
-      return html(carPage(cfg.secret, cfg.gates));
-    }
-
-    if (parts[0] === 'admin') {
-      if (!env.ADMIN_PASSWORD) return html(resultPage({ ok: false, message: 'Set ADMIN_PASSWORD first: npx wrangler secret put ADMIN_PASSWORD' }), 503);
-      if (!adminAuthorized(req, env)) return unauthorized();
-      try {
-        return await admin(req, env, url, parts.slice(1));
-      } catch (e) {
-        const message = e instanceof Error ? e.message : String(e);
-        return json({ ok: false, message, body: e instanceof PalGateError ? e.body : undefined }, 502);
-      }
-    }
-
-    return new Response('OK', { headers: { 'content-type': 'text/plain', ...NO_STORE } });
+    return text('OK');
   },
 } satisfies ExportedHandler<Env>;
 
-async function admin(req: Request, env: Env, url: URL, parts: string[]): Promise<Response> {
-  const route = `${req.method} /${parts.join('/')}`;
-  switch (route) {
-    case 'GET /':
-      return html(adminPage());
+async function openRoute(req: Request, env: Env, ctx: ExecutionContext, url: URL, parts: string[], m: ClientMeta) {
+  const r = await resolveChannel(env, parts[1]!, m);
+  if ('throttled' in r) return text('Too many requests', 429);
+  const { cfg, channel } = r;
+  if (!channel) return html(resultPage({ ok: false, message: 'Not found' }), 404);
+  if (req.method === 'HEAD' || req.method === 'OPTIONS') return new Response(null, { status: 204 });
+  if (PREVIEW_BOTS.test(m.ua)) return html(resultPage({ ok: false, message: 'Preview fetch ignored' }), 403);
+  // Only Grok needs plain GET (it can only "visit" a link). The car button and
+  // phone automations use POST, so prefetchers and stray clicks can't trigger them.
+  if (channel.kind !== 'grok' && req.method !== 'POST') {
+    return html(resultPage({ ok: false, message: 'This link only works from its button / automation (POST)' }), 405);
+  }
+  if (req.method !== 'GET' && req.method !== 'POST') return text('Method not allowed', 405);
 
-    case 'GET /api/state': {
-      const [session, cfg, log] = await Promise.all([
-        getSession(env),
-        getConfig(env),
-        env.GATE.get<LogEntry[]>('log', 'json'),
-      ]);
+  const alias = parts[2] && cfg.gates.some((g) => g.alias === parts[2]) ? parts[2] : undefined;
+  const res = await performOpen(env, ctx, cfg, alias, { channel, label: channel.name }, m);
+  const wantsJson = url.searchParams.has('json') || (req.headers.get('accept') ?? '').includes('application/json');
+  if (wantsJson) {
+    return json(res.ok ? { ok: true, gate: res.gate.label, repeated: res.repeated } : res, res.ok ? 200 : res.status);
+  }
+  return html(
+    resultPage(res.ok ? { ok: true, label: res.gate.label, repeated: res.repeated } : { ok: false, message: res.message }),
+    res.ok ? 200 : res.status,
+  );
+}
+
+// ---------------------------------------------------------------- admin
+
+interface PendingSetup {
+  pw: AdminRecord['pw'];
+  totp: string;
+}
+
+async function adminRoute(req: Request, env: Env, ctx: ExecutionContext, url: URL, parts: string[], m: ClientMeta) {
+  const route = `${req.method} /${parts.join('/')}`;
+  const admin = await getAdmin(env);
+
+  if (route === 'GET /' || route === 'GET ') {
+    if (!admin) return html(setupPage());
+    if (await currentSession(req, env)) return html(adminPage());
+    return html(loginPage());
+  }
+  if (req.method !== 'POST') return json({ ok: false, message: 'not found' }, 404);
+  if (!sameOrigin(req, url)) return json({ ok: false, message: 'cross-origin request refused' }, 403);
+
+  // ----- first-time setup: one-time code → own password → enrol authenticator
+  if (route === 'POST /setup/start' || route === 'POST /setup/finish') {
+    if (admin) return json({ ok: false, message: 'already set up' }, 409);
+    if (await lockedOut(env, m)) return json({ ok: false, message: 'יותר מדי ניסיונות. נסה שוב בעוד 15 דקות.' }, 429);
+    const body = await readJson<{ setupCode: string; password: string; token: string; code: string }>(req);
+    if (route === 'POST /setup/start') {
+      if (!safeEqual(String(body.setupCode ?? ''), env.SETUP_CODE!)) {
+        await recordFailure(env, m);
+        return json({ ok: false, message: 'קוד התקנה שגוי' }, 401);
+      }
+      const bad = validatePassword(body.password);
+      if (bad) return json({ ok: false, message: bad }, 400);
+      const totp = base32(randomBytes(20));
+      const token = randomToken(24);
+      await putSealed(env, `setup:${token}`, { pw: await hashPassword(body.password!), totp } satisfies PendingSetup, 900);
+      const uri = `otpauth://totp/PalGate%20Grok:owner?secret=${totp}&issuer=PalGate%20Grok&algorithm=SHA1&digits=6&period=30`;
+      return json({ ok: true, token, secret: totp, svg: qrSvg(uri) });
+    }
+    const pending = await getSealed<PendingSetup>(env, `setup:${String(body.token ?? '')}`);
+    if (!pending) return json({ ok: false, message: 'פג תוקף, התחל מחדש' }, 400);
+    const step = await verifyTotp(pending.totp, String(body.code ?? ''));
+    if (step === null) {
+      await recordFailure(env, m);
+      return json({ ok: false, message: 'קוד אימות שגוי — ודא שהשעון בטלפון מדויק' }, 401);
+    }
+    const rec: AdminRecord = { pw: pending.pw, totp: pending.totp, lastStep: step, epoch: 1, createdAt: new Date().toISOString() };
+    await putAdmin(env, rec);
+    await env.GATE.delete(`setup:${String(body.token)}`);
+    await addLog(env, { kind: 'admin', ok: true, detail: 'account created', ip: m.ip, country: m.country });
+    return json({ ok: true }, 200, { 'set-cookie': await createSession(env, rec, m) });
+  }
+
+  if (route === 'POST /login') {
+    if (!admin) return json({ ok: false, message: 'not set up' }, 409);
+    const cfg = await getConfig(env);
+    if (await lockedOut(env, m)) return json({ ok: false, message: 'יותר מדי ניסיונות. נסה שוב בעוד 15 דקות.' }, 429);
+    const body = await readJson<{ password: string; code: string }>(req);
+    const r = await checkCredentials(env, body.password, body.code);
+    if (!r.ok) {
+      await recordFailure(env, m);
+      await addLog(env, { kind: 'admin', ok: false, detail: 'login failed', ip: m.ip, country: m.country });
+      notify(env, ctx, cfg, `⚠️ ניסיון התחברות כושל לפאנל מ-${m.country} (${m.ip})`);
+      return json({ ok: false, message: r.message }, 401);
+    }
+    await addLog(env, { kind: 'admin', ok: true, detail: 'login', ip: m.ip, country: m.country });
+    notify(env, ctx, cfg, `🔐 התחברות לפאנל הניהול מ-${m.country} (${m.ip})`);
+    return json({ ok: true }, 200, { 'set-cookie': await createSession(env, r.admin, m) });
+  }
+
+  if (route === 'POST /logout') {
+    await destroySession(req, env);
+    return json({ ok: true }, 200, { 'set-cookie': clearCookie });
+  }
+
+  // ----- everything below requires a signed-in owner
+  const session = await currentSession(req, env);
+  if (!session) return json({ ok: false, message: 'unauthorized' }, 401);
+  return adminApi(req, env, ctx, url, route.replace(' /api', ' '), session, m);
+}
+
+async function adminApi(
+  req: Request,
+  env: Env,
+  ctx: ExecutionContext,
+  url: URL,
+  route: string,
+  admin: AdminRecord,
+  m: ClientMeta,
+): Promise<Response> {
+  const body = await readJson<Record<string, unknown>>(req);
+  const cfg = await getConfig(env);
+  const channel = () => cfg.channels.find((c) => c.id === body.id);
+
+  switch (route) {
+    case 'POST /state': {
+      const [session, log] = await Promise.all([getSession(env), getLog(env)]);
       return json({
         linked: session ? { phone: maskPhone(session.phone), type: session.type, linkedAt: session.linkedAt } : null,
         config: cfg,
         origin: url.origin,
-        log: log ?? [],
+        log: log.slice(0, 100),
       });
     }
 
-    case 'POST /api/link/start': {
+    case 'POST /link/start': {
       const id = crypto.randomUUID();
-      const qr = qrcode(0, 'L');
-      qr.addData(`{"id": "${id}"}`);
-      qr.make();
-      return json({ id, svg: qr.createSvgTag({ cellSize: 6, margin: 4, scalable: true }) });
+      return json({ id, svg: qrSvg(`{"id": "${id}"}`) });
     }
-
-    case 'POST /api/link/wait': {
-      const { id } = await req.json<{ id: string }>();
+    case 'POST /link/wait': {
+      const id = String(body.id ?? '');
       if (!/^[0-9a-f-]{36}$/.test(id)) return json({ ok: false, message: 'bad id' }, 400);
       const session = await waitForLink(id, AbortSignal.timeout(90_000));
       await checkToken(session);
-      await env.GATE.put('session', JSON.stringify(session));
+      await putSession(env, session);
+      await addLog(env, { kind: 'admin', ok: true, detail: 'PalGate linked', ip: m.ip, country: m.country });
       return json({ ok: true, phone: maskPhone(session.phone) });
     }
-
-    case 'POST /api/unlink':
+    case 'POST /unlink':
       await env.GATE.delete('session');
+      await addLog(env, { kind: 'admin', ok: true, detail: 'PalGate unlinked', ip: m.ip, country: m.country });
       return json({ ok: true });
-
-    case 'GET /api/devices': {
+    case 'POST /devices': {
       const session = await getSession(env);
       if (!session) return json({ ok: false, message: 'not linked' }, 400);
       const devices = await listDevices(session);
       return json({ ok: true, devices: devices.map(({ id, name, outputs }) => ({ id, name, outputs })) });
     }
 
-    case 'POST /api/config': {
-      const body = await req.json<Partial<Config>>();
-      const cfg = await getConfig(env);
-      if (Array.isArray(body.gates)) {
-        const seen = new Set<string>();
-        cfg.gates = body.gates
-          .map((g) => ({
-            alias: String(g.alias ?? '').toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 24),
-            label: String(g.label ?? '').slice(0, 60),
-            deviceId: String(g.deviceId ?? '').slice(0, 64),
-            output: Math.max(1, Math.min(4, Number(g.output) || 1)),
-          }))
-          .filter((g) => g.alias && g.deviceId && !seen.has(g.alias) && seen.add(g.alias));
-      }
+    case 'POST /gates': {
+      if (!Array.isArray(body.gates)) return json({ ok: false, message: 'gates required' }, 400);
+      const seen = new Set<string>();
+      cfg.gates = (body.gates as Partial<Gate>[])
+        .slice(0, 20)
+        .map((g) => ({
+          alias: String(g.alias ?? '').toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 24),
+          label: String(g.label ?? '').slice(0, 60),
+          deviceId: String(g.deviceId ?? '').slice(0, 64),
+          output: Math.max(1, Math.min(4, Number(g.output) || 1)),
+        }))
+        .filter((g) => g.alias && g.deviceId && !seen.has(g.alias) && seen.add(g.alias));
+      await putConfig(env, cfg);
+      return json({ ok: true });
+    }
+
+    case 'POST /settings': {
+      if (typeof body.enabled === 'boolean') cfg.enabled = body.enabled;
       if (body.cooldownSec !== undefined) cfg.cooldownSec = clamp(body.cooldownSec, 0, 120);
-      if (body.maxPerHour !== undefined) cfg.maxPerHour = clamp(body.maxPerHour, 1, 500);
-      await env.GATE.put('config', JSON.stringify(cfg));
-      return json({ ok: true, config: cfg });
+      if (body.notifyUrl !== undefined) {
+        const n = String(body.notifyUrl).trim();
+        if (n && !/^https:\/\/[^\s/]+\/\S+$/.test(n)) return json({ ok: false, message: 'כתובת התראות חייבת להתחיל ב-https://' }, 400);
+        cfg.notifyUrl = n.slice(0, 300);
+      }
+      await putConfig(env, cfg);
+      await addLog(env, { kind: 'admin', ok: true, detail: `settings: ${cfg.enabled ? 'enabled' : 'MASTER OFF'}`, ip: m.ip, country: m.country });
+      return json({ ok: true });
+    }
+    case 'POST /notify-test':
+      notify(env, ctx, cfg, '✅ בדיקת התראה מפותחן השער');
+      return json({ ok: true });
+
+    case 'POST /channel/add': {
+      const kind = String(body.kind) as ChannelKind;
+      if (!['grok', 'car', 'phone'].includes(kind)) return json({ ok: false, message: 'bad kind' }, 400);
+      if (cfg.channels.length >= 20) return json({ ok: false, message: 'too many links' }, 400);
+      cfg.channels.push(newChannel(kind, typeof body.name === 'string' && body.name.trim() ? body.name.trim() : undefined));
+      await putConfig(env, cfg);
+      return json({ ok: true });
+    }
+    case 'POST /channel/update': {
+      const c = channel();
+      if (!c) return json({ ok: false, message: 'no such link' }, 404);
+      if (typeof body.name === 'string' && body.name.trim()) c.name = body.name.trim().slice(0, 40);
+      if (typeof body.enabled === 'boolean') c.enabled = body.enabled;
+      if (body.maxPerHour !== undefined) c.maxPerHour = clamp(body.maxPerHour, 1, 100);
+      if (body.countries !== undefined) {
+        c.countries = String(body.countries)
+          .toUpperCase()
+          .split(/[\s,]+/)
+          .filter((x) => /^[A-Z]{2}$/.test(x))
+          .slice(0, 20);
+      }
+      await putConfig(env, cfg);
+      return json({ ok: true });
+    }
+    case 'POST /channel/rotate': {
+      const c = channel();
+      if (!c) return json({ ok: false, message: 'no such link' }, 404);
+      c.secret = randomToken(24);
+      await putConfig(env, cfg);
+      await addLog(env, { kind: 'admin', ok: true, detail: `rotated ${c.name}`, ip: m.ip, country: m.country });
+      return json({ ok: true });
+    }
+    case 'POST /channel/delete': {
+      const before = cfg.channels.length;
+      cfg.channels = cfg.channels.filter((c) => c.id !== body.id);
+      if (cfg.channels.length === before) return json({ ok: false, message: 'no such link' }, 404);
+      await putConfig(env, cfg);
+      return json({ ok: true });
     }
 
-    case 'POST /api/rotate': {
-      const cfg = await getConfig(env);
-      cfg.secret = newSecret();
-      await env.GATE.put('config', JSON.stringify(cfg));
-      return json({ ok: true, secret: cfg.secret });
-    }
-
-    case 'POST /api/test': {
-      const { alias } = await req.json<{ alias?: string }>();
+    case 'POST /test': {
+      const alias = typeof body.alias === 'string' ? body.alias : undefined;
       await env.GATE.delete(`last:${alias ?? ''}`);
-      const r = await openByAlias(env, alias, 'admin-test');
+      const r = await performOpen(env, ctx, cfg, alias, { label: 'admin-test' }, m);
       return json(r, r.ok ? 200 : r.status);
+    }
+
+    case 'POST /logout-all':
+      admin.epoch += 1;
+      await putAdmin(env, admin);
+      await addLog(env, { kind: 'admin', ok: true, detail: 'signed out everywhere', ip: m.ip, country: m.country });
+      return json({ ok: true }, 200, { 'set-cookie': clearCookie });
+
+    case 'POST /password': {
+      if (!(await verifyPassword(String(body.current ?? ''), admin.pw))) return json({ ok: false, message: 'הסיסמה הנוכחית שגויה' }, 401);
+      const step = await verifyTotp(admin.totp, String(body.code ?? ''), admin.lastStep);
+      if (step === null) return json({ ok: false, message: 'קוד אימות שגוי' }, 401);
+      const bad = validatePassword(body.next);
+      if (bad) return json({ ok: false, message: bad }, 400);
+      admin.pw = await hashPassword(String(body.next));
+      admin.lastStep = step;
+      admin.epoch += 1; // every other device is signed out
+      await putAdmin(env, admin);
+      await addLog(env, { kind: 'admin', ok: true, detail: 'password changed', ip: m.ip, country: m.country });
+      return json({ ok: true }, 200, { 'set-cookie': await createSession(env, admin, m) });
     }
   }
   return json({ ok: false, message: 'not found' }, 404);
+}
+
+function qrSvg(data: string) {
+  const qr = qrcode(0, 'M');
+  qr.addData(data);
+  qr.make();
+  return qr.createSvgTag({ cellSize: 6, margin: 4, scalable: true });
 }
 
 const clamp = (v: unknown, lo: number, hi: number) => Math.max(lo, Math.min(hi, Number(v) || 0));
