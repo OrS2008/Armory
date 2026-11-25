@@ -554,6 +554,17 @@ async function tenantApi(
 
   switch (route) {
     case '/state': {
+      if (!cfg.gates.length) {
+        // Before a gate exists the panel never shows a link, so duplicate
+        // Grok/automation entries added meanwhile are unused: keep one of each.
+        const seen = new Set<string>();
+        const extra = cfg.channels.filter((c) => c.kind !== 'car' && !c.lastUsedAt && (seen.has(c.kind) || !seen.add(c.kind)));
+        if (extra.length) {
+          for (const c of extra) await unindexChannel(t, c);
+          cfg.channels = cfg.channels.filter((c) => !extra.includes(c));
+          await putConfig(t, cfg);
+        }
+      }
       const [session, entries, armed] = await Promise.all([
         getSession(t),
         getLog(t),
@@ -658,13 +669,14 @@ async function tenantApi(
     case '/channel/add': {
       const kind = str(body.kind, 10) as ChannelKind;
       if (kind !== 'grok' && kind !== 'phone') return json({ ok: false, message: 'bad_code' }, 400);
+      if (!cfg.gates.length) return json({ ok: false, message: 'no_gate' }, 400);
       if (cfg.channels.length >= 20) return json({ ok: false, message: 'too_many_access' }, 400);
       const c = newChannel(kind, str(body.name, 40) || undefined, langOf(cfg));
       cfg.channels.push(c);
       await putConfig(t, cfg);
       await indexChannel(t, c);
       await log(`channel_added|${c.name}`, true);
-      return json({ ok: true });
+      return json({ ok: true, id: c.id });
     }
     case '/channel/update': {
       const c = channel();

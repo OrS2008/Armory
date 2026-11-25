@@ -385,6 +385,25 @@ describe('customer accounts', () => {
     expect((await new Browser().loginPassword('claimed.name', 'a brand new password')).status).toBe(200);
   });
 
+  it('without a gate, access methods cannot be added and stray duplicates are tidied', async () => {
+    const a = new Browser();
+    await a.signup();
+    expect((await a.post('/app/api/channel/add', { kind: 'grok' })).status).toBe(400);
+    // Simulate the duplicates an earlier version allowed.
+    const tid = [...kv.m.keys()].find((k) => k.startsWith('tn:'))!.slice(3);
+    const t = await tenant(env, tid);
+    const { getConfig, putConfig, newChannel, indexChannel } = await import('../src/store');
+    const cfg = await getConfig(t);
+    const dups = [newChannel('grok'), newChannel('grok'), newChannel('phone')];
+    cfg.channels.push(...dups);
+    await putConfig(t, cfg);
+    for (const c of dups) await indexChannel(t, c);
+    const st = await a.state();
+    expect(st.config.channels.filter((c) => c.kind === 'grok')).toHaveLength(1);
+    expect(st.config.channels.filter((c) => c.kind === 'phone')).toHaveLength(1);
+    for (const c of dups) expect((await call(`/o/${c.secret}`)).status).toBe(404); // unindexed too
+  });
+
   it('signs in with a passkey; refuses replay, phishing origin, foreign key and strangers', async () => {
     const a = new Browser();
     await a.signup(true);

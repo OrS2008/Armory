@@ -361,6 +361,7 @@ $('#go')?.addEventListener('click',e=>{$('#err').textContent='';busy(e.currentTa
 const APP_CSS = `
 .top{position:sticky;top:0;z-index:10;background:color-mix(in srgb,var(--bg) 85%,transparent);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
 .top .in{max-width:1440px;margin:0 auto;padding:10px clamp(16px,3vw,32px);display:flex;align-items:center;gap:10px;flex-wrap:wrap}.top img{width:34px;height:34px}
+@media (max-width:440px){.top img{display:none}.top .in{gap:6px;padding-inline:12px}.top .btn-sm{padding:7px 10px}}
 .layout{max-width:1440px;margin:0 auto}
 main{padding:16px 16px 24px;min-width:0}
 .tabs{position:fixed;bottom:0;inset-inline:0;z-index:20;background:var(--card);border-top:1px solid var(--line);display:flex;justify-content:center;padding-bottom:env(safe-area-inset-bottom)}
@@ -500,19 +501,25 @@ async function gatesEditor(el){el.innerHTML='<p class="muted">'+L.loading_gates+
 
 // ---------- access
 function access(){const el=$('#tab-access'),c=S.config.channels,g=S.config.gates;
-  let h='<div class="card stack"><h2>'+L.ways_title+'</h2><p class="muted small">'+L.ways_sub+'</p>'+
-    '<div class="row"><button class="btn-primary" id="pair">'+L.pair_btn+'</button><button class="btn-soft" id="addgrok">'+L.add_grok+'</button></div><button class="btn-ghost btn-sm" id="addphone">'+L.add_phone+'</button></div>';
-  if(!g.length)h+='<div class="card empty"><div class="e">🚧</div><p>'+L.need_gate+'</p></div>';
-  h+=c.length?'<div class="cards">'+c.map(ch=>chCard(ch)).join('')+'</div>':'<div class="card empty"><div class="e">🔑</div><p class="muted">'+L.no_ways+'</p></div>';
-  el.innerHTML=h;
-  $('#pair').onclick=pairDialog;$('#addgrok').onclick=()=>addCh('grok');$('#addphone').onclick=()=>addCh('phone');
+  if(!S.linked||!g.length){el.innerHTML='<div class="card empty stack"><div class="e">🚧</div><h2>'+L.access_need_title+'</h2><p class="muted">'+L.access_need_text+'</p>'+
+    '<div><button class="btn-primary" id="need">'+(S.linked?L.access_need_gate:L.access_need_btn)+'</button></div></div>';
+    $('#need').onclick=()=>{show('home');if(!S.linked)linkFlow();else{const d=$('#gd')||$('#w-gates');if(d){if(d.tagName==='DETAILS')d.open=true;d.scrollIntoView({behavior:'smooth'});}}};return;}
+  const sec=(kind,desc,action)=>{const list=c.filter(x=>x.kind===kind),k=KIND[kind];
+    return '<section class="stack"><div class="row" style="gap:8px"><span style="font-size:1.4rem" aria-hidden="true">'+k.i+'</span><h2>'+k.t+'</h2></div><p class="muted small" style="margin-top:4px">'+desc+'</p>'+
+      (list.length?'<div class="cards">'+list.map(chCard).join('')+'</div>':'')+(action(list)||'')+'</section>';};
+  el.innerHTML='<div class="card"><h2>'+L.ways_title+'</h2><p class="muted small">'+L.ways_sub+'</p></div>'+
+    sec('grok',L.grok_desc,l=>l.length?'':'<div><button class="btn-primary" id="addgrok">'+L.enable_grok+'</button></div>')+
+    sec('car',L.car_desc,l=>'<div><button class="'+(l.length?'btn-ghost btn-sm':'btn-primary')+'" id="pair">'+(l.length?L.pair_more:L.pair_btn)+'</button></div>')+
+    sec('phone',L.phone_desc,l=>l.length?'':'<div><button class="btn-primary" id="addphone">'+L.enable_phone+'</button></div>');
+  $('#pair').onclick=pairDialog;$('#addgrok')?.addEventListener('click',e=>busy(e.currentTarget,()=>addCh('grok')));$('#addphone')?.addEventListener('click',e=>busy(e.currentTarget,()=>addCh('phone')));
   $$('.ch').forEach(box=>{const ch=c.find(x=>x.id===box.dataset.id),act=async(p,b,msg)=>{try{await api(p,Object.assign({id:ch.id},b||{}));if(msg)toast(msg,'ok');await load();}catch(e){toast(e.message,'bad');}};
     box.querySelector('.en').onchange=e=>act('channel/update',{enabled:e.target.checked},e.target.checked?L.enabled_t:L.disabled_t);
     box.querySelector('.del').onclick=async()=>{if(await ask(F(L.del_q,ch.name),ch.kind==='car'?L.del_device:L.del_link,L.delete,true))act('channel/delete',{},L.deleted);};
     box.querySelector('.rot')?.addEventListener('click',async()=>{if(await ask(L.rotate_q,F(L.rotate_text,ch.name),L.rotate))act('channel/rotate',{},L.rotated);});
     box.querySelector('.arm')?.addEventListener('change',e=>act('channel/update',{requireArm:e.target.checked},e.target.checked?L.arm_on:L.arm_off));
     box.querySelector('.armnow')?.addEventListener('click',async()=>{try{const d=await api('arm');toast(F(L.armed_for,d.armedMinutes),'ok');load();}catch(e){toast(e.message,'bad');}});
-    box.querySelector('.saveadv')?.addEventListener('click',()=>act('channel/update',{name:box.querySelector('.nm').value,countries:box.querySelector('.cc').value,maxPerHour:+box.querySelector('.mx').value,armMinutes:+(box.querySelector('.am')?.value||10)},L.saved));});}
+    box.querySelector('.saveadv')?.addEventListener('click',()=>act('channel/update',{name:box.querySelector('.nm').value,countries:box.querySelector('.cc').value,maxPerHour:+box.querySelector('.mx').value,armMinutes:+(box.querySelector('.am')?.value||10)},L.saved));});
+  if(window.FOCUS_CH){const b=$('.ch[data-id="'+window.FOCUS_CH+'"]');window.FOCUS_CH=null;if(b){b.scrollIntoView({behavior:'smooth',block:'center'});b.style.outline='3px solid var(--brand)';setTimeout(()=>b.style.outline='',2500);}}}
 
 function chCard(ch){const k=KIND[ch.kind],g=S.config.gates,base=S.origin+'/o/'+ch.secret;let body='';
   if(ch.enabled&&g.length){
@@ -533,7 +540,7 @@ function chCard(ch){const k=KIND[ch.kind],g=S.config.gates,base=S.origin+'/o/'+c
     (ch.kind==='grok'?'<label>'+L.arm_minutes+'<input class="am" type="number" min="1" max="60" value="'+(ch.armMinutes||10)+'"></label>':'')+
     '<div class="row"><button class="btn-primary btn-sm saveadv">'+L.save+'</button>'+(ch.kind!=='car'?'<button class="btn-ghost btn-sm rot">'+L.rotate_link+'</button>':'')+'<button class="btn-ghost btn-sm del" style="color:var(--bad)">'+L.delete+'</button></div></div></details></div>';}
 
-async function addCh(kind){try{await api('channel/add',{kind});toast(L.added,'ok');await load();}catch(e){toast(e.message,'bad');}}
+async function addCh(kind){try{const d=await api('channel/add',{kind});window.FOCUS_CH=d.id;toast(L.added,'ok');await load();}catch(e){toast(e.message,'bad');}}
 
 function pairDialog(){const d=document.createElement('dialog');d.innerHTML='<form class="stack" method="dialog"><h2>'+L.pair_dlg+'</h2>'+
   '<ol class="small" style="padding-inline-start:20px;margin:0"><li>'+L.pair_dlg_1+'<br><span class="mono">'+esc(S.origin)+'/car</span></li><li>'+L.pair_dlg_2+'</li></ol>'+
