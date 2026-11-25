@@ -65,6 +65,7 @@ dialog{border:0;border-radius:20px;padding:22px;max-width:min(440px,calc(100vw -
 dialog::backdrop{background:#0008;backdrop-filter:blur(2px)}
 .copy{display:flex;gap:8px;align-items:center;background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:6px}
 .copy code{flex:1;min-width:0;padding:6px}
+.reccode{font:600 clamp(.9rem,4.4vw,1.2rem)/1.3 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;letter-spacing:.02em;text-align:center;white-space:nowrap;overflow-x:auto;background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:14px 8px;user-select:all;-webkit-user-select:all}
 pre{white-space:pre-wrap;word-break:break-word;background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:12px;font:.875rem/1.6 var(--font);margin:0;max-height:260px;overflow:auto}
 details>summary{cursor:pointer;font-weight:600;color:var(--brand);list-style:none;padding:6px 0}details>summary::-webkit-details-marker{display:none}
 details>summary:before{content:"▸ ";display:inline-block;transition:.15s}details[open]>summary:before{transform:rotate(90deg)}
@@ -174,7 +175,7 @@ async function addPasskey(){const o=await api('passkey/options');let cred;try{cr
 async function busy(btn,fn){const o=btn.innerHTML;btn.disabled=true;btn.innerHTML='<span aria-hidden="true">⏳</span> '+L.wait;try{return await fn();}finally{btn.disabled=false;btn.innerHTML=o;}}
 function showRecovery(code,title,then){const d=document.createElement('dialog');
   d.innerHTML='<div class="stack"><h2>'+esc(title||L.rec_title)+'</h2><p class="muted small">'+L.rec_text+'</p>'+
-  '<div class="copy"><code style="font-size:1.05rem;letter-spacing:.06em">'+esc(code)+'</code><button class="btn-soft btn-sm" data-copy="'+esc(code)+'">'+L.copy+'</button></div>'+
+  '<div class="reccode" dir="ltr">'+esc(code)+'</div><button class="btn-soft btn-block" data-copy="'+esc(code)+'">📋 '+L.copy+'</button>'+
   '<label class="row" style="font-weight:400"><input type="checkbox" id="saved" style="width:22px;min-height:22px"> '+L.rec_saved+'</label><button class="btn-primary btn-block" id="cont" disabled>'+L.continue+'</button></div>';
   document.body.append(d);d.addEventListener('cancel',e=>e.preventDefault());d.showModal();
   d.querySelector('#saved').onchange=e=>{d.querySelector('#cont').disabled=!e.target.checked;};
