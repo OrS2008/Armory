@@ -1,0 +1,106 @@
+export type Lang = 'he' | 'en';
+
+const he = {
+  title: 'HeyNav · ניווט לרכב',
+  where: 'לאן נוסעים?',
+  searching: 'מחפש…',
+  no_results: 'לא נמצאו תוצאות',
+  search_failed: 'החיפוש נכשל. נסה שוב.',
+  home: 'בית',
+  work: 'עבודה',
+  set_home: 'קבע כבית',
+  set_work: 'קבע כעבודה',
+  saved: 'נשמר',
+  recent: 'אחרונים',
+  clear: 'נקה',
+  locating: 'מאתר את המיקום שלך…',
+  no_geo: 'אין גישה למיקום. אשר שיתוף מיקום בהגדרות הדפדפן ורענן.',
+  weak_gps: 'אות GPS חלש',
+  start: 'צא לדרך',
+  simulate: 'נסיעת ניסיון',
+  cancel: 'ביטול',
+  end: 'סיום',
+  calc: 'מחשב מסלול…',
+  route_failed: 'לא הצלחתי לחשב מסלול. נסה שוב.',
+  rerouting: 'מחשב מסלול חדש…',
+  arrive_at: 'הגעה',
+  min: 'דק׳',
+  hr: 'שע׳',
+  km: 'ק״מ',
+  arrived: 'הגעת ליעד 🏁',
+  recenter: 'מרכז',
+  mute: 'השתק',
+  unmute: 'השמע',
+  pin_here: 'נווט לנקודה הזו',
+  pin_name: 'נקודה במפה',
+  need_fix: 'צריך קודם מיקום',
+  day: 'יום',
+  night: 'לילה',
+  theme: 'ערכת צבעים',
+  language: 'שפה',
+  sim_badge: 'נסיעת ניסיון',
+  close: 'סגור',
+  overview: 'מבט על',
+  safety: 'שים עין על הכביש. ההנחיות הן עזר בלבד; צייתו לתמרורים ולחוק.',
+  disclaimer: 'HeyNav אינו קשור ל-Waze, ל-Google או ל-Tesla. מפות © OpenStreetMap, מסלולים OSRM.',
+  credits: 'קרדיטים',
+};
+export type Key = keyof typeof he;
+
+const en: Record<Key, string> = {
+  title: 'HeyNav · car navigation',
+  where: 'Where to?',
+  searching: 'Searching…',
+  no_results: 'No results',
+  search_failed: 'Search failed. Try again.',
+  home: 'Home',
+  work: 'Work',
+  set_home: 'Set as home',
+  set_work: 'Set as work',
+  saved: 'Saved',
+  recent: 'Recent',
+  clear: 'Clear',
+  locating: 'Finding your location…',
+  no_geo: 'No location access. Allow location in the browser settings and reload.',
+  weak_gps: 'Weak GPS signal',
+  start: 'Start',
+  simulate: 'Test drive',
+  cancel: 'Cancel',
+  end: 'End',
+  calc: 'Calculating route…',
+  route_failed: "Couldn't calculate a route. Try again.",
+  rerouting: 'Rerouting…',
+  arrive_at: 'Arrival',
+  min: 'min',
+  hr: 'h',
+  km: 'km',
+  arrived: 'You have arrived 🏁',
+  recenter: 'Recenter',
+  mute: 'Mute',
+  unmute: 'Unmute',
+  pin_here: 'Navigate here',
+  pin_name: 'Dropped pin',
+  need_fix: 'Location needed first',
+  day: 'Day',
+  night: 'Night',
+  theme: 'Colour theme',
+  language: 'Language',
+  sim_badge: 'Test drive',
+  close: 'Close',
+  overview: 'Overview',
+  safety: 'Keep your eyes on the road. Directions are a guide only; obey signs and the law.',
+  disclaimer: 'HeyNav is not affiliated with Waze, Google or Tesla. Maps © OpenStreetMap, routing OSRM.',
+  credits: 'Credits',
+};
+
+export const dict = (lang: Lang) => (lang === 'he' ? he : en);
+
+export function pickLang(req: Request, url: URL): Lang {
+  const q = url.searchParams.get('lang');
+  if (q === 'he' || q === 'en') return q;
+  const c = /(?:^|;\s*)hn_lang=(he|en)/.exec(req.headers.get('cookie') ?? '')?.[1];
+  if (c === 'he' || c === 'en') return c;
+  const al = (req.headers.get('accept-language') ?? '').toLowerCase();
+  if (al.startsWith('en')) return 'en';
+  return 'he';
+}

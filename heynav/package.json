@@ -1,0 +1,22 @@
+{
+  "name": "heynav",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "node scripts/embed-assets.cjs && wrangler deploy",
+    "assets": "node scripts/embed-assets.cjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20261125.1",
+    "@mapbox/mapbox-gl-rtl-text": "1.0.0",
+    "@types/node": "26.1.2",
+    "maplibre-gl": "6.18.0",
+    "typescript": "6.0.3",
+    "vitest": "4.1.12",
+    "wrangler": "4.168.0"
+  }
+}

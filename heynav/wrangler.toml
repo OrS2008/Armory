@@ -1,0 +1,12 @@
+name = "heynav"
+main = "src/index.ts"
+compatibility_date = "2026-08-01"
+
+# Per-IP limit in front of the search and routing services (they are free, shared services).
+[[ratelimits]]
+name = "RL_API"
+namespace_id = "7201"
+simple = { limit = 60, period = 60 }
+
+[observability]
+enabled = true
