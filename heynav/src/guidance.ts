@@ -27,6 +27,7 @@ export interface Step {
   text: string;       // the instruction, without a distance ("Turn left onto Herzl")
   speak: boolean;     // worth announcing (a plain "continue straight" is not)
   icon: string;       // arrow to draw
+  lanes?: { d: string[]; ok: boolean }[]; // lanes at this junction, left to right, when known
 }
 export interface Route { geometry: LonLat[]; steps: Step[]; distance: number; duration: number }
 
@@ -61,6 +62,16 @@ function towards(s: OsrmStep, lang: Lang): string {
   const d = (s.destinations ?? '').split(':').pop()?.split(',')[0]?.trim();
   if (!d) return '';
   return lang === 'he' ? ` לכיוון ${d}` : ` towards ${d}`;
+}
+
+/** A stop on the way (not the destination): the driver has reached it and the route goes on. */
+export function waypointStep(lang: Lang, mod?: string): { text: string; speak: boolean; icon: string } {
+  const sd = side(mod);
+  const he = lang === 'he';
+  const text = he
+    ? `הגעת לעצירה${sd ? (sd === 'left' ? ', משמאלך' : ', מימינך') : ''}`
+    : `You've reached your stop${sd ? `, on the ${sd}` : ''}`;
+  return { text, speak: true, icon: 'arrive' };
 }
 
 export function instruction(s: OsrmStep, lang: Lang): { text: string; speak: boolean; icon: string } {
@@ -121,8 +132,11 @@ export function buildRoute(r: OsrmRoute, lang: Lang): Route {
   const geometry: LonLat[] = [];
   const steps: Step[] = [];
   let along = 0;
-  for (const leg of r.legs) {
+  r.legs.forEach((leg, li) => {
+    const last = li === r.legs.length - 1;
     for (const s of leg.steps) {
+      // Between legs: the "arrive" of a stop becomes a waypoint, and the next "depart" is dropped.
+      if (li > 0 && s.maneuver.type === 'depart') continue;
       const coords = s.geometry.coordinates;
       const start = along;
       for (let i = 0; i < coords.length; i++) {
@@ -132,13 +146,14 @@ export function buildRoute(r: OsrmRoute, lang: Lang): Route {
         if (prev) along += metres(prev, c);
         geometry.push([round6(c[0]), round6(c[1])]);
       }
-      const ins = instruction(s, lang);
+      const stop = !last && s.maneuver.type === 'arrive';
+      const ins = stop ? waypointStep(lang, s.maneuver.modifier) : instruction(s, lang);
       steps.push({
-        type: s.maneuver.type, modifier: s.maneuver.modifier, exit: s.maneuver.exit, name: roadName(s, lang),
+        type: stop ? 'waypoint' : s.maneuver.type, modifier: s.maneuver.modifier, exit: s.maneuver.exit, name: roadName(s, lang),
         distance: along - start, duration: s.duration, start, ...ins,
       });
     }
-  }
+  });
   // OSRM measures slightly differently; trust the joined line so progress adds up exactly.
   return { geometry, steps, distance: along, duration: r.duration };
 }

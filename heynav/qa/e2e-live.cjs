@@ -53,7 +53,7 @@ const move = (lon, lat, brg, m) => [lon + (m * Math.sin(brg * rad)) / (R * Math.
   await p.evaluate(([lon, lat]) => window.__hn.choose({ name: 'QA camera test', detail: '', lon, lat }), to);
   await p.waitForFunction(() => !document.querySelector('#go').disabled, null, { timeout: 20000 });
   ok('route passes the camera', (await p.textContent('#pextra')).includes('📷'), await p.textContent('#pextra'));
-  await p.click('#sim');
+  await p.evaluate(() => window.__hn.sim());
   let seen = '';
   for (let i = 0; i < 40 && !seen; i++) { await p.waitForTimeout(1000); if (await p.isVisible('#bcam')) seen = await p.textContent('#bcam'); }
   ok('camera alert on the banner while driving', !!seen, seen + ` (camera ${cam.id}, ${cam.desc.slice(0, 40)})`);

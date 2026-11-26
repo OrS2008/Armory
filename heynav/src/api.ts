@@ -1,4 +1,6 @@
 import type { buildRoute } from './guidance';
+import type { LaneSection } from './traffic';
+import { core } from './core';
 /** Input parsing and result shaping for the API (kept out of the entry module). */
 
 /** "lon,lat" → [lon, lat], or null. */
@@ -63,4 +65,33 @@ export function placeFromNominatim(h: NominatimHit): Place {
   const detail = [street && street !== name ? street : '', city && city !== name ? city : '', a.country_code && a.country_code !== 'il' ? a.country ?? '' : '']
     .filter(Boolean).join(', ');
   return { name, detail, lon: Number(h.lon), lat: Number(h.lat) };
+}
+
+/**
+ * Puts lane guidance on the manoeuvre it belongs to: each lane section goes to the
+ * first turn at or just after it (within ~800 m), and only if the lit lanes agree
+ * with the turn's side (a "keep left" never shows right-hand lanes lit).
+ */
+export function attachLanes(r: RouteOut, sections: LaneSection[]) {
+  if (!sections.length) return;
+  const cum = core.cumulative(r.geometry);
+  const sideOf = (k: string) => (k.includes('left') ? 'left' : k.includes('right') ? 'right' : k === 'uturn' ? 'left' : 'straight');
+  const best = new Map<number, { gap: number; lanes: LaneSection['lanes'] }>();
+  for (const x of sections) {
+    const pr = core.project(r.geometry, cum, x.at);
+    if (pr.offset > 40) continue;
+    const i = r.steps.findIndex((st) => st.speak && st.type !== 'depart' && st.start >= pr.along - 30);
+    const st = r.steps[i];
+    if (!st || st.type === 'arrive' || st.type === 'waypoint' || st.start - pr.along > 800) continue;
+    const turn = sideOf(st.icon);
+    const lit = x.lanes.filter((l) => l.ok).flatMap((l) => l.d.map(sideOf));
+    // keeping to one side at a fork is often "stay in the straight lanes"; a real turn is not
+    const soft = st.icon.includes('fork');
+    if (turn !== 'straight' && !lit.includes(turn) && !(soft && lit.includes('straight'))) continue;
+    if (turn === 'straight' && !lit.includes('straight')) continue;
+    const gap = st.start - pr.along;
+    const cur = best.get(i);
+    if (!cur || gap < cur.gap) best.set(i, { gap, lanes: x.lanes });
+  }
+  for (const [i, v] of best) r.steps[i]!.lanes = v.lanes;
 }

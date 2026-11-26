@@ -11,9 +11,10 @@ import { ASSETS } from './assets.gen';
 import { buildRoute, type OsrmRoute } from './guidance';
 import { pickLang, type Lang } from './i18n';
 import { appPage, iconSvg, manifest } from './page';
-import { lonLat, nearFirst, placeFromNominatim, placeFromPhoton, rank, type NominatimHit, type PhotonFeature, type Place, type RouteOut } from './api';
+import { attachLanes, lonLat, nearFirst, placeFromNominatim, placeFromPhoton, rank, type NominatimHit, type PhotonFeature, type Place, type RouteOut } from './api';
 import { getCameras } from './cameras';
 import { incidents, timeRoute, trafficTile } from './traffic';
+import { fuelOnRoute, fuelTomTom } from './fuel';
 import { areasOnRoute, valhallaRoutes } from './valhalla';
 import { KINDS, addReport, listReports, vote, type Kind } from './reports';
 
@@ -26,6 +27,7 @@ export interface Env {
   TOMTOM_BASE?: string;  // dev/tests only
   CAMERAS_URL?: string;  // dev/tests only
   VALHALLA_BASE?: string; // dev/tests only
+  OVERPASS_BASE?: string; // dev/tests only
   REPORTS?: KVNamespace; // driver reports
   RL_REPORT?: RateLimit;
 }
@@ -145,29 +147,33 @@ async function route(req: Request, env: Env, url: URL, lang: Lang) {
   if (!from || !to) return json({ ok: false, error: 'bad_points' }, 400);
   if (await limited(env, req, 'r')) return json({ ok: false, error: 'rate_limited' }, 429);
   const b = num(url.searchParams.get('bearing'), 0, 360);
+  const viaRaw = url.searchParams.get('via');
+  const via = viaRaw ? lonLat(viaRaw) : null;
+  if (viaRaw && !via) return json({ ok: false, error: 'bad_points' }, 400);
   const avoid = new Set((url.searchParams.get('avoid') ?? '').split(','));
   const o = { tolls: avoid.has('tolls'), areas: avoid.has('areas') };
   let routes: RouteOut[] | null = null;
   let router = 'osrm';
   if (o.tolls || o.areas) {
-    routes = await valhallaRoutes(from, to, lang, o, UA, b, env.VALHALLA_BASE).catch((e) => { console.error('valhalla', String(e)); return null; });
+    routes = await valhallaRoutes(from, to, lang, o, UA, b, env.VALHALLA_BASE, via).catch((e) => { console.error('valhalla', String(e)); return null; });
     if (routes) router = 'valhalla';
   }
   if (!routes) {
-    const osrm = await osrmRoutes(env, from, to, lang, b);
+    const osrm = await osrmRoutes(env, from, to, lang, b, via);
     if ('error' in osrm) return json({ ok: false, error: osrm.error }, osrm.status);
-    routes = osrm.routes.map((r) => ({ ...r, areas: areasOnRoute(r.geometry, [from, to]) }));
+    routes = osrm.routes.map((r) => ({ ...r, areas: areasOnRoute(r.geometry, via ? [from, via, to] : [from, to]) }));
   }
   return await finish(env, routes, router, o);
 }
 
-async function osrmRoutes(env: Env, from: [number, number], to: [number, number], lang: Lang, b: number | null): Promise<{ routes: RouteOut[] } | { error: string; status: number }> {
-  const u = new URL(`${env.ROUTER_BASE ?? ROUTER}${from[0]},${from[1]};${to[0]},${to[1]}`);
+async function osrmRoutes(env: Env, from: [number, number], to: [number, number], lang: Lang, b: number | null, via: [number, number] | null = null): Promise<{ routes: RouteOut[] } | { error: string; status: number }> {
+  const pts = via ? [from, via, to] : [from, to];
+  const u = new URL(`${env.ROUTER_BASE ?? ROUTER}${pts.map((x) => `${x[0]},${x[1]}`).join(';')}`);
   u.searchParams.set('overview', 'false');
   u.searchParams.set('steps', 'true');
   u.searchParams.set('geometries', 'geojson');
   // When rerouting, start in the direction the car is already driving.
-  if (b != null) u.searchParams.set('bearings', `${Math.round(b) % 360},60;`);
+  if (b != null) u.searchParams.set('bearings', `${Math.round(b) % 360},60` + ';'.repeat(pts.length - 1));
   u.searchParams.set('alternatives', '3');
   const r = await fetch(u, { headers: { 'user-agent': UA, accept: 'application/json' } });
   const d = (await r.json().catch(() => null)) as { code?: string; routes?: OsrmRoute[] } | null;
@@ -182,10 +188,32 @@ async function finish(env: Env, routes: RouteOut[], router: string, o: { tolls: 
     const times = await Promise.all(routes.map((x) => timeRoute(key, x.geometry, env.TOMTOM_BASE).catch(() => null)));
     // `live` is true only when the provider reports an actual delay right now; otherwise the
     // time reflects typical traffic for this hour (TomTom has no live feed for Israel).
-    times.forEach((t, i) => { if (t) routes[i]!.traffic = { seconds: Math.round(t.seconds), delay: Math.round(t.delay), live: t.delay > 0 }; });
+    times.forEach((t, i) => {
+      if (!t) return;
+      routes[i]!.traffic = { seconds: Math.round(t.seconds), delay: Math.round(t.delay), live: t.delay > 0 };
+      attachLanes(routes[i]!, t.lanes);
+    });
   }
   const { best, shortest } = rank(routes);
   return json({ ok: true, routes, best, shortest, router, avoid: o, traffic: routes.some((x) => !!x.traffic), route: routes[best] });
+}
+
+/** Fuel stations near the route the driver is on (OpenStreetMap, via Overpass). */
+async function fuel(req: Request, env: Env, url: URL, lang: Lang) {
+  const raw = (url.searchParams.get('line') ?? '').split(';');
+  if (raw.length < 2 || raw.length > 160) return json({ ok: false, error: 'bad_line' }, 400);
+  const line: [number, number][] = [];
+  for (const x of raw) { const p = lonLat(x); if (!p) return json({ ok: false, error: 'bad_line' }, 400); line.push(p); }
+  if (await limited(env, req, 'f')) return json({ ok: false, error: 'rate_limited' }, 429);
+  try {
+    let stations = env.TOMTOM_KEY ? await fuelTomTom(env.TOMTOM_KEY, line, lang, env.TOMTOM_BASE).catch((e) => { console.error('fuel tomtom', String(e)); return null; }) : null;
+    const source = stations ? 'TomTom' : 'OpenStreetMap';
+    stations ??= await fuelOnRoute(line, lang, UA, env.OVERPASS_BASE);
+    return json({ ok: true, stations, source }, 200, 'private, max-age=600');
+  } catch (e) {
+    console.error('fuel', e instanceof Error ? e.message : String(e));
+    return json({ ok: false, error: 'upstream' }, 502);
+  }
 }
 
 // ---------------------------------------------------------------- driver reports
@@ -297,6 +325,7 @@ export default {
         if (p === '/api/config') return json({ ok: true, traffic: !!env.TOMTOM_KEY, trafficLayer: false, reports: !!env.REPORTS });
         if (p === '/api/reports' || p === '/api/report' || p === '/api/report/vote') return await reports(req, env, url, p);
         if (p === '/api/cameras') return await cameras(ctx, env);
+        if (p === '/api/fuel') return await fuel(req, env, url, lang);
         if (p === '/api/incidents') return await incidentList(req, env, url);
         if (p.startsWith('/api/traffic/')) return await traffic(req, env, url, p.slice(13).split('/'));
       }

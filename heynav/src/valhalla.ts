@@ -5,7 +5,7 @@
  */
 import { AREA_A } from './areas.gen';
 import type { Lang } from './i18n';
-import type { Route, Step } from './guidance';
+import { waypointStep, type Route, type Step } from './guidance';
 
 type LonLat = [number, number];
 const VALHALLA = 'https://valhalla1.openstreetmap.de/route';
@@ -85,37 +85,59 @@ const ICON: Record<number, string> = {
 };
 const SILENT = new Set([7, 8, 22, 27]); // "becomes", "continue", "stay straight", "exit roundabout"
 
+/** The whole trip as one line (legs joined). */
+export function tripLine(trip: VTrip): LonLat[] {
+  const out: LonLat[] = [];
+  for (const l of trip.legs) for (const p of decode6(l.shape)) { const q = out[out.length - 1]; if (!q || q[0] !== p[0] || q[1] !== p[1]) out.push(p); }
+  return out;
+}
+
 export function buildValhallaRoute(trip: VTrip, lang: Lang): Route {
-  const leg = trip.legs[0]!;
-  const geometry = decode6(leg.shape);
-  const cum = [0];
-  for (let i = 1; i < geometry.length; i++) {
-    const a = geometry[i - 1]!, b = geometry[i]!, rad = Math.PI / 180;
-    const x = (b[0] - a[0]) * rad * Math.cos(((a[1] + b[1]) / 2) * rad), y = (b[1] - a[1]) * rad;
-    cum.push(cum[i - 1]! + Math.sqrt(x * x + y * y) * 6371008.8);
-  }
-  const steps: Step[] = leg.maneuvers.map((m) => {
-    const start = cum[m.begin_shape_index] ?? 0;
-    const end = cum[m.end_shape_index] ?? start;
-    const arrive = m.type >= 4 && m.type <= 6;
-    let icon = ICON[m.type] ?? 'straight';
-    if (m.type === 26 && m.roundabout_exit_count) icon = `roundabout-${Math.min(4, m.roundabout_exit_count)}`;
-    const text = (m.verbal_pre_transition_instruction || m.instruction || '').replace(/\.\s*$/, '').trim();
-    return {
-      type: arrive ? 'arrive' : m.type === 1 || m.type === 2 || m.type === 3 ? 'depart' : 'turn',
-      name: m.street_names?.[0] ?? '', distance: end - start, duration: m.time, start,
-      text: text || (lang === 'he' ? 'המשך' : 'Continue'), speak: !SILENT.has(m.type), icon,
-    };
+  const geometry: LonLat[] = [];
+  const steps: Step[] = [];
+  let base = 0; // distance at the start of the current leg
+  trip.legs.forEach((leg, li) => {
+    const last = li === trip.legs.length - 1;
+    const g = decode6(leg.shape);
+    const cum = [0];
+    for (let i = 1; i < g.length; i++) {
+      const a = g[i - 1]!, b = g[i]!, rad = Math.PI / 180;
+      const x = (b[0] - a[0]) * rad * Math.cos(((a[1] + b[1]) / 2) * rad), y = (b[1] - a[1]) * rad;
+      cum.push(cum[i - 1]! + Math.sqrt(x * x + y * y) * 6371008.8);
+    }
+    for (const m of leg.maneuvers) {
+      const depart = m.type >= 1 && m.type <= 3;
+      if (li > 0 && depart) continue; // the leg after a stop just carries on
+      const start = base + (cum[m.begin_shape_index] ?? 0);
+      const end = base + (cum[m.end_shape_index] ?? 0);
+      const arrive = m.type >= 4 && m.type <= 6;
+      if (arrive && !last) {
+        const w = waypointStep(lang, m.type === 5 ? 'right' : m.type === 6 ? 'left' : undefined);
+        steps.push({ type: 'waypoint', name: '', distance: 0, duration: 0, start, ...w });
+        continue;
+      }
+      let icon = ICON[m.type] ?? 'straight';
+      if (m.type === 26 && m.roundabout_exit_count) icon = `roundabout-${Math.min(4, m.roundabout_exit_count)}`;
+      const text = (m.verbal_pre_transition_instruction || m.instruction || '').replace(/\.\s*$/, '').trim();
+      steps.push({
+        type: arrive ? 'arrive' : depart ? 'depart' : 'turn',
+        name: m.street_names?.[0] ?? '', distance: end - start, duration: m.time, start,
+        text: text || (lang === 'he' ? 'המשך' : 'Continue'), speak: !SILENT.has(m.type), icon,
+      });
+    }
+    for (const p of li > 0 ? g.slice(1) : g) geometry.push(p);
+    base += cum[cum.length - 1] ?? 0;
   });
-  return { geometry, steps, distance: cum[cum.length - 1] ?? 0, duration: trip.summary.time };
+  return { geometry, steps, distance: base, duration: trip.summary.time };
 }
 
 export interface AvoidOptions { tolls: boolean; areas: boolean }
 
-async function call(base: string, ua: string, from: LonLat, to: LonLat, lang: Lang, o: AvoidOptions, exclude: LonLat[], bearing: number | null) {
+async function call(base: string, ua: string, from: LonLat, to: LonLat, lang: Lang, o: AvoidOptions, exclude: LonLat[], bearing: number | null, via: LonLat | null) {
   const body = {
     locations: [
       { lon: from[0], lat: from[1], ...(bearing != null ? { heading: Math.round(bearing) % 360, heading_tolerance: 60 } : {}) },
+      ...(via ? [{ lon: via[0], lat: via[1], type: 'break' }] : []),
       { lon: to[0], lat: to[1] },
     ],
     costing: 'auto',
@@ -136,21 +158,21 @@ async function call(base: string, ua: string, from: LonLat, to: LonLat, lang: La
  * first enters an area, block that road, and route again (a few rounds). Whatever
  * still crosses an area is reported so the screen can warn.
  */
-export async function valhallaRoutes(from: LonLat, to: LonLat, lang: Lang, o: AvoidOptions, ua: string, bearing: number | null, base = VALHALLA) {
-  const ends: LonLat[] = [from, to];
+export async function valhallaRoutes(from: LonLat, to: LonLat, lang: Lang, o: AvoidOptions, ua: string, bearing: number | null, base = VALHALLA, via: LonLat | null = null) {
+  const ends: LonLat[] = via ? [from, via, to] : [from, to];
   const exclude: LonLat[] = [];
-  let trips = await call(base, ua, from, to, lang, o, exclude, bearing);
+  let trips = await call(base, ua, from, to, lang, o, exclude, bearing, via);
   if (!trips) return null;
   if (o.areas) {
     for (let round = 0; round < 6; round++) {
-      const lines = trips.map((t) => decode6(t.legs[0]!.shape));
+      const lines = trips.map(tripLine);
       if (lines.some((l) => !firstInArea(l, ends))) break;          // at least one clean route: done
       const hit = firstInArea(lines[0]!, ends);
       if (!hit) break;
       // Block the road a little way inside the boundary, where the route goes in.
       const i = Math.min(lines[0]!.length - 1, hit.index + 2);
       exclude.push(lines[0]![i]!);
-      const next = await call(base, ua, from, to, lang, o, exclude, bearing);
+      const next = await call(base, ua, from, to, lang, o, exclude, bearing, via);
       if (!next) break;
       trips = next;
     }

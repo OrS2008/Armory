@@ -15,11 +15,44 @@ export function thin(line: LonLat[], max: number): LonLat[] {
   return out;
 }
 
-export interface TrafficTime { seconds: number; delay: number; noTraffic: number }
+/** One lane at a junction, left to right: the ways it leads and whether to be in it. */
+export interface Lane { d: string[]; ok: boolean }
+/** Lane guidance for a stretch of road: where it starts (on TomTom's line) and its lanes. */
+export interface LaneSection { at: LonLat; lanes: Lane[] }
+export interface TrafficTime { seconds: number; delay: number; noTraffic: number; lanes: LaneSection[] }
+
+const LANE_DIR: Record<string, string> = {
+  STRAIGHT: 'straight', SLIGHT_RIGHT: 'slight-right', RIGHT: 'right', SHARP_RIGHT: 'sharp-right', RIGHT_U_TURN: 'uturn-right',
+  SLIGHT_LEFT: 'slight-left', LEFT: 'left', SHARP_LEFT: 'sharp-left', LEFT_U_TURN: 'uturn',
+};
+
+interface TTSection { startPointIndex?: number; sectionType?: string; lanes?: { directions?: string[]; follow?: string }[] }
+interface TTRoute {
+  summary?: { travelTimeInSeconds?: number; trafficDelayInSeconds?: number; noTrafficTravelTimeInSeconds?: number };
+  legs?: { points?: { latitude: number; longitude: number }[] }[];
+  sections?: TTSection[];
+}
+
+/** Lane sections from a TomTom route: only junctions where some lanes are right and some are not. */
+export function laneSections(r: TTRoute): LaneSection[] {
+  const pts: LonLat[] = [];
+  for (const l of r.legs ?? []) for (const p of l.points ?? []) pts.push([p.longitude, p.latitude]);
+  const out: LaneSection[] = [];
+  for (const s of r.sections ?? []) {
+    if (s.sectionType !== 'LANES' || !s.lanes?.length || s.startPointIndex == null) continue;
+    const at = pts[s.startPointIndex];
+    if (!at) continue;
+    const lanes = s.lanes.map((l) => ({ d: (l.directions ?? []).map((x) => LANE_DIR[x] ?? 'straight'), ok: !!l.follow }));
+    if (lanes.length < 2 || lanes.every((l) => l.ok) || !lanes.some((l) => l.ok)) continue;
+    out.push({ at, lanes });
+  }
+  return out;
+}
 
 /**
  * Travel time with live traffic along a given route: TomTom rebuilds the route
- * through our points (so it times *this* road choice) and returns the timing.
+ * through our points (so it times *this* road choice) and returns the timing,
+ * plus which lanes to be in at junctions along the way.
  */
 export async function timeRoute(key: string, line: LonLat[], base = API): Promise<TrafficTime | null> {
   if (line.length < 2) return null;
@@ -30,17 +63,20 @@ export async function timeRoute(key: string, line: LonLat[], base = API): Promis
   u.searchParams.set('traffic', 'true');
   u.searchParams.set('travelMode', 'car');
   u.searchParams.set('computeTravelTimeFor', 'all');
-  u.searchParams.set('routeRepresentation', 'summaryOnly');
+  u.searchParams.set('routeRepresentation', 'polyline');
+  u.searchParams.set('sectionType', 'lanes');
+  u.searchParams.set('instructionsType', 'coded'); // lane sections come only with instructions
   const r = await fetch(u, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ supportingPoints: pts.map(([lon, lat]) => ({ latitude: lat, longitude: lon })) }),
   });
-  if (!r.ok) return null;
-  const d = (await r.json().catch(() => null)) as { routes?: { summary?: { travelTimeInSeconds?: number; trafficDelayInSeconds?: number; noTrafficTravelTimeInSeconds?: number } }[] } | null;
-  const s = d?.routes?.[0]?.summary;
-  if (!s || typeof s.travelTimeInSeconds !== 'number') return null;
-  return { seconds: s.travelTimeInSeconds, delay: s.trafficDelayInSeconds ?? 0, noTraffic: s.noTrafficTravelTimeInSeconds ?? s.travelTimeInSeconds };
+  if (!r.ok) { console.error('tomtom route', r.status, (await r.text().catch(() => '')).slice(0, 300).replace(/key=[^&\s]+/g, 'key=…')); return null; }
+  const d = (await r.json().catch(() => null)) as { routes?: TTRoute[] } | null;
+  const rt = d?.routes?.[0];
+  const s = rt?.summary;
+  if (!rt || !s || typeof s.travelTimeInSeconds !== 'number') return null;
+  return { seconds: s.travelTimeInSeconds, delay: s.trafficDelayInSeconds ?? 0, noTraffic: s.noTrafficTravelTimeInSeconds ?? s.travelTimeInSeconds, lanes: laneSections(rt) };
 }
 
 /** Traffic-flow tile (PNG, transparent), coloured by speed relative to free flow. */

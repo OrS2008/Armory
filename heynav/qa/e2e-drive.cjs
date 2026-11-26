@@ -41,7 +41,7 @@ const ok = (name, cond, extra = '') => { checks.push(!!cond); console.log((cond 
   await p.click('#res button');
   await p.waitForFunction(() => !document.querySelector('#go').disabled, null, { timeout: 40000 });
   ok('route with avoid options', true, await p.textContent('#pextra'));
-  await p.click('#sim');
+  await p.evaluate(() => window.__hn.sim());
   await p.waitForTimeout(6000);
   const pitch = await p.evaluate(() => window.__hn.pitch());
   ok('low, driver\'s-eye camera', pitch >= 60, 'pitch ' + Math.round(pitch) + '°');

@@ -138,6 +138,28 @@ body.nav #speedo{bottom:calc(122px + env(safe-area-inset-bottom))}
 .warn{color:var(--bad);font-weight:700}
 #alertchip{grid-column:1/-1;display:flex;gap:10px;align-items:center;margin-top:8px;padding:8px 12px;background:rgba(37,99,235,.16);border:1px solid #2563eb;font-weight:700}
 #alertchip i{font-style:normal;font-size:28px}
+/* banner: tap for all turns; lane guidance */
+#banner{cursor:pointer}
+#bmore{position:absolute;inset-inline-end:10px;bottom:8px;font-size:1.1rem;color:var(--muted)}
+#blanes{grid-column:1/-1;margin-top:6px}
+.lanes{display:flex;gap:4px;justify-content:center;direction:ltr;background:#000a;padding:6px;border-radius:6px}
+:root[data-theme=light] .lanes{background:#0b0f1214}
+.ln{width:46px;height:52px;display:grid;place-items:center;border-inline:2px dashed #ffffff30}
+.ln svg{width:40px;height:40px}.ln.on{background:rgba(255,176,32,.16)}
+.lanes.sm{justify-content:flex-start;padding:3px;background:transparent}.lanes.sm .ln{width:28px;height:30px}.lanes.sm .ln svg{width:24px;height:24px}
+/* list sheets (turns, fuel) */
+.list{display:grid}
+.list>button,.list>div{all:unset;cursor:pointer;display:grid;grid-template-columns:auto 1fr auto;gap:4px 14px;align-items:center;padding:12px 4px;border-bottom:1px solid var(--line)}
+.list .ic{width:48px;height:48px;display:grid;place-items:center;background:linear-gradient(180deg,var(--act),var(--act2));clip-path:var(--cut);font-size:26px}
+.list .ic svg{width:38px;height:38px}
+.list .tx{font-weight:700;line-height:1.25}.list .sub{grid-column:2/-1;color:var(--muted);font-size:.85rem}
+.list .d{font:700 1.05rem var(--mono);color:var(--brand);white-space:nowrap;direction:ltr}
+.list .msg{padding:14px 4px;color:var(--muted)}
+.list .go{min-height:48px;padding:0 14px;font-size:.95rem}
+.stopbar{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:8px 12px;border:1px solid var(--ok);color:var(--ok);font-weight:700}
+.stopbar .btn{min-height:44px;font-size:.9rem;padding:0 12px}
+.fuel-m{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;font-size:22px;background:#fff;border:3px solid #16a34a;box-shadow:0 2px 8px rgba(0,0,0,.4);cursor:pointer}
+.fuel-m.stop{border-color:var(--brand);width:46px;height:46px}
 [hidden]{display:none!important}
 @media (max-width:760px){#speedo{width:92px;height:92px}#speedo b{font-size:2.1rem}.fab{width:58px;height:58px}.fab.rep{width:66px;height:66px}body.nav #fabs{bottom:calc(122px + env(safe-area-inset-bottom))}.repgrid button{min-height:100px}#bd{font-size:2.3rem}#bi{width:76px;height:76px}#bi svg{width:60px;height:60px}#bt{font-size:1.2rem}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}`;
@@ -158,12 +180,20 @@ function arrowPath(deg){const r=deg*Math.PI/180,ex=24+17*Math.sin(r),ey=24-17*Ma
 const ANG={straight:0,'slight-right':45,right:90,'sharp-right':135,'slight-left':-45,left:-90,'sharp-left':-135,'fork-right':35,'fork-left':-35};
 function icon(key,color){color=color||'#07090b';let d;
   if(key==='uturn')d='M30 44V20a8 8 0 0 0-16 0v16M8 30l6 7 6-7';
+  else if(key==='uturn-right')d='M18 44V20a8 8 0 0 1 16 0v16M40 30l-6 7-6-7';
   else if(key==='arrive')d='M24 44V8M24 8h16l-5 6 5 6H24';
   else if(key&&key.startsWith('roundabout')){const n=+(key.split('-')[1]||0);const a=[90,90,0,-90,-150][n]??0;const r=a*Math.PI/180;
     const sx=24+8*Math.sin(r),sy=22-8*Math.cos(r),ex=24+20*Math.sin(r),ey=22-20*Math.cos(r);
     return '<svg viewBox="0 0 48 48" fill="none" stroke="'+color+'" stroke-width="4.5" stroke-linecap="square"><circle cx="24" cy="22" r="8"/><path d="M24 44V30M'+sx.toFixed(1)+' '+sy.toFixed(1)+'L'+ex.toFixed(1)+' '+ey.toFixed(1)+'"/></svg>';}
   else d=arrowPath(ANG[key]??0);
   return '<svg viewBox="0 0 48 48" fill="none" stroke="'+color+'" stroke-width="4.5" stroke-linecap="square" stroke-linejoin="miter">'+'<path d="'+d+'"/></svg>';}
+
+// Lanes, left to right as the driver sees them (never mirrored); the ones to take are lit.
+function lanePaths(dirs){return dirs.map(k=>k==='uturn'?'M30 44V20a8 8 0 0 0-16 0v16M8 30l6 7 6-7':k==='uturn-right'?'M18 44V20a8 8 0 0 1 16 0v16M40 30l-6 7-6-7':arrowPath(ANG[k]??0));}
+function lanesEl(lanes,small){const box=document.createElement('div');box.className='lanes'+(small?' sm':'');box.setAttribute('aria-label',L.lanes);
+  for(const l of lanes){const c=l.ok?(dark()?'#ffb020':'#a35f00'):(dark()?'#56626a':'#9aa4a9');const sp=document.createElement('span');sp.className='ln'+(l.ok?' on':'');
+    sp.innerHTML='<svg viewBox="0 0 48 48" fill="none" stroke="'+c+'" stroke-width="5" stroke-linecap="square">'+lanePaths(l.d.length?l.d:['straight']).map(d=>'<path d="'+d+'"/>').join('')+'</svg>';box.appendChild(sp);}
+  return box;}
 
 // ---------- map
 const dark=()=>document.documentElement.getAttribute('data-theme')!=='light';
@@ -228,10 +258,10 @@ function setCar(pos,bearing,arrow){
   car.setLngLat(pos);if(arrow)car.setRotation(bearing);if(!carOnMap){car.addTo(map);carOnMap=true;}}
 
 // ---------- state
-let mode='browse',fix=null,dest=null,route=null,trk=null,follow=true,muted=store.get('hn_muted',false),sim=null,lastReroute=0,rerouting=false,lastProg=null,firstFix=true,wake=null;
+let stop=null,stopMarker=null,mode='browse',fix=null,dest=null,route=null,trk=null,follow=true,muted=store.get('hn_muted',false),sim=null,lastReroute=0,rerouting=false,lastProg=null,firstFix=true,wake=null;
 const show=(id,on)=>{$(id).hidden=!on;};
 function setMode(m){mode=m;document.body.classList.toggle('nav',m==='nav');document.body.classList.toggle('preview',m==='preview');show('#search',m==='browse');show('#preview',m==='preview');show('#fabs',m!=='preview');
-  show('#banner',m==='nav');show('#navbar',m==='nav');show('#simb',m==='nav'&&!!sim);if(m!=='nav')show('#recenter',false);if(m==='browse')show('#arrived',false);}
+  show('#banner',m==='nav');show('#navbar',m==='nav');show('#openfuel',m==='nav');show('#simb',m==='nav'&&!!sim);if(m!=='nav')show('#recenter',false);if(m==='browse')show('#arrived',false);}
 
 // ---------- GPS
 function gpsLine(f){const g=$('#gps');if(!f){return;}speedo(f);
@@ -309,6 +339,8 @@ const fmtClock=(s)=>{const d=new Date(Date.now()+s*1000);return String(d.getHour
 const fmtKm=(m)=>(m/1000).toFixed(m>=10000?0:1)+' '+L.km;
 let opts=Object.assign({tolls:false,areas:true,voice:true},store.get('hn_opts',{}));
 const avoidQ=()=>{const a=[];if(opts.tolls)a.push('tolls');if(opts.areas)a.push('areas');return a.length?'&avoid='+a.join(','):'';};
+const ll=(lon,lat)=>lon.toFixed(6)+','+lat.toFixed(6);
+function routeUrl(from,bearing){return '/api/route?from='+ll(from[0],from[1])+'&to='+ll(dest.lon,dest.lat)+(stop?'&via='+ll(stop.lon,stop.lat):'')+(bearing!=null?'&bearing='+Math.round(bearing):'')+avoidQ();}
 async function choose(p){$('#res').textContent='';$('#q').blur();
   if(picking)return setManual(p);
   if(!fix){startPick(p);return;}
@@ -316,11 +348,14 @@ async function choose(p){$('#res').textContent='';$('#q').blur();
   dest=p;remember(p);chips();
   const el=document.createElement('div');el.className='pin';
   if(destMarker)destMarker.remove();destMarker=new ml.Marker({element:el,anchor:'bottom'}).setLngLat([p.lon,p.lat]).addTo(map);
-  $('#pname').textContent=p.name;$('#pdetail').textContent=p.detail||'';$('#psum').textContent=L.calc;$('#go').disabled=true;$('#sim').disabled=true;setMode('preview');
-  $('#alts').textContent='';$('#pextra').textContent='';
-  try{const d=await api('/api/route?from='+fix.pos[0].toFixed(6)+','+fix.pos[1].toFixed(6)+'&to='+p.lon.toFixed(6)+','+p.lat.toFixed(6)+avoidQ());
+  setStop(null);
+  $('#pname').textContent=p.name;$('#pdetail').textContent=p.detail||'';await planRoute();}
+// Asks for routes from here to the destination (through the stop, if any) and shows them.
+async function planRoute(){$('#psum').textContent=L.calc;$('#go').disabled=true;setMode('preview');
+  $('#alts').textContent='';$('#pextra').textContent='';stopBar();
+  try{const d=await api(routeUrl(fix.pos,null));
     routes=d.routes||[d.route];routeShortest=d.shortest??0;routeBest=d.best??0;pickRoute(routeBest);
-    $('#go').disabled=false;$('#sim').disabled=false;
+    $('#go').disabled=false;
     const b=new ml.LngLatBounds();routes.forEach(r=>r.geometry.forEach(c=>b.extend(c)));map.fitBounds(b,{padding:{top:80,bottom:80,left:LANG==='he'?60:600,right:LANG==='he'?600:60},duration:900,maxZoom:16});}
   catch(e){$('#psum').textContent=L.route_failed;}}
 let routeBest=0,routeShortest=0;
@@ -348,7 +383,7 @@ const areaName=(n)=>LANG==='he'?(AREA_HE[n]||n):n;
 map.on('click','alts-line',(e)=>{const f=e.features&&e.features[0];if(f&&mode==='preview'){pickRoute(f.properties.i);}});
 $('#reverse').onclick=()=>{if(!dest||!fix)return;const here=fix.manual?{name:fix.name||L.pin_name,lon:fix.pos[0],lat:fix.pos[1]}:{name:L.my_location,lon:fix.pos[0],lat:fix.pos[1]};
   const there=dest;pendingDest=here;setManual(there);};
-function cancelRoute(){stopSim();route=null;routes=null;trk=null;camW=null;camHits=[];routeData=null;remainData=null;drawRoute();drawAlts();clearIncidents();show('#bcam',false);if(destMarker){destMarker.remove();destMarker=null;}releaseWake();
+function cancelRoute(){stopSim();setStop(null);clearFuel();route=null;routes=null;trk=null;camW=null;camHits=[];routeData=null;remainData=null;drawRoute();drawAlts();clearIncidents();show('#bcam',false);if(destMarker){destMarker.remove();destMarker=null;}releaseWake();
   speechSynthesis&&speechSynthesis.cancel&&speechSynthesis.cancel();limitNow=null;show('#alertchip',false);setMode('browse');follow=true;if(fix){map.easeTo({center:fix.pos,zoom:16,pitch:0,bearing:0,padding:{top:0,bottom:0,left:0,right:0},duration:800});setCar(fix.pos,0,false);}}
 $('#cancel').onclick=cancelRoute;
 $('#sethome').onclick=()=>{if(dest){store.set('hn_home',{...dest,name:dest.name});chips();toast(L.saved+' · '+L.home);}};
@@ -372,7 +407,7 @@ function armRoute(){trk=NAVCORE.tracker(route,LANG);segHint=0;camHits=NAVCORE.ca
 function startNav(simulate){if(!route)return;armRoute();follow=true;lastProg=null;lastCheck=Date.now();drawAlts();setMode('nav');wakeOn();
   if(simulate)startSim();show('#simb',!!sim);say(trk.intro());
   if(fix&&!sim)guide(fix);else if(sim)simTick();}
-$('#go').onclick=()=>startNav(false);$('#sim').onclick=()=>startNav(true);
+$('#go').onclick=()=>startNav(false);
 $('#end').onclick=cancelRoute;
 function zoomFor(speed){const s=speed||0;return s>25?16.6:s>14?17.3:18;}
 function guide(f){const p=trk.update(f);lastProg=p;setCar(p.snapped,p.bearing,true);
@@ -380,7 +415,10 @@ function guide(f){const p=trk.update(f);lastProg=p;setCar(p.snapped,p.bearing,tr
   const seg=Math.max(0,routeIndex(p));remainData=[p.snapped].concat(route.geometry.slice(seg+1));drawRoute();
   const n=p.next>=0?route.steps[p.next]:null;
   if(n){$('#bi').innerHTML=icon(n.icon);$('#bd').textContent=NAVCORE.shortDistance(p.toNext,LANG);$('#bt').textContent=rerouting?L.rerouting:n.text;
-    const n2=route.steps[p.next+1];if(n2&&n2.start-n.start<300&&n2.type!=='arrive'){$('#bthen').hidden=false;$('#bti').innerHTML=icon(n2.icon,dark()?'#9aa7ae':'#4c575e');$('#btt').textContent=n2.text;}else $('#bthen').hidden=true;}
+    const n2=route.steps[p.next+1];if(n2&&n2.start-n.start<300&&n2.type!=='arrive'){$('#bthen').hidden=false;$('#bti').innerHTML=icon(n2.icon,dark()?'#9aa7ae':'#4c575e');$('#btt').textContent=n2.text;}else $('#bthen').hidden=true;
+    const bl=$('#blanes');const lk=n.lanes&&p.toNext<2000?p.next:-1;const lkey=lk+':'+Math.round(route.distance);if(bl.dataset.k!==lkey){bl.dataset.k=lkey;bl.textContent='';if(lk>=0)bl.appendChild(lanesEl(n.lanes));}bl.hidden=lk<0;}
+  // past the stop: from here on, routes go straight to the destination
+  if(stop&&route.steps.some((s,i)=>s.type==='waypoint'&&i<=p.step))setStop(null);
   const rt=p.remainingTime*routeFactor;
   $('#etaA').textContent=fmtClock(rt);$('#etaT').textContent=fmtTime(rt);$('#etaD').textContent=fmtKm(p.remaining);
   if(p.say)say(p.say);
@@ -400,13 +438,13 @@ function guide(f){const p=trk.update(f);lastProg=p;setCar(p.snapped,p.bearing,tr
 let segHint=0;function routeIndex(p){const g=route.geometry,cum=trk.cum;let i=Math.min(segHint,g.length-2);while(i>0&&cum[i]>p.along)i--;while(i<g.length-2&&cum[i+1]<=p.along)i++;segHint=i;return i;}
 // Car low on the screen, the road ahead filling the view (like the car's own display).
 function padding(){const h=window.innerHeight;return {top:h*0.5,bottom:h*0.04,left:0,right:0};}
-async function reroute(f){const now=Date.now();if(rerouting||now-lastReroute<8000||!dest)return;rerouting=true;lastReroute=now;$('#bt').textContent=L.rerouting;
-  try{const d=await api('/api/route?from='+f.pos[0].toFixed(6)+','+f.pos[1].toFixed(6)+'&to='+dest.lon.toFixed(6)+','+dest.lat.toFixed(6)+(lastProg?'&bearing='+Math.round(f.heading??lastProg.bearing):'')+avoidQ());
+async function reroute(f,force){const now=Date.now();if(rerouting||(!force&&now-lastReroute<8000)||!dest)return;rerouting=true;lastReroute=now;$('#bt').textContent=L.rerouting;
+  try{const d=await api(routeUrl(f.pos,lastProg?(f.heading??lastProg.bearing):null));
     routes=d.routes||[d.route];route=routes[d.best??0];routeData=route.geometry;routeFactor=route.traffic&&route.duration>0?route.traffic.seconds/route.duration:1;armRoute();say(trk.intro());}
   catch(e){}finally{rerouting=false;}}
 /** Every few minutes: is there now a clearly faster way (traffic changed)? Switch, and say how much it saves. */
 async function checkFaster(f,p){checking=true;lastCheck=Date.now();
-  try{const d=await api('/api/route?from='+f.pos[0].toFixed(6)+','+f.pos[1].toFixed(6)+'&to='+dest.lon.toFixed(6)+','+dest.lat.toFixed(6)+'&bearing='+Math.round(p.bearing)+avoidQ());
+  try{const d=await api(routeUrl(f.pos,p.bearing));
     const rs=(d.routes||[]).filter(r=>r.traffic);if(!rs.length||mode!=='nav')return;
     const ahead=remainData||route.geometry;let same=null,sameOv=0;for(const r of rs){const ov=NAVCORE.overlap(r.geometry,ahead);if(ov>sameOv){sameOv=ov;same=r;}}
     const current=same&&sameOv>=0.8?same.traffic.seconds:p.remainingTime*routeFactor;
@@ -457,7 +495,7 @@ map.on('click','cams-dot',(e)=>{const f=e.features&&e.features[0];if(!f)return;c
 
 // ---------- sheets
 function openSheet(id){$('#veil').hidden=false;$(id).hidden=false;}
-function closeSheets(){$('#veil').hidden=true;$('#repsheet').hidden=true;$('#setsheet').hidden=true;}
+function closeSheets(){$('#veil').hidden=true;document.querySelectorAll('.sheet').forEach(x=>x.hidden=true);}
 $('#veil').onclick=closeSheets;document.querySelectorAll('[data-close]').forEach(b=>b.onclick=closeSheets);
 $('#openset').onclick=()=>{optBtns();themeBtns();openSheet('#setsheet');};
 function optBtns(){$('#o-tolls').setAttribute('aria-checked',String(opts.tolls));$('#o-areas').setAttribute('aria-checked',String(opts.areas));$('#o-voice').setAttribute('aria-checked',String(!muted));}
@@ -506,7 +544,67 @@ function reportAlerts(p){const chip=$('#alertchip');let near=null;
 let askT;function askStill(r){$('#asktx').textContent=(REP_ICON[r.kind]||'')+' '+L['rep_'+r.kind]+' · '+L.rep_still;$('#ask').hidden=false;clearTimeout(askT);askT=setTimeout(()=>$('#ask').hidden=true,10000);
   $('#askyes').onclick=()=>{$('#ask').hidden=true;voteRep(r,true);};$('#askno').onclick=()=>{$('#ask').hidden=true;voteRep(r,false);};}
 
-// ---------- test drive: moves along the route as if driving, through the same guidance code
+// ---------- all turns: tap the banner (or the button in the preview)
+function openSteps(){if(!route)return;const box=$('#steplist');box.textContent='';
+  const cum=trk?trk.cum:NAVCORE.cumulative(route.geometry);const nav=mode==='nav'&&lastProg;const along=nav?lastProg.along:0;const from=nav?Math.max(0,lastProg.next):0;
+  let n=0;
+  route.steps.forEach((s,i)=>{if(i<from)return;if(!(s.speak||s.type==='arrive'||s.type==='waypoint'))return;if(s.type==='depart'&&nav)return;n++;
+    const b=document.createElement('button');b.type='button';
+    const ic=document.createElement('span');ic.className='ic';ic.innerHTML=icon(s.icon);
+    const tx=document.createElement('span');tx.className='tx';tx.textContent=s.text;
+    const d=document.createElement('span');d.className='d';d.textContent=NAVCORE.shortDistance(Math.max(0,s.start-along),LANG);
+    b.append(ic,tx,d);
+    if(s.lanes){const sub=document.createElement('span');sub.className='sub';sub.appendChild(lanesEl(s.lanes,true));b.appendChild(sub);}
+    b.onclick=()=>{closeSheets();const pt=NAVCORE.pointAt(route.geometry,cum,s.start);follow=false;lastTouch=Date.now()+7000;if(mode==='nav')show('#recenter',true);
+      map.easeTo({center:pt.point,zoom:17.2,bearing:pt.bearing,pitch:45,padding:{top:0,bottom:0,left:0,right:0},duration:900});};
+    box.appendChild(b);});
+  $('#stepsum').textContent=F(L.steps_count,n,fmtKm(nav?lastProg.remaining:route.distance));
+  openSheet('#stepsheet');}
+$('#banner').addEventListener('click',openSteps);$('#banner').addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openSteps();}});
+$('#psteps').onclick=openSteps;
+
+// ---------- fuel stations along the route, and a stop on the way
+let fuel=[],fuelMarkers=[],fuelSeq=0;
+function clearFuel(){fuelMarkers.forEach(m=>m.remove());fuelMarkers=[];fuel=[];}
+function setStop(s){stop=s;if(stopMarker){stopMarker.remove();stopMarker=null;}
+  if(s){const el=document.createElement('div');el.className='fuel-m stop';el.textContent='⛽';stopMarker=new ml.Marker({element:el}).setLngLat([s.lon,s.lat]).addTo(map);}
+  stopBar();}
+function stopBar(){for(const id of ['#pstop','#fstop']){const box=$(id);if(!box)continue;box.textContent='';if(!stop)continue;
+  const d=document.createElement('div');d.className='stopbar';const t=document.createElement('span');t.textContent='⛽ '+F(L.stop_now,stop.name);
+  const x=document.createElement('button');x.type='button';x.className='btn';x.textContent=L.stop_remove;x.onclick=()=>{setStop(null);closeSheets();rePlan();};d.append(t,x);box.appendChild(d);}}
+// New route after the stop changed: in the preview show it again, while driving switch now.
+function rePlan(){if(!dest||!fix)return;if(mode==='preview')planRoute();else if(mode==='nav'){remainData=null;reroute(fix,true);}}
+// The route ahead as at most ~150 points spaced along it (keeps the request small).
+function lineAhead(){const cum=trk?trk.cum:NAVCORE.cumulative(route.geometry);const a=mode==='nav'&&lastProg?lastProg.along:0;const end=Math.min(cum[cum.length-1],a+200000);
+  const n=Math.min(150,Math.max(2,Math.ceil((end-a)/150)));const out=[];for(let i=0;i<n;i++){out.push(NAVCORE.pointAt(route.geometry,cum,a+(end-a)*i/(n-1)).point);}return {line:out,cum,a};}
+async function openFuel(){if(!route)return;const box=$('#fuellist');box.textContent='';stopBar();
+  const msg=(t)=>{box.textContent='';const m=document.createElement('div');m.className='msg';m.textContent=t;box.appendChild(m);};
+  msg(L.fuel_loading);openSheet('#fuelsheet');const seq=++fuelSeq;
+  try{const {line,cum,a}=lineAhead();const d=await api('/api/fuel?line='+line.map(p=>p[0].toFixed(5)+','+p[1].toFixed(5)).join(';'));if(seq!==fuelSeq)return;
+    clearFuel();$('#fsrc').textContent=d.source?'© '+d.source:'';
+    for(const st of d.stations){const pr=NAVCORE.project(route.geometry,cum,[st.lon,st.lat]);if(pr.offset>(st.detour!=null?3000:500)||pr.along<a)continue;
+      const rb=NAVCORE.pointAt(route.geometry,cum,pr.along).bearing,sb=NAVCORE.bearing(pr.point,[st.lon,st.lat]);const rel=((sb-rb)%360+360)%360;
+      fuel.push({...st,along:pr.along,off:pr.offset,side:pr.offset<15?'':rel<180?'right':'left'});}
+    fuel.sort((x,y)=>x.along-y.along);fuel=fuel.slice(0,25);
+    if(!fuel.length)return msg(L.fuel_none);
+    box.textContent='';
+    for(const st of fuel){const r=document.createElement('div');r.setAttribute('role','listitem');
+      const ic=document.createElement('span');ic.className='ic';ic.textContent='⛽';
+      const tx=document.createElement('span');tx.className='tx';tx.textContent=st.name||L.fuel_station;
+      const go=document.createElement('button');go.type='button';go.className='btn primary go';go.textContent=L.fuel_add;go.onclick=(e)=>{e.stopPropagation();addStop(st);};
+      const sub=document.createElement('span');sub.className='sub';sub.textContent=[F(L.fuel_in,NAVCORE.shortDistance(st.along-a,LANG)),st.detour>=60?F(L.fuel_detour,Math.round(st.detour/60)):st.side?L['side_'+st.side]:'',st.brand].filter(Boolean).join(' · ');
+      r.append(ic,tx,go,sub);r.onclick=()=>{closeSheets();follow=false;lastTouch=Date.now()+7000;if(mode==='nav')show('#recenter',true);map.easeTo({center:[st.lon,st.lat],zoom:16.5,pitch:30,padding:{top:0,bottom:0,left:0,right:0},duration:900});};
+      box.appendChild(r);
+      const el=document.createElement('div');el.className='fuel-m';el.textContent='⛽';el.title=st.name||L.fuel_station;el.addEventListener('click',(ev)=>{ev.stopPropagation();fuelPopup(st);});
+      fuelMarkers.push(new ml.Marker({element:el}).setLngLat([st.lon,st.lat]).addTo(map));}}
+  catch(e){if(seq===fuelSeq)msg(L.fuel_failed);}}
+function fuelPopup(st){const box=document.createElement('div');box.style.cssText='display:grid;gap:8px;min-width:200px';const t=document.createElement('b');t.textContent='⛽ '+(st.name||L.fuel_station);
+  const b=document.createElement('button');b.className='btn primary';b.textContent=L.fuel_add;box.append(t,b);
+  const pop=new ml.Popup({closeButton:true,offset:16}).setLngLat([st.lon,st.lat]).setDOMContent(box).addTo(map);b.onclick=()=>{pop.remove();addStop(st);};}
+function addStop(st){closeSheets();setStop({name:st.name||L.fuel_station,lon:st.lon,lat:st.lat});clearFuel();toast(F(L.stop_added,stop.name));rePlan();}
+$('#pfuel').onclick=openFuel;$('#openfuel').onclick=openFuel;
+
+// ---------- test drive (kept for automated checks only; no button): moves along the route as if driving, through the same guidance code
 function startSim(){const cum=NAVCORE.cumulative(route.geometry);sim={along:0,cum,timer:setInterval(simTick,1000)};}
 function stopSim(){if(sim){clearInterval(sim.timer);sim=null;show('#simb',false);}}
 function simTick(){if(!sim||!route)return;const st=route.steps.find((s,i)=>s.start<=sim.along&&(i===route.steps.length-1||route.steps[i+1].start>sim.along));
@@ -520,7 +618,7 @@ document.querySelectorAll('[data-lang]').forEach(b=>b.onclick=()=>{document.cook
 themeBtns();chips();setMode('browse');
 {const m=store.get('hn_manual',null);if(m&&typeof m.lon==='number'){firstFix=false;onFix({pos:[m.lon,m.lat],accuracy:0,speed:null,heading:null,time:Date.now(),manual:true,name:m.name||''});map.jumpTo({center:[m.lon,m.lat],zoom:15});}}
 startGps();loadConfig();loadCams();
-window.__hn={choose,pitch:()=>map.getPitch(),state:()=>({speed:Math.round(kmh),reports:reps.length,opts,mode,follow,dest,steps:route&&route.steps.length,prog:lastProg,sim:!!sim,routes:routes&&routes.length,routeIdx,cams:cams.length,camHits:camHits.length,traffic:TRAFFIC})};
+window.__hn={choose,sim:()=>startNav(true),pitch:()=>map.getPitch(),state:()=>({stop,fuel:fuel.length,lanes:route?route.steps.filter(s=>s.lanes).length:0,speed:Math.round(kmh),reports:reps.length,opts,mode,follow,dest,steps:route&&route.steps.length,prog:lastProg,sim:!!sim,routes:routes&&routes.length,routeIdx,cams:cams.length,camHits:camHits.length,traffic:TRAFFIC})};
 `;
 
 export function appPage(lang: Lang, origin: string) {
@@ -551,13 +649,17 @@ export function appPage(lang: Lang, origin: string) {
   <div class="sum" id="psum"></div>
   <div id="alts" role="radiogroup"></div>
   <div class="small" id="pextra"></div>
-  <div class="row"><button class="btn primary" id="go" type="button">▶ ${t.start}</button><button class="btn ghost" id="sim" type="button">${t.simulate}</button></div>
+  <div id="pstop"></div>
+  <div class="row"><button class="btn primary" id="go" type="button">▶ ${t.start}</button></div>
+  <div class="row"><button class="btn ghost" id="psteps" type="button">${t.steps_btn}</button><button class="btn ghost" id="pfuel" type="button">${t.fuel_btn}</button></div>
   <div class="row"><button class="btn" id="sethome" type="button">🏠 ${t.set_home}</button><button class="btn" id="setwork" type="button">💼 ${t.set_work}</button><button class="btn" id="reverse" type="button">${t.reverse}</button><button class="btn danger" id="cancel" type="button">${t.cancel}</button></div>
   <div class="small" id="pmanual" hidden>${t.manual_note}</div>
   <div class="small">${t.safety}</div>
 </section>
-<section id="banner" class="hud" hidden aria-live="polite">
+<section id="banner" class="hud" hidden aria-live="polite" role="button" tabindex="0" title="${t.steps_hint}">
   <div id="bi"></div><div id="bd"></div><div id="bt"></div>
+  <div id="blanes" hidden></div>
+  <span id="bmore" aria-hidden="true">☰</span>
   <div id="bthen" hidden><span id="bti"></span><span id="btt"></span></div>
   <div id="bcam" hidden></div>
   <div id="alertchip" hidden></div>
@@ -568,6 +670,7 @@ export function appPage(lang: Lang, origin: string) {
 </section>
 <div id="fabs">
   <button class="fab small" id="recenter" type="button" aria-label="${t.recenter}" hidden>◎</button>
+  <button class="fab small" id="openfuel" type="button" aria-label="${t.fuel_title}" hidden>⛽</button>
   <button class="fab small" id="openset" type="button" aria-label="${t.settings}">⚙</button>
   <button class="fab rep" id="openrep" type="button" aria-label="${t.report}">⚠</button>
 </div>
@@ -594,6 +697,17 @@ export function appPage(lang: Lang, origin: string) {
   <div class="opt"><div class="seg" role="group" aria-label="${t.theme}"><button type="button" data-theme-opt="light">☀️ ${t.day}</button><button type="button" data-theme-opt="dark">🌙 ${t.night}</button></div>
   <div class="seg" role="group" aria-label="${t.language}"><button type="button" data-lang="he" aria-pressed="${lang === 'he'}">עברית</button><button type="button" data-lang="en" aria-pressed="${lang === 'en'}">English</button></div></div>
   <div class="disc">${t.safety}<br>${t.disclaimer}<br>${t.cams_credit}</div>
+</section>
+<section id="stepsheet" class="sheet" hidden role="dialog" aria-label="${t.steps_title}">
+  <h2>${t.steps_title}</h2><button class="x" type="button" data-close aria-label="${t.close}">✕</button>
+  <div class="small" id="stepsum"></div>
+  <div class="list" id="steplist"></div>
+</section>
+<section id="fuelsheet" class="sheet" hidden role="dialog" aria-label="${t.fuel_title}">
+  <h2>${t.fuel_title}</h2><button class="x" type="button" data-close aria-label="${t.close}">✕</button>
+  <div id="fstop"></div>
+  <div class="list" id="fuellist"></div>
+  <div class="disc" id="fsrc"></div>
 </section>
 <div id="ask" class="hud br" hidden><span id="asktx"></span><button class="btn" id="askyes" type="button">${t.rep_yes}</button><button class="btn" id="askno" type="button">${t.rep_no}</button></div>
 <div id="simb" hidden>${t.sim_badge}</div>

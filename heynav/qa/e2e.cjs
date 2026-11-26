@@ -36,7 +36,7 @@ const ok = (name, cond, extra = '') => { checks.push([name, !!cond]); console.lo
     await p.screenshot({ path: `${OUT}/nav-${lang}-preview.png` });
 
     await p.click('#sethome');
-    await p.click('#sim');
+    await p.evaluate(() => window.__hn.sim());
     await p.waitForTimeout(600);
     ok('guidance banner', await p.isVisible('#banner'), await p.textContent('#bt'));
     const first = await p.textContent('#bt');
