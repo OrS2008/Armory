@@ -20,7 +20,7 @@ export const NONCE = '{{CSP_NONCE}}';
  * injected markup can't execute anything; nothing can frame the page; forms and
  * fetches stay on this origin.
  */
-export function html(body: string, status = 200, extra: Record<string, string> = {}, cspAdd: string[] = []) {
+export function html(body: string, status = 200, extra: Record<string, string> = {}) {
   const nonce = randomToken(16);
   const csp = [
     "default-src 'none'",
@@ -33,7 +33,6 @@ export function html(body: string, status = 200, extra: Record<string, string> =
     "form-action 'self'",
     "frame-ancestors 'none'",
     "base-uri 'none'",
-    ...cspAdd,
   ].join('; ');
   return new Response(body.replaceAll(NONCE, nonce), {
     status,
