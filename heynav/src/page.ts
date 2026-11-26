@@ -160,6 +160,8 @@ body.nav #speedo{bottom:calc(122px + env(safe-area-inset-bottom))}
 .stopbar .btn{min-height:44px;font-size:.9rem;padding:0 12px}
 .fuel-m{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;font-size:22px;background:#fff;border:3px solid #16a34a;box-shadow:0 2px 8px rgba(0,0,0,.4);cursor:pointer}
 .fuel-m.stop{border-color:var(--brand);width:46px;height:46px}
+.poileg{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px 12px;padding-bottom:6px}
+.poileg>span{display:flex;gap:8px;align-items:center;font-size:.9rem}.poileg svg{flex:none}
 [hidden]{display:none!important}
 @media (max-width:760px){#speedo{width:92px;height:92px}#speedo b{font-size:2.1rem}.fab{width:58px;height:58px}.fab.rep{width:66px;height:66px}body.nav #fabs{bottom:calc(122px + env(safe-area-inset-bottom))}.repgrid button{min-height:100px}#bd{font-size:2.3rem}#bi{width:76px;height:76px}#bi svg{width:60px;height:60px}#bt{font-size:1.2rem}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}`;
@@ -244,7 +246,79 @@ function addAreas(){
   const before=map.getStyle().layers.find(l=>l.type==='symbol')?.id;
   if(!map.getLayer('areas-fill'))map.addLayer({id:'areas-fill',type:'fill',source:'areas',paint:{'fill-color':'#e53935','fill-opacity':.12}},before);
   if(!map.getLayer('areas-line'))map.addLayer({id:'areas-line',type:'line',source:'areas',paint:{'line-color':'#e53935','line-width':2,'line-dasharray':[2,2],'line-opacity':.8}},before);}
-map.on('style.load',()=>{labelLang();tuneDark();realityView();addAreas();addRouteLayers();});
+
+// ---------- places around: hotels, food, malls, fuel, chargers… as clear coloured badges
+// [category, colour, tier (1 shows from far, 3 only up close), glyph (24×24 path)]
+const POI=[
+  ['hotel','#3b82f6',1,'M7 13c1.66 0 3-1.34 3-3S8.66 7 7 7s-3 1.34-3 3 1.34 3 3 3zm12-6h-8v7H3V5H1v15h2v-3h18v3h2v-9c0-2.21-1.79-4-4-4z'],
+  ['mall','#a855f7',1,'M18 6h-2c0-2.21-1.79-4-4-4S8 3.79 8 6H6c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-6-2c1.1 0 2 .9 2 2h-4c0-1.1.9-2 2-2zm6 16H6V8h2v2c0 .55.45 1 1 1s1-.45 1-1V8h4v2c0 .55.45 1 1 1s1-.45 1-1V8h2v12z'],
+  ['fuel','#16a34a',1,'M19.77 7.23l.01-.01-3.72-3.72L15 4.56l2.11 2.11c-.94.36-1.61 1.26-1.61 2.33 0 1.38 1.12 2.5 2.5 2.5.36 0 .69-.08 1-.21v7.21c0 .55-.45 1-1 1s-1-.45-1-1V14c0-1.1-.9-2-2-2h-1V5c0-1.1-.9-2-2-2H6c-1.1 0-2 .9-2 2v16h10v-7.5h1.5v5c0 1.38 1.12 2.5 2.5 2.5s2.5-1.12 2.5-2.5V9c0-.69-.28-1.32-.73-1.77zM12 10H6V5h6v5zm6 0c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1z'],
+  ['charge','#0ea5e9',1,'M7 2v11h3v9l7-12h-4l4-8z'],
+  ['food','#f97316',2,'M11 9H9V2H7v7H5V2H3v7c0 2.12 1.66 3.84 3.75 3.97V22h2.5v-9.03C11.34 12.84 13 11.12 13 9V2h-2v7zm5-3v8h2.5v8H21V2c-2.76 0-5 2.24-5 4z'],
+  ['health','#dc2626',2,'M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-1 11h-4v4h-4v-4H6v-4h4V6h4v4h4v4z'],
+  ['fun','#0d9488',2,'M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z'],
+  ['cafe','#b45309',3,'M20 3H4v10c0 2.21 1.79 4 4 4h6c2.21 0 4-1.79 4-4v-3h2c1.11 0 2-.89 2-2V5c0-1.11-.89-2-2-2zm0 5h-2V5h2v3zM4 19h16v2H4z'],
+  ['bar','#db2777',3,'M21 5V3H3v2l8 9v5H6v2h12v-2h-5v-5l8-9zM7.43 7L5.66 5h12.69l-1.78 2H7.43z'],
+  ['grocery','#65a30d',3,'M7 18c-1.1 0-1.99.9-1.99 2S5.9 22 7 22s2-.9 2-2-.9-2-2-2zM1 2v2h2l3.6 7.59-1.35 2.45c-.16.28-.25.61-.25.96 0 1.1.9 2 2 2h12v-2H7.42c-.14 0-.25-.11-.25-.25l.03-.12.9-1.63h7.45c.75 0 1.41-.41 1.75-1.03l3.58-6.49A1.003 1.003 0 0 0 20 4H5.21l-.94-2H1zm16 16c-1.1 0-1.99.9-1.99 2s.89 2 1.99 2 2-.9 2-2-.9-2-2-2z'],
+  ['pharmacy','#059669',3,'M10 3h4v7h7v4h-7v7h-4v-7H3v-4h7z'],
+  ['parking','#2563eb',3,'M13 3H6v18h4v-6h3c3.31 0 6-2.69 6-6s-2.69-6-6-6zm.2 8H10V7h3.2c1.1 0 2 .9 2 2s-.9 2-2 2z'],
+];
+const POI_BY=Object.fromEntries(POI.map(x=>[x[0],x]));
+const C=['get','class'],SC=['get','subclass'];
+const POI_CAT=['case',
+  ['==',C,'lodging'],'hotel',
+  ['all',['==',C,'shop'],['in',SC,['literal',['mall','department_store']]]],'mall',
+  ['all',['==',C,'fuel'],['==',SC,'charging_station']],'charge',
+  ['==',C,'fuel'],'fuel',
+  ['in',C,['literal',['restaurant','fast_food']]],'food',
+  ['==',C,'hospital'],'health',
+  ['in',C,['literal',['attraction','museum','cinema','theatre','stadium','zoo','castle','aquarium','theme_park']]],'fun',
+  ['in',C,['literal',['cafe','ice_cream','bakery']]],'cafe',
+  ['in',C,['literal',['bar','beer']]],'bar',
+  ['all',['==',C,'grocery'],['==',SC,'supermarket']],'grocery',
+  ['==',C,'pharmacy'],'pharmacy',
+  ['==',C,'parking'],'parking',
+  ''];
+const poiTier=(t)=>['in',POI_CAT,['literal',POI.filter(x=>x[2]===t).map(x=>x[0])]];
+const poiIcon=(col,d,size)=>'<svg xmlns="http://www.w3.org/2000/svg" width="'+size+'" height="'+size+'" viewBox="0 0 48 48"><circle cx="24" cy="24" r="21" fill="'+col+'" stroke="#fff" stroke-width="3"/><path transform="translate(11.5 11.5) scale(1.04)" fill="#fff" d="'+d+'"/></svg>';
+const poiImgs={};
+function poiImages(){return Promise.all(POI.map(([k,col,,d])=>poiImgs[k]||(poiImgs[k]=new Promise(res=>{const im=new Image(96,96);im.onload=()=>res(im);im.onerror=()=>res(null);im.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(poiIcon(col,d,96));}))));}
+const POI_LAYERS=['hn-poi-1','hn-poi-2','hn-poi-3'];
+async function addPois(){const imgs=await poiImages();
+  POI.forEach(([k],i)=>{const id='hn-'+k;if(imgs[i]&&!map.hasImage(id))map.addImage(id,imgs[i],{pixelRatio:2});});
+  const st=map.getStyle();if(!st.sources.openmaptiles)return;
+  // the style's own POI icons are replaced by ours (the dark style has none at all)
+  for(const l of st.layers)if(l['source-layer']==='poi'&&!l.id.startsWith('hn-'))try{map.setLayoutProperty(l.id,'visibility','none');}catch(e){}
+  const name=LANG==='he'?['coalesce',['get','name:he'],['get','name']]:['coalesce',['get','name:en'],['get','name:latin'],['get','name']];
+    [[1,13.5],[2,15],[3,16.8]].forEach(([t,minz])=>{const id='hn-poi-'+t;if(map.getLayer(id))return;
+    map.addLayer({id,type:'symbol',source:'openmaptiles','source-layer':'poi',minzoom:minz,filter:poiTier(t),
+      layout:{'icon-image':['concat','hn-',POI_CAT],'icon-size':['interpolate',['linear'],['zoom'],13,.75,16,.9,18,1.15],'icon-allow-overlap':false,'icon-padding':6,
+        'symbol-sort-key':['+',t*1000,['coalesce',['get','rank'],50]],
+        'text-field':name,'text-font':['Noto Sans Regular'],'text-size':12.5,'text-offset':[0,1.35],'text-anchor':'top','text-optional':true,'text-max-width':8,
+        visibility:opts.pois?'visible':'none'},
+      paint:{'text-color':dark()?'#dfe6ea':'#1f2a30','text-halo-color':dark()?'#07090b':'#fff','text-halo-width':1.6,'icon-opacity':1}});});
+  poiMode();}
+// While driving, only what matters from the road (hotels, malls, fuel, chargers, food, hospitals, attractions).
+function poiMode(){const on=opts.pois;POI_LAYERS.forEach(id=>{if(!map.getLayer(id))return;const v=on&&!(id==='hn-poi-3'&&mode==='nav');map.setLayoutProperty(id,'visibility',v?'visible':'none');});}
+const poiCatOf=(p)=>{const c=p.class,sc=p.subclass;
+  if(c==='lodging')return 'hotel';if(c==='shop'&&(sc==='mall'||sc==='department_store'))return 'mall';if(c==='fuel')return sc==='charging_station'?'charge':'fuel';
+  if(c==='restaurant'||c==='fast_food')return 'food';if(c==='hospital')return 'health';if(['attraction','museum','cinema','theatre','stadium','zoo','castle','aquarium','theme_park'].includes(c))return 'fun';
+  if(['cafe','ice_cream','bakery'].includes(c))return 'cafe';if(c==='bar'||c==='beer')return 'bar';if(c==='grocery')return 'grocery';if(c==='pharmacy')return 'pharmacy';if(c==='parking')return 'parking';return '';};
+for(const id of POI_LAYERS)map.on('click',id,(e)=>{const f=e.features&&e.features[0];if(!f)return;window.__poiClick=Date.now();
+  const pr=f.properties,cat=poiCatOf(pr),nm=(LANG==='he'?pr['name:he']||pr.name:pr['name:en']||pr.name)||L['poi_'+cat];
+  const ll=f.geometry.type==='Point'?f.geometry.coordinates:[e.lngLat.lng,e.lngLat.lat];
+  const box=document.createElement('div');box.style.cssText='display:grid;gap:8px;min-width:210px';
+  const h=document.createElement('div');h.style.cssText='display:flex;gap:10px;align-items:center';const ic=document.createElement('span');ic.innerHTML=poiIcon(POI_BY[cat]?POI_BY[cat][1]:'#888',POI_BY[cat]?POI_BY[cat][3]:'',36);
+  const t=document.createElement('div');const b=document.createElement('b');b.textContent=nm;const k=document.createElement('div');k.className='small';k.textContent=L['poi_'+cat]||'';t.append(b,k);h.append(ic,t);box.appendChild(h);
+  const place={name:nm,detail:L['poi_'+cat]||'',lon:ll[0],lat:ll[1],icon:'📍'};
+  const pop=new ml.Popup({closeButton:true,offset:14,maxWidth:'320px'}).setLngLat(ll).setDOMContent(box);
+  if(mode==='nav'){const s=document.createElement('button');s.className='btn primary';s.textContent=L.fuel_add;s.onclick=()=>{pop.remove();addStop(place);};box.appendChild(s);}
+  else if(mode==='browse'){const g=document.createElement('button');g.className='btn primary';g.textContent=L.pin_here;g.onclick=()=>{pop.remove();choose(place);};box.appendChild(g);}
+  pop.addTo(map);});
+for(const id of POI_LAYERS){map.on('mouseenter',id,()=>map.getCanvas().style.cursor='pointer');map.on('mouseleave',id,()=>map.getCanvas().style.cursor='');}
+function poiLegend(){const box=$('#poileg');if(!box||box.childElementCount)return;
+  for(const [k,col,,d] of POI){const it=document.createElement('span');it.innerHTML=poiIcon(col,d,30);const tx=document.createElement('span');tx.textContent=L['poi_'+k];it.appendChild(tx);box.appendChild(it);}}
+map.on('style.load',()=>{labelLang();tuneDark();realityView();addAreas();addRouteLayers();addPois();});
 
 // car marker
 const carEl=document.createElement('div');carEl.className='car dot';
@@ -260,7 +334,7 @@ function setCar(pos,bearing,arrow){
 // ---------- state
 let stop=null,stopMarker=null,mode='browse',fix=null,dest=null,route=null,trk=null,follow=true,muted=store.get('hn_muted',false),sim=null,lastReroute=0,rerouting=false,lastProg=null,firstFix=true,wake=null;
 const show=(id,on)=>{$(id).hidden=!on;};
-function setMode(m){mode=m;document.body.classList.toggle('nav',m==='nav');document.body.classList.toggle('preview',m==='preview');show('#search',m==='browse');show('#preview',m==='preview');show('#fabs',m!=='preview');
+function setMode(m){mode=m;if(typeof poiMode==='function'&&map.isStyleLoaded())poiMode();document.body.classList.toggle('nav',m==='nav');document.body.classList.toggle('preview',m==='preview');show('#search',m==='browse');show('#preview',m==='preview');show('#fabs',m!=='preview');
   show('#banner',m==='nav');show('#navbar',m==='nav');show('#openfuel',m==='nav');show('#simb',m==='nav'&&!!sim);if(m!=='nav')show('#recenter',false);if(m==='browse')show('#arrived',false);}
 
 // ---------- GPS
@@ -337,7 +411,7 @@ let destMarker=null;
 const fmtTime=(s)=>{const m=Math.max(1,Math.round(s/60));return m<60?m+' '+L.min:Math.floor(m/60)+':'+String(m%60).padStart(2,'0')+' '+L.hr;};
 const fmtClock=(s)=>{const d=new Date(Date.now()+s*1000);return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');};
 const fmtKm=(m)=>(m/1000).toFixed(m>=10000?0:1)+' '+L.km;
-let opts=Object.assign({tolls:false,areas:true,voice:true},store.get('hn_opts',{}));
+let opts=Object.assign({tolls:false,areas:true,voice:true,pois:true},store.get('hn_opts',{}));
 const avoidQ=()=>{const a=[];if(opts.tolls)a.push('tolls');if(opts.areas)a.push('areas');return a.length?'&avoid='+a.join(','):'';};
 const ll=(lon,lat)=>lon.toFixed(6)+','+lat.toFixed(6);
 function routeUrl(from,bearing){return '/api/route?from='+ll(from[0],from[1])+'&to='+ll(dest.lon,dest.lat)+(stop?'&via='+ll(stop.lon,stop.lat):'')+(bearing!=null?'&bearing='+Math.round(bearing):'')+avoidQ();}
@@ -459,7 +533,7 @@ for(const ev of ['dragstart','rotatestart','pitchstart'])map.on(ev,(e)=>{if(!e.o
 map.on('zoomstart',(e)=>{if(e.originalEvent)lastTouch=Date.now();});
 $('#recenter').onclick=()=>{follow=true;show('#recenter',false);if(lastProg)map.easeTo({center:lastProg.snapped,bearing:lastProg.bearing,pitch:70,zoom:17.5,padding:padding(),duration:600});else if(fix)map.easeTo({center:fix.pos,zoom:16,duration:600});};
 $('#overview').onclick=()=>{if(!route)return;follow=false;lastTouch=Date.now()+7000;show('#recenter',true);const b=new ml.LngLatBounds();(remainData||route.geometry).forEach(c=>b.extend(c));map.fitBounds(b,{padding:80,pitch:0,bearing:0,duration:900});};
-map.on('click',(e)=>{if(mode!=='browse'||Date.now()-(window.__camClick||0)<300)return;if(map.queryRenderedFeatures(e.point,{layers:map.getLayer('cams-dot')?['cams-dot']:[]}).length)return;const p={name:L.pin_name,detail:e.lngLat.lat.toFixed(5)+', '+e.lngLat.lng.toFixed(5),lon:e.lngLat.lng,lat:e.lngLat.lat};
+map.on('click',(e)=>{if(mode!=='browse'||Date.now()-(window.__camClick||0)<300||Date.now()-(window.__poiClick||0)<300)return;if(map.queryRenderedFeatures(e.point,{layers:map.getLayer('cams-dot')?['cams-dot']:[]}).length)return;const p={name:L.pin_name,detail:e.lngLat.lat.toFixed(5)+', '+e.lngLat.lng.toFixed(5),lon:e.lngLat.lng,lat:e.lngLat.lat};
   if(picking)return setManual(p);
   const box=document.createElement('div');box.style.cssText='display:grid;gap:8px';
   const b=document.createElement('button');b.className='btn primary';b.textContent=L.pin_here;
@@ -498,8 +572,9 @@ function openSheet(id){$('#veil').hidden=false;$(id).hidden=false;}
 function closeSheets(){$('#veil').hidden=true;document.querySelectorAll('.sheet').forEach(x=>x.hidden=true);}
 $('#veil').onclick=closeSheets;document.querySelectorAll('[data-close]').forEach(b=>b.onclick=closeSheets);
 $('#openset').onclick=()=>{optBtns();themeBtns();openSheet('#setsheet');};
-function optBtns(){$('#o-tolls').setAttribute('aria-checked',String(opts.tolls));$('#o-areas').setAttribute('aria-checked',String(opts.areas));$('#o-voice').setAttribute('aria-checked',String(!muted));}
+function optBtns(){poiLegend();$('#o-pois').setAttribute('aria-checked',String(opts.pois));$('#o-tolls').setAttribute('aria-checked',String(opts.tolls));$('#o-areas').setAttribute('aria-checked',String(opts.areas));$('#o-voice').setAttribute('aria-checked',String(!muted));}
 for(const [id,k] of [['#o-tolls','tolls'],['#o-areas','areas']])$(id).onclick=()=>{opts[k]=!opts[k];store.set('hn_opts',opts);optBtns();if(map.getLayer('areas-fill'))map.setLayoutProperty('areas-fill','visibility','visible');};
+$('#o-pois').onclick=()=>{opts.pois=!opts.pois;store.set('hn_opts',opts);optBtns();poiMode();};
 $('#o-voice').onclick=()=>{muted=!muted;store.set('hn_muted',muted);muteBtn();optBtns();};
 
 // ---------- driver reports
@@ -567,10 +642,10 @@ $('#psteps').onclick=openSteps;
 let fuel=[],fuelMarkers=[],fuelSeq=0;
 function clearFuel(){fuelMarkers.forEach(m=>m.remove());fuelMarkers=[];fuel=[];}
 function setStop(s){stop=s;if(stopMarker){stopMarker.remove();stopMarker=null;}
-  if(s){const el=document.createElement('div');el.className='fuel-m stop';el.textContent='⛽';stopMarker=new ml.Marker({element:el}).setLngLat([s.lon,s.lat]).addTo(map);}
+  if(s){const el=document.createElement('div');el.className='fuel-m stop';el.textContent=s.icon||'⛽';stopMarker=new ml.Marker({element:el}).setLngLat([s.lon,s.lat]).addTo(map);}
   stopBar();}
 function stopBar(){for(const id of ['#pstop','#fstop']){const box=$(id);if(!box)continue;box.textContent='';if(!stop)continue;
-  const d=document.createElement('div');d.className='stopbar';const t=document.createElement('span');t.textContent='⛽ '+F(L.stop_now,stop.name);
+  const d=document.createElement('div');d.className='stopbar';const t=document.createElement('span');t.textContent=(stop.icon||'⛽')+' '+F(L.stop_now,stop.name);
   const x=document.createElement('button');x.type='button';x.className='btn';x.textContent=L.stop_remove;x.onclick=()=>{setStop(null);closeSheets();rePlan();};d.append(t,x);box.appendChild(d);}}
 // New route after the stop changed: in the preview show it again, while driving switch now.
 function rePlan(){if(!dest||!fix)return;if(mode==='preview')planRoute();else if(mode==='nav'){remainData=null;reroute(fix,true);}}
@@ -601,7 +676,7 @@ async function openFuel(){if(!route)return;const box=$('#fuellist');box.textCont
 function fuelPopup(st){const box=document.createElement('div');box.style.cssText='display:grid;gap:8px;min-width:200px';const t=document.createElement('b');t.textContent='⛽ '+(st.name||L.fuel_station);
   const b=document.createElement('button');b.className='btn primary';b.textContent=L.fuel_add;box.append(t,b);
   const pop=new ml.Popup({closeButton:true,offset:16}).setLngLat([st.lon,st.lat]).setDOMContent(box).addTo(map);b.onclick=()=>{pop.remove();addStop(st);};}
-function addStop(st){closeSheets();setStop({name:st.name||L.fuel_station,lon:st.lon,lat:st.lat});clearFuel();toast(F(L.stop_added,stop.name));rePlan();}
+function addStop(st){closeSheets();setStop({name:st.name||L.fuel_station,lon:st.lon,lat:st.lat,icon:st.icon});clearFuel();toast(F(L.stop_added,stop.name));rePlan();}
 $('#pfuel').onclick=openFuel;$('#openfuel').onclick=openFuel;
 
 // ---------- test drive (kept for automated checks only; no button): moves along the route as if driving, through the same guidance code
@@ -618,7 +693,7 @@ document.querySelectorAll('[data-lang]').forEach(b=>b.onclick=()=>{document.cook
 themeBtns();chips();setMode('browse');
 {const m=store.get('hn_manual',null);if(m&&typeof m.lon==='number'){firstFix=false;onFix({pos:[m.lon,m.lat],accuracy:0,speed:null,heading:null,time:Date.now(),manual:true,name:m.name||''});map.jumpTo({center:[m.lon,m.lat],zoom:15});}}
 startGps();loadConfig();loadCams();
-window.__hn={choose,sim:()=>startNav(true),pitch:()=>map.getPitch(),state:()=>({stop,fuel:fuel.length,lanes:route?route.steps.filter(s=>s.lanes).length:0,speed:Math.round(kmh),reports:reps.length,opts,mode,follow,dest,steps:route&&route.steps.length,prog:lastProg,sim:!!sim,routes:routes&&routes.length,routeIdx,cams:cams.length,camHits:camHits.length,traffic:TRAFFIC})};
+window.__hnmap=map;window.__hn={choose,sim:()=>startNav(true),pitch:()=>map.getPitch(),state:()=>({stop,fuel:fuel.length,lanes:route?route.steps.filter(s=>s.lanes).length:0,speed:Math.round(kmh),reports:reps.length,opts,mode,follow,dest,steps:route&&route.steps.length,prog:lastProg,sim:!!sim,routes:routes&&routes.length,routeIdx,cams:cams.length,camHits:camHits.length,traffic:TRAFFIC})};
 `;
 
 export function appPage(lang: Lang, origin: string) {
@@ -694,6 +769,8 @@ export function appPage(lang: Lang, origin: string) {
   <div class="opt"><div><b>${t.avoid_areas}</b><small>${t.avoid_areas_sub}</small></div><button class="tog" type="button" role="switch" id="o-areas" aria-checked="true" aria-label="${t.avoid_areas}"></button></div>
   <div class="opt"><div><b>${t.voice}</b></div><button class="tog" type="button" role="switch" id="o-voice" aria-checked="true" aria-label="${t.voice}"></button></div>
   <div class="kicker">// ${t.display}</div>
+  <div class="opt"><div><b>${t.pois}</b><small>${t.pois_sub}</small></div><button class="tog" type="button" role="switch" id="o-pois" aria-checked="true" aria-label="${t.pois}"></button></div>
+  <div id="poileg" class="poileg"></div>
   <div class="opt"><div class="seg" role="group" aria-label="${t.theme}"><button type="button" data-theme-opt="light">☀️ ${t.day}</button><button type="button" data-theme-opt="dark">🌙 ${t.night}</button></div>
   <div class="seg" role="group" aria-label="${t.language}"><button type="button" data-lang="he" aria-pressed="${lang === 'he'}">עברית</button><button type="button" data-lang="en" aria-pressed="${lang === 'en'}">English</button></div></div>
   <div class="disc">${t.safety}<br>${t.disclaimer}<br>${t.cams_credit}</div>
