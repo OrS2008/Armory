@@ -58,7 +58,21 @@ const ok = (name, cond, extra = '') => { checks.push(!!cond); console.log((cond 
   await p.click('#pfuel');
   await p.waitForSelector('#fuellist [role=listitem]', { timeout: 15000 });
   ok('fuel stations listed in route order', (await p.$$('#fuellist [role=listitem]')).length === 2, await p.textContent('#fuellist [role=listitem]'));
+  // Prices: a driver updates the sign's prices; they show for everyone, and cheapest sorting works
+  await p.click('#fuellist [role=listitem]:nth-child(2) .upd');
+  await p.waitForSelector('#pricesheet:not([hidden])');
+  await p.fill('#pf-s95', '7.79'); await p.fill('#pf-dsl', '7.41');
+  await p.click('#pform button[type=submit]');
+  await p.waitForSelector('#toast:not([hidden])');
+  ok('price update sent', true, await p.textContent('#toast'));
+  await p.waitForSelector('#fuellist .pc b', { timeout: 15000 });
+  ok('prices shown on the station', ((await p.textContent('#fuellist')) || '').includes('7.79'), (await p.textContent('#fuellist [role=listitem]:nth-child(2) .prices')) || '');
+  await p.click('[data-fsort="dsl"]');
+  await p.waitForFunction(() => (document.querySelector('#fuellist [role=listitem] .prices')?.textContent || '').includes('7.41'), null, { timeout: 15000 }).catch(() => {});
+  ok('cheapest diesel first', ((await p.textContent('#fuellist [role=listitem] .prices')) || '').includes('7.41'));
   await p.screenshot({ path: `${OUT}/turns-fuel.png` });
+  await p.click('[data-fsort="route"]');
+  await p.waitForTimeout(800);
   const before = routeUrls.length;
   await p.click('#fuellist [role=listitem] .go');
   await p.waitForFunction((n) => !document.querySelector('#go').disabled && window.__hn.state().stop, before, { timeout: 40000 });

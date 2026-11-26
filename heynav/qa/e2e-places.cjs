@@ -41,17 +41,18 @@ const ok = (name, cond, extra = '') => { checks.push(!!cond); console.log((cond 
     });
     if (pt) {
       await p.mouse.click(pt.x, pt.y);
-      await p.waitForTimeout(600);
-      const pop = await p.$('.maplibregl-popup');
-      ok('tapping a place opens its card', !!pop, pop ? (await pop.textContent()).slice(0, 60) : '');
-      ok('card offers navigation', !!(await p.$('.maplibregl-popup .btn.primary')));
+      await p.waitForSelector('#placesheet:not([hidden])', { timeout: 5000 }).catch(() => {});
+      await p.waitForTimeout(800);
+      ok('tapping a place opens its card', await p.isVisible('#placesheet'), (await p.textContent('#plname')) + ' · ' + (await p.textContent('#plcat')));
+      ok('card offers navigation', await p.isVisible('#plgo'), await p.textContent('#plgo'));
+      ok('card shows a picture or the place icon', await p.isVisible('#plhero svg, #plhero img'));
       await p.screenshot({ path: `${OUT}/places-${theme}-card.png` });
+      await p.click('#placesheet [data-close]');
     } else ok('a hotel or place to tap', false);
 
     if (theme === 'dark') {
-      await p.keyboard.press('Escape');
       await p.click('#openset');
-      ok('legend explains every icon', (await p.$$('#poileg > span')).length === 12);
+      ok('legend explains every icon', (await p.$$('#poileg > span')).length === 16);
       await p.screenshot({ path: `${OUT}/places-legend.png` });
       await p.click('#o-pois');
       await p.waitForTimeout(500);

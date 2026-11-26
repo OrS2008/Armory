@@ -15,6 +15,8 @@ import { attachLanes, lonLat, nearFirst, placeFromNominatim, placeFromPhoton, ra
 import { getCameras } from './cameras';
 import { incidents, timeRoute, trafficTile } from './traffic';
 import { fuelOnRoute, fuelTomTom } from './fuel';
+import { placeInfo, placePhoto } from './place';
+import { FUELS, official, pricesAt, setPrice, validPrice, type Fuel } from './prices';
 import { areasOnRoute, valhallaRoutes } from './valhalla';
 import { KINDS, addReport, listReports, vote, type Kind } from './reports';
 
@@ -216,6 +218,74 @@ async function fuel(req: Request, env: Env, url: URL, lang: Lang) {
   }
 }
 
+/** Fuel prices: read for a few stations (GET), or a driver reports what the sign says (POST). */
+async function prices(req: Request, env: Env, url: URL, p: string) {
+  const kv = env.REPORTS;
+  if (req.method === 'GET' && p === '/api/prices') {
+    const raw = (url.searchParams.get('pts') ?? '').split(';').filter(Boolean);
+    if (raw.length > 30) return json({ ok: false, error: 'too_many' }, 400);
+    const pts: [number, number][] = [];
+    for (const x of raw) { const q = lonLat(x); if (!q) return json({ ok: false, error: 'bad_points' }, 400); pts.push(q); }
+    const list = kv && pts.length ? await pricesAt(kv, pts) : pts.map(() => null);
+    if (!list) return json({ ok: false, error: 'too_many' }, 400);
+    return json({ ok: true, prices: list, official: official(), now: Date.now() }, 200, 'private, max-age=30');
+  }
+  if (req.method !== 'POST' || p !== '/api/price' || !kv) return json({ ok: false, error: 'method' }, 405);
+  if (req.headers.get('origin') !== url.origin) return json({ ok: false, error: 'forbidden' }, 403);
+  if (env.RL_REPORT) {
+    const { success } = await env.RL_REPORT.limit({ key: req.headers.get('cf-connecting-ip') ?? 'local' });
+    if (!success) return json({ ok: false, error: 'rate_limited' }, 429);
+  }
+  const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
+  if (!body || JSON.stringify(body).length > 300) return json({ ok: false, error: 'bad_body' }, 400);
+  const lon = Number(body.lon), lat = Number(body.lat);
+  if (!(Math.abs(lon) <= 180 && Math.abs(lat) <= 90)) return json({ ok: false, error: 'bad_point' }, 400);
+  const got: Partial<Record<Fuel, number>> = {};
+  for (const f of FUELS) {
+    if (body[f] == null || body[f] === '') continue;
+    if (!validPrice(f, body[f])) return json({ ok: false, error: 'bad_price', fuel: f }, 400);
+    got[f] = body[f] as number;
+  }
+  if (!Object.keys(got).length) return json({ ok: false, error: 'no_price' }, 400);
+  return json({ ok: true, station: await setPrice(kv, lon, lat, got) });
+}
+
+/** Card details for a tapped place (TomTom), cached a day at the edge. */
+async function place(req: Request, env: Env, url: URL, lang: Lang, ctx: ExecutionContext) {
+  const at = lonLat(url.searchParams.get('at'));
+  const name = (url.searchParams.get('name') ?? '').slice(0, 80);
+  if (!at) return json({ ok: false, error: 'bad_point' }, 400);
+  if (!env.TOMTOM_KEY) return json({ ok: true, place: null });
+  if (await limited(env, req, 'p')) return json({ ok: false, error: 'rate_limited' }, 429);
+  const cache = (globalThis as { caches?: { default: Cache } }).caches?.default;
+  const ck = new Request(`https://cache.heynav/place/v2/${lang}/${at[0].toFixed(5)},${at[1].toFixed(5)}/${encodeURIComponent(name)}`);
+  const hit = cache ? await cache.match(ck) : undefined;
+  if (hit) { const d = (await hit.json()) as unknown; return json(d, 200, 'private, max-age=600'); }
+  try {
+    const body = { ok: true, place: await placeInfo(env.TOMTOM_KEY, at, name, lang, env.TOMTOM_BASE) };
+    // opening hours go stale: cache an hour
+    if (cache) ctx.waitUntil(cache.put(ck, new Response(JSON.stringify(body), { headers: { 'cache-control': 'max-age=3600' } })));
+    return json(body, 200, 'private, max-age=600');
+  } catch (e) {
+    console.error('place', e instanceof Error ? e.message : String(e));
+    return json({ ok: true, place: null });
+  }
+}
+
+async function photo(req: Request, env: Env, url: URL) {
+  const id = url.searchParams.get('id') ?? '';
+  if (!env.TOMTOM_KEY || !/^[\w-]{6,80}$/.test(id)) return new Response(null, { status: 404, headers: BASE_HEADERS });
+  // only our own pages may embed these
+  const site = req.headers.get('sec-fetch-site');
+  if (site && site !== 'same-origin') return new Response(null, { status: 403, headers: BASE_HEADERS });
+  if (await limited(env, req, 'ph')) return new Response(null, { status: 429, headers: BASE_HEADERS });
+  const r = await placePhoto(env.TOMTOM_KEY, id, env.TOMTOM_BASE);
+  const h = new Headers(r.headers);
+  for (const [k, v] of Object.entries(BASE_HEADERS)) h.set(k, v);
+  h.set('cross-origin-resource-policy', 'same-origin');
+  return new Response(r.body, { status: r.status, headers: h });
+}
+
 // ---------------------------------------------------------------- driver reports
 async function reports(req: Request, env: Env, url: URL, p: string) {
   const kv = env.REPORTS;
@@ -310,12 +380,13 @@ export default {
     const lang = pickLang(req, url);
     try {
       const p = url.pathname;
-      const isReportWrite = req.method === 'POST' && (p === '/api/report' || p === '/api/report/vote');
+      const isReportWrite = req.method === 'POST' && (p === '/api/report' || p === '/api/report/vote' || p === '/api/price');
       if (req.method !== 'GET' && req.method !== 'HEAD' && !isReportWrite) return json({ ok: false, error: 'method' }, 405);
       if (p === '/') return page(appPage(lang, url.origin));
       if (p === '/icon.svg') return new Response(iconSvg(), { headers: { ...BASE_HEADERS, 'content-type': 'image/svg+xml', 'cache-control': 'public, max-age=86400' } });
       if (p === '/manifest.webmanifest') return new Response(JSON.stringify(manifest(lang)), { headers: { ...BASE_HEADERS, 'content-type': 'application/manifest+json' } });
       if (p.startsWith('/vendor/') || p.startsWith('/fonts/')) return asset(p.slice(1)) ?? json({ ok: false, error: 'not_found' }, 404);
+      if (p === '/api/place/photo') return await photo(req, env, url);
       if (p.startsWith('/api/')) {
         // A custom header makes any cross-site call need a CORS preflight, which is never granted.
         if (req.headers.get('x-hn') !== '1') return json({ ok: false, error: 'forbidden' }, 403);
@@ -326,6 +397,8 @@ export default {
         if (p === '/api/reports' || p === '/api/report' || p === '/api/report/vote') return await reports(req, env, url, p);
         if (p === '/api/cameras') return await cameras(ctx, env);
         if (p === '/api/fuel') return await fuel(req, env, url, lang);
+        if (p === '/api/prices' || p === '/api/price') return await prices(req, env, url, p);
+        if (p === '/api/place') return await place(req, env, url, lang, ctx);
         if (p === '/api/incidents') return await incidentList(req, env, url);
         if (p.startsWith('/api/traffic/')) return await traffic(req, env, url, p.slice(13).split('/'));
       }

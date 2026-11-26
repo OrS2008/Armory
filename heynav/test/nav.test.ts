@@ -167,7 +167,7 @@ describe('server', () => {
   it('serves MapLibre and the fonts itself', async () => {
     expect((await get('/vendor/maplibre-gl.mjs', {})).headers.get('content-type')).toContain('javascript');
     expect((await get('/vendor/maplibre-gl-worker.mjs?v=6', {})).status).toBe(200);
-    expect((await get('/fonts/heebo-hebrew-400-normal.woff2', {})).headers.get('content-type')).toBe('font/woff2');
+    expect((await get('/fonts/rubik-hebrew-400-normal.woff2', {})).headers.get('content-type')).toBe('font/woff2');
     expect((await get('/vendor/../index.ts', {})).status).toBe(404);
   });
   it('refuses API calls without the app header (no cross-site use)', async () => {
