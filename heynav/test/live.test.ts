@@ -137,7 +137,7 @@ describe('server: traffic and cameras', () => {
     expect((await get('/api/cameras')).status).toBe(502);
   });
   it('reports traffic as off, and routes still work, without a TomTom key', async () => {
-    expect(await (await get('/api/config')).json()).toEqual({ ok: true, traffic: false });
+    expect(await (await get('/api/config')).json()).toMatchObject({ ok: true, traffic: false });
     expect((await get('/api/traffic/12/2440/1660.png')).status).toBe(404);
     expect(await (await get('/api/incidents?bbox=34.7,32,34.8,32.1')).json()).toEqual({ ok: true, incidents: [] });
   });

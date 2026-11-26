@@ -66,7 +66,7 @@ export async function incidents(key: string, bbox: [number, number, number, numb
   u.searchParams.set('fields', '{incidents{type,geometry{type,coordinates},properties{iconCategory,magnitudeOfDelay,delay,roadNumbers}}}');
   u.searchParams.set('timeValidityFilter', 'present');
   const r = await fetch(u);
-  if (!r.ok) return [];
+  if (!r.ok) throw new Error(`incidents ${r.status}: ${(await r.text().catch(() => '')).slice(0, 160)}`);
   const d = (await r.json().catch(() => null)) as { incidents?: { geometry?: { type: string; coordinates: unknown }; properties?: { iconCategory?: number; magnitudeOfDelay?: number; delay?: number; roadNumbers?: string[] } }[] } | null;
   const out: Incident[] = [];
   for (const i of d?.incidents ?? []) {

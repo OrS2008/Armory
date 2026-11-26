@@ -27,7 +27,7 @@ export function placeFromPhoton(f: PhotonFeature): Place {
 }
 
 
-export type RouteOut = ReturnType<typeof buildRoute> & { traffic?: { seconds: number; delay: number } };
+export type RouteOut = ReturnType<typeof buildRoute> & { traffic?: { seconds: number; delay: number; live?: boolean }; areas?: string[]; tolls?: boolean };
 
 /** Fastest by traffic time when known (else the router's estimate); shortest by distance. */
 export function rank(routes: RouteOut[]) {

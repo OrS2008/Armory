@@ -19,7 +19,7 @@ const ok = (name, cond, extra = '') => { checks.push([name, !!cond]); console.lo
     p.on('console', (m) => { if (m.type() === 'error') errs.push(m.text()); });
 
     await p.goto(B + '/');
-    await p.waitForFunction(() => document.querySelector('#gps')?.textContent?.includes('32.08'), null, { timeout: 15000 });
+    await p.waitForFunction(() => document.querySelector('#gps')?.textContent?.includes('GPS'), null, { timeout: 15000 });
     ok('location shown', true, await p.textContent('#gps'));
     await p.waitForTimeout(3000);
     const tiles = await p.evaluate(() => performance.getEntriesByType('resource').filter((e) => e.name.includes('openfreemap')).length);

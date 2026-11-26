@@ -8,5 +8,15 @@ name = "RL_API"
 namespace_id = "7201"
 simple = { limit = 60, period = 60 }
 
+# Driver reports (police, accidents, closures…), shared by everyone.
+[[kv_namespaces]]
+binding = "REPORTS"
+id = "24c52f6fd89b4f5ab1f505ba37424c9d"
+
+[[ratelimits]]
+name = "RL_REPORT"
+namespace_id = "7202"
+simple = { limit = 6, period = 60 }
+
 [observability]
 enabled = true
