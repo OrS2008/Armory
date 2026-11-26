@@ -11,7 +11,7 @@ import { ASSETS } from './assets.gen';
 import { buildRoute, type OsrmRoute } from './guidance';
 import { pickLang, type Lang } from './i18n';
 import { appPage, iconSvg, manifest } from './page';
-import { attachLanes, lonLat, nearFirst, placeFromNominatim, placeFromPhoton, rank, type NominatimHit, type PhotonFeature, type Place, type RouteOut } from './api';
+import { FOREIGN, attachLanes, lonLat, nearFirst, preferReadable, placeFromNominatim, placeFromPhoton, rank, type NominatimHit, type PhotonFeature, type Place, type RouteOut } from './api';
 import { getCameras } from './cameras';
 import { incidents, timeRoute, trafficTile } from './traffic';
 import { fuelOnRoute, fuelTomTom } from './fuel';
@@ -104,7 +104,7 @@ async function search(req: Request, env: Env, url: URL, lang: Lang, ctx: Executi
   if (lat != null && lon != null) { u.searchParams.set('lat', lat.toFixed(2)); u.searchParams.set('lon', lon.toFixed(2)); }
 
   const cache = (globalThis as { caches?: CacheStorage & { default?: Cache } }).caches?.default;
-  const key = new Request(`https://cache.heynav/search/v3?${u.searchParams}`);
+  const key = new Request(`https://cache.heynav/search/v4?${u.searchParams}`);
   const hit = cache ? await cache.match(key) : undefined;
   if (hit) return json(await hit.json(), 200, 'private, max-age=300');
 
@@ -114,8 +114,17 @@ async function search(req: Request, env: Env, url: URL, lang: Lang, ctx: Executi
   for (let attempt = 0; attempt < 3 && !places; attempt++) {
     if (attempt) await new Promise((res) => setTimeout(res, attempt * 200));
     const r = await fetch(u, { headers: { 'user-agent': UA, accept: 'application/json' } }).catch(() => null);
-    if (r?.ok) places = ((await r.json()) as { features?: PhotonFeature[] }).features?.map(placeFromPhoton) ?? [];
-    else console.error('search: photon', r?.status ?? 'network');
+    if (r?.ok) {
+      let feats = ((await r.json()) as { features?: PhotonFeature[] }).features ?? [];
+      // Hebrew user abroad: local names in another script get their English version
+      if (lang === 'he' && feats.some((f) => FOREIGN.test(JSON.stringify(f.properties)))) {
+        const ue = new URL(u);
+        ue.searchParams.set('lang', 'en');
+        const re = await fetch(ue, { headers: { 'user-agent': UA, accept: 'application/json' } }).catch(() => null);
+        if (re?.ok) feats = preferReadable(feats, ((await re.json()) as { features?: PhotonFeature[] }).features ?? []);
+      }
+      places = feats.map(placeFromPhoton);
+    } else console.error('search: photon', r?.status ?? 'network');
   }
   if (!places) places = await nominatim(env, q, lang, lat, lon);
   if (!places) return json({ ok: false, error: 'upstream' }, 502);

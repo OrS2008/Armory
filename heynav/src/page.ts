@@ -256,7 +256,12 @@ const map=new ml.Map({container:'map',style:styleUrl(),center:store.get('hn_last
   transformRequest:(url)=>url.startsWith(location.origin+'/api/')?{url,headers:{'x-hn':'1'}}:{url}});
 map.addControl(new ml.AttributionControl({compact:true,customAttribution:'Routing © <a href="https://project-osrm.org" target="_blank" rel="noopener">OSRM</a> · Search © <a href="https://photon.komoot.io" target="_blank" rel="noopener">Photon</a>'}),LANG==='he'?'top-left':'top-right');
 let routeData=null,remainData=null;
-function labelLang(){const f=LANG==='he'?['coalesce',['get','name:he'],['get','name']]:['coalesce',['get','name:en'],['get','name:latin'],['get','name']];
+// Labels: Hebrew: name:he; else the local name if it's Hebrew or Latin; else English / Latin letters (never Armenian etc.)
+function nameExpr(){const first=['slice',['coalesce',['get','name'],''],0,1];
+  const readableLocal=['any',['all',['>=',first,'\u0590'],['<=',first,'\u05FF']],['<',first,'\u0250']];
+  const latin=['coalesce',['get','name:en'],['get','name:latin'],['get','name_int'],['get','name']];
+  return LANG==='he'?['coalesce',['get','name:he'],['case',readableLocal,['get','name'],latin]]:['case',['<',first,'\u0250'],['coalesce',['get','name:en'],['get','name']],latin];}
+function labelLang(){const f=nameExpr();
   for(const l of map.getStyle().layers){if(l.type!=='symbol')continue;const tf=l.layout&&l.layout['text-field'];if(!tf)continue;const s=JSON.stringify(tf);
     if(s.includes('name'))try{map.setLayoutProperty(l.id,'text-field',f);}catch(e){}}}
 function addRouteLayers(){
@@ -357,7 +362,7 @@ async function addPois(){const imgs=await poiImages();
   const st=map.getStyle();if(!st.sources.openmaptiles)return;
   // the style's own POI icons are replaced by ours (the dark style has none at all)
   for(const l of st.layers)if(l['source-layer']==='poi'&&!l.id.startsWith('hn-'))try{map.setLayoutProperty(l.id,'visibility','none');}catch(e){}
-  const name=LANG==='he'?['coalesce',['get','name:he'],['get','name']]:['coalesce',['get','name:en'],['get','name:latin'],['get','name']];
+  const name=nameExpr();
     [[1,13.5],[2,15],[3,16.8]].forEach(([t,minz])=>{const id='hn-poi-'+t;if(map.getLayer(id))return;
     map.addLayer({id,type:'symbol',source:'openmaptiles','source-layer':'poi',minzoom:minz,filter:poiTier(t),
       layout:{'icon-image':['concat','hn-',POI_CAT],'icon-size':['interpolate',['linear'],['zoom'],13,.75,16,.9,18,1.15],'icon-allow-overlap':false,'icon-padding':6,
@@ -375,7 +380,7 @@ const poiCatOf=(p)=>{const c=p.class,sc=p.subclass;
   if(c==='restaurant'||c==='fast_food')return 'food';if(c==='hospital')return 'health';if(['attraction','museum','cinema','theatre','stadium','zoo','castle','aquarium','theme_park'].includes(c))return 'fun';
   if(['cafe','ice_cream','bakery'].includes(c))return 'cafe';if(c==='bar'||c==='beer')return 'bar';if(c==='grocery')return 'grocery';if(c==='pharmacy')return 'pharmacy';if(c==='bank')return 'bank';if(c==='atm')return 'atm';if((c==='school'||c==='college')&&sc!=='kindergarten')return 'school';if(c==='place_of_worship')return 'worship';if(c==='parking')return 'parking';return '';};
 for(const id of POI_LAYERS)map.on('click',id,(e)=>{const f=e.features&&e.features[0];if(!f)return;window.__poiClick=Date.now();
-  const pr=f.properties,cat=poiCatOf(pr),nm=(LANG==='he'?pr['name:he']||pr.name:pr['name:en']||pr.name)||'';
+  const pr=f.properties,cat=poiCatOf(pr),nm=readable((LANG==='he'?pr['name:he']||(/^[\u0590-\u05FF\u0000-\u024F]/.test(pr.name||'')?pr.name:pr['name:en']||pr['name:latin']||pr.name):pr['name:en']||pr['name:latin']||pr.name)||'');
   const ll=f.geometry.type==='Point'?f.geometry.coordinates:[e.lngLat.lng,e.lngLat.lat];
   openPlace({cat,name:nm,lon:ll[0],lat:ll[1]});});
 // ---------- place card: photo, name, rating, open now, address, call, website, navigate
@@ -478,7 +483,7 @@ let sTimer,sSeq=0;
 function renderPlaces(list,msg){const r=$('#res');r.textContent='';
   if(picking&&!msg&&!gpsDenied){const b=document.createElement('button');b.type='button';const n=document.createElement('b');n.textContent=L.from_gps;b.appendChild(n);b.onclick=()=>{$('#res').textContent='';useGps();endPick();$('#q').focus();};r.appendChild(b);}
   if(msg){const d=document.createElement('div');d.className='msg';d.textContent=msg;r.appendChild(d);return;}
-  for(const p of list){const b=document.createElement('button');b.type='button';const n=document.createElement('b');n.textContent=p.name;b.appendChild(n);
+  for(const p of list){p.name=readable(p.name);p.detail=readable(p.detail||'');const b=document.createElement('button');b.type='button';const n=document.createElement('b');n.textContent=p.name;b.appendChild(n);
     if(p.detail){const s=document.createElement('span');s.textContent=p.detail;b.appendChild(s);}b.onclick=()=>choose(p);r.appendChild(b);}}
 async function doSearch(q){const seq=++sSeq;renderPlaces([],L.searching);
   try{const c=fix?fix.pos:map.getCenter().toArray();const d=await api('/api/search?q='+encodeURIComponent(q)+'&lat='+c[1].toFixed(3)+'&lon='+c[0].toFixed(3));
@@ -492,6 +497,27 @@ function chips(){const c=$('#chips');c.textContent='';const add=(txt,cls,fn)=>{c
   if(h)add('🏠 '+L.home,'fav',()=>choose(h));if(w)add('💼 '+L.work,'fav',()=>choose(w));
   rec.forEach(p=>add('↺ '+p.name,'',()=>choose(p)));if(rec.length)add('✕ '+L.clear,'x',()=>{store.set('hn_recent',[]);chips();});}
 function remember(p){const rec=store.get('hn_recent',[]).filter(x=>!(x.name===p.name&&Math.abs(x.lat-p.lat)<1e-4));rec.unshift({name:p.name,detail:p.detail||'',lon:p.lon,lat:p.lat});store.set('hn_recent',rec.slice(0,8));}
+
+// ---------- street names in the driver's language
+// Routers give local names (Armenian in Yerevan). Prefer the map's own name in our language;
+// otherwise write it in Latin letters, so directions never show a script the driver can't read.
+const FOREIGN_RUN=/[Ͱ-ϿЀ-ӿ԰-֏؀-ۿႠ-ჿ฀-๿぀-ヿ一-鿿가-힯][Ͱ-ϿЀ-ӿ԰-֏؀-ۿႠ-ჿ฀-๿぀-ヿ一-鿿가-힯\s.'’\-\d]*/g;
+const TR={};
+'ա a բ b գ g դ d ե e զ z է e ը y թ t ժ zh ի i լ l խ kh ծ ts կ k հ h ձ dz ղ gh ճ ch մ m յ y ն n շ sh ո o չ ch պ p ջ j ռ r ս s վ v տ t ր r ց ts ւ v փ p ք k օ o ֆ f և ev'
+ .concat(' а a б b в v г g д d е e ё yo ж zh з z и i й y к k л l м m н n о o п p р r с s т t у u ф f х kh ц ts ч ch ш sh щ shch ъ  ы y ь  э e ю yu я ya і i ї yi є ye ґ g')
+ .concat(' ა a ბ b გ g დ d ე e ვ v ზ z თ t ი i კ k ლ l მ m ნ n ო o პ p ჟ zh რ r ს s ტ t უ u ფ p ქ k ღ gh ყ q შ sh ჩ ch ც ts ძ dz წ ts ჭ ch ხ kh ჯ j ჰ h')
+ .concat(' α a β v γ g δ d ε e ζ z η i θ th ι i κ k λ l μ m ν n ξ x ο o π p ρ r σ s ς s τ t υ y φ f χ ch ψ ps ω o ά a έ e ή i ί i ό o ύ y ώ o')
+ .split(' ').reduce((k,v,i,a)=>{if(i%2===0)TR[v]=a[i+1]||'';return k;},0);
+function translit(s){let t=s.toLowerCase().replace(/ու/g,'u');let out='';for(const ch of t)out+=ch in TR?TR[ch]:ch;
+  if(FOREIGN_RUN.test(out)){FOREIGN_RUN.lastIndex=0;return null;}FOREIGN_RUN.lastIndex=0;
+  return out.replace(/(^|[\s\-])([a-z])/g,(m,a,b)=>a+b.toUpperCase());}
+function mapName(local){if(!map.isStyleLoaded())return null;try{
+  const fs=map.querySourceFeatures('openmaptiles',{sourceLayer:'transportation_name',filter:['==',['get','name'],local]});
+  for(const f of fs){const p=f.properties;const n=LANG==='he'?(p['name:he']||p['name:en']||p.name_en):(p['name:en']||p.name_en);if(n&&!FOREIGN_RUN.test(n)){FOREIGN_RUN.lastIndex=0;return n;}FOREIGN_RUN.lastIndex=0;}}catch(e){}return null;}
+function readable(txt){if(!txt)return txt;return txt.replace(FOREIGN_RUN,(run,at,all)=>{const r=run.trim();if(!r)return run;const tail=run.slice(run.trimEnd().length);const n=mapName(r)||translit(r)||r;
+  const glued=at>0&&/[\u05D0-\u05EA]/.test(all[at-1])&&/^[A-Za-z]/.test(n)&&(at<2||/[\s(]/.test(all[at-2]));return (glued?'-':'')+n+tail;});}
+// Rewrites a route's names and directions in place (also what the voice will say).
+function localizeRoute(r){if(!r||!r.steps)return r;for(const s of r.steps){s.text=readable(s.text);if(s.name)s.name=readable(s.name);}return r;}
 
 // ---------- route preview
 let destMarker=null;
@@ -515,7 +541,7 @@ async function choose(p){$('#res').textContent='';$('#q').blur();
 async function planRoute(){$('#psum').textContent=L.calc;$('#go').disabled=true;setMode('preview');
   $('#alts').textContent='';$('#pextra').textContent='';stopBar();
   try{const d=await api(routeUrl(fix.pos,null));
-    routes=d.routes||[d.route];routeShortest=d.shortest??0;routeBest=d.best??0;pickRoute(routeBest);
+    routes=(d.routes||[d.route]).map(localizeRoute);routeShortest=d.shortest??0;routeBest=d.best??0;pickRoute(routeBest);
     $('#go').disabled=false;
     const b=new ml.LngLatBounds();routes.forEach(r=>r.geometry.forEach(c=>b.extend(c)));map.fitBounds(b,{padding:{top:80,bottom:80,left:LANG==='he'?60:600,right:LANG==='he'?600:60},duration:900,maxZoom:16});}
   catch(e){$('#psum').textContent=L.route_failed;}}
@@ -601,12 +627,12 @@ let segHint=0;function routeIndex(p){const g=route.geometry,cum=trk.cum;let i=Ma
 function padding(){const h=window.innerHeight;return {top:h*0.5,bottom:h*0.04,left:0,right:0};}
 async function reroute(f,force){const now=Date.now();if(rerouting||(!force&&now-lastReroute<8000)||!dest)return;rerouting=true;lastReroute=now;$('#bt').textContent=L.rerouting;
   try{const d=await api(routeUrl(f.pos,lastProg?(f.heading??lastProg.bearing):null));
-    routes=d.routes||[d.route];route=routes[d.best??0];routeData=route.geometry;routeFactor=route.traffic&&route.duration>0?route.traffic.seconds/route.duration:1;armRoute();say(trk.intro());}
+    routes=(d.routes||[d.route]).map(localizeRoute);route=routes[d.best??0];routeData=route.geometry;routeFactor=route.traffic&&route.duration>0?route.traffic.seconds/route.duration:1;armRoute();say(trk.intro());}
   catch(e){}finally{rerouting=false;}}
 /** Every few minutes: is there now a clearly faster way (traffic changed)? Switch, and say how much it saves. */
 async function checkFaster(f,p){checking=true;lastCheck=Date.now();
   try{const d=await api(routeUrl(f.pos,p.bearing));
-    const rs=(d.routes||[]).filter(r=>r.traffic);if(!rs.length||mode!=='nav')return;
+    const rs=(d.routes||[]).filter(r=>r.traffic).map(localizeRoute);if(!rs.length||mode!=='nav')return;
     const ahead=remainData||route.geometry;let same=null,sameOv=0;for(const r of rs){const ov=NAVCORE.overlap(r.geometry,ahead);if(ov>sameOv){sameOv=ov;same=r;}}
     const current=same&&sameOv>=0.8?same.traffic.seconds:p.remainingTime*routeFactor;
     const best=rs.reduce((a,b)=>a.traffic.seconds<=b.traffic.seconds?a:b);
@@ -811,7 +837,7 @@ document.querySelectorAll('[data-lang]').forEach(b=>b.onclick=()=>{document.cook
 themeBtns();chips();setMode('browse');
 {const m=store.get('hn_manual',null);if(m&&typeof m.lon==='number'){firstFix=false;onFix({pos:[m.lon,m.lat],accuracy:0,speed:null,heading:null,time:Date.now(),manual:true,name:m.name||''});map.jumpTo({center:[m.lon,m.lat],zoom:15});}}
 startGps();loadConfig();loadCams();
-window.__hnmap=map;window.__hn={choose,sim:()=>startNav(true),pitch:()=>map.getPitch(),state:()=>({stop,fuel:fuel.length,lanes:route?route.steps.filter(s=>s.lanes).length:0,speed:Math.round(kmh),reports:reps.length,opts,mode,follow,dest,steps:route&&route.steps.length,prog:lastProg,sim:!!sim,routes:routes&&routes.length,routeIdx,cams:cams.length,camHits:camHits.length,traffic:TRAFFIC})};
+window.__hnmap=map;window.__hn={readable,choose,sim:()=>startNav(true),pitch:()=>map.getPitch(),state:()=>({stop,fuel:fuel.length,lanes:route?route.steps.filter(s=>s.lanes).length:0,speed:Math.round(kmh),reports:reps.length,opts,mode,follow,dest,steps:route&&route.steps.length,prog:lastProg,sim:!!sim,routes:routes&&routes.length,routeIdx,cams:cams.length,camHits:camHits.length,traffic:TRAFFIC})};
 `;
 
 export function appPage(lang: Lang, origin: string) {

@@ -18,6 +18,24 @@ export interface PhotonFeature {
   properties: Record<string, string | undefined>;
 }
 
+/** Text in a script that is neither Hebrew nor Latin (Armenian, Cyrillic, Georgian, Greek, Arabic, Asian…). */
+export const FOREIGN = /[Ͱ-ϿЀ-ӿ԰-֏؀-ۿႠ-ჿ฀-๿぀-ヿ一-鿿가-힯]/;
+
+/**
+ * Photon has no Hebrew; its default answer is the local name (Armenian in Yerevan).
+ * For a Hebrew user, take the English version of any place whose local name is in
+ * a foreign script.
+ */
+export function preferReadable(local: PhotonFeature[], english: PhotonFeature[]): PhotonFeature[] {
+  const byId = new Map(english.map((f) => [`${f.properties.osm_type}${f.properties.osm_id}`, f]));
+  return local.map((f) => {
+    const p = f.properties;
+    const txt = [p.name, p.street, p.city, p.district, p.state, p.country].filter(Boolean).join(' ');
+    if (!FOREIGN.test(txt)) return f;
+    return byId.get(`${p.osm_type}${p.osm_id}`) ?? f;
+  });
+}
+
 export function placeFromPhoton(f: PhotonFeature): Place {
   const p = f.properties;
   // OSM sometimes names internal roads by bare numbers ("1240"): useless to a driver.

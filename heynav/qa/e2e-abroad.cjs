@@ -1,0 +1,43 @@
+// Abroad (Yerevan): directions, search results and map labels stay in the chosen language.
+const { chromium } = require('playwright');
+const B = process.env.BASE || 'http://127.0.0.1:8795';
+const OUT = process.env.OUT || __dirname;
+const checks = [];
+const ok = (name, cond, extra = '') => { checks.push(!!cond); console.log((cond ? '  ✅ ' : '  ❌ ') + name + (extra ? ' — ' + extra : '')); };
+const ARM = /[԰-֏]/;
+(async () => {
+  const br = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
+  const c = await br.newContext({ viewport: { width: 1600, height: 900 } });
+  await c.addInitScript(() => { try { localStorage.setItem('hn_muted', 'true'); localStorage.setItem('hn_opts', '{"areas":false}'); localStorage.setItem('hn_manual', JSON.stringify({ lon: 44.5152, lat: 40.1776, name: 'Republic Square' })); } catch (e) {} });
+  const p = await c.newPage();
+  const errs = [];
+  p.on('pageerror', (e) => errs.push(e.message));
+  await p.goto(B + '/');
+  await p.waitForTimeout(4000);
+  ok('transliterates Armenian', !ARM.test(await p.evaluate(() => window.__hn.readable('צא מהכיכר אל Պաղ Թագավորի փողոց'))), await p.evaluate(() => window.__hn.readable('צא מהכיכר אל Պաղ Թագավորի փողոց')));
+  await p.evaluate(() => window.__hn.choose({ name: 'Cascade', lon: 44.5156, lat: 40.1913 }));
+  await p.waitForFunction(() => !document.querySelector('#go').disabled, null, { timeout: 40000 });
+  await p.click('#psteps');
+  const steps = await p.$$eval('#steplist .tx', (xs) => xs.map((x) => x.textContent));
+  ok('no Armenian in the directions', steps.length > 2 && !steps.some((t) => ARM.test(t)), steps.slice(0, 4).join(' | '));
+  await p.screenshot({ path: `${OUT}/abroad-steps.png` });
+  await p.click('#stepsheet [data-close]');
+  await p.click('#cancel');
+  await p.fill('#q', 'Abovyan');
+  await p.waitForSelector('#res button', { timeout: 20000 });
+  const res = await p.$$eval('#res button', (xs) => xs.map((x) => x.textContent));
+  ok('no Armenian in search results', !res.some((t) => ARM.test(t)), res.slice(0, 3).join(' | '));
+  await p.fill('#q', '');
+  await p.evaluate(() => window.__hnmap.jumpTo({ center: [44.5152, 40.1776], zoom: 16 }));
+  await p.waitForTimeout(4000);
+  const labels = await p.evaluate(() => window.__hnmap.queryRenderedFeatures().filter((f) => f.layer.type === 'symbol' && f.layer.layout && f.layer.layout['text-field']).slice(0, 400)
+    .map((f) => (f.layer.layout['text-field'].sections||[]).map((x) => x.text).join('')).filter(Boolean));
+  const bad = labels.filter((t) => ARM.test(t));
+  ok('map labels in Hebrew or Latin', labels.length > 5 && bad.length <= labels.length * 0.05, labels.length + ' labels, ' + bad.length + ' without any Latin name: ' + bad.slice(0, 4).join(' | '));
+  await p.screenshot({ path: `${OUT}/abroad-map.png` });
+  ok('no JS errors', errs.length === 0, errs.slice(0, 3).join(' | '));
+  await br.close();
+  const failed = checks.filter((x) => !x).length;
+  console.log(`\n${checks.length - failed}/${checks.length} checks passed`);
+  process.exit(failed ? 1 : 0);
+})();
