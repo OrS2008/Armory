@@ -29,7 +29,7 @@ import {
 import { burnPasswordCheck, hashPassword, randomBytes, randomToken, safeEqual, sha256, verifyPassword } from './crypto';
 import { logText, msg, note, pickLang, type Lang } from './i18n';
 import { clientMeta, html, json, readJson, text, type ClientMeta } from './http';
-import { appAuthPage, appPage, carPage, iconSvg, landingPage, manifest, pairPage, privacyPage, qrSharePage, resultPage, saAuthPage, saPage } from './pages';
+import { WAZE_EMBED, appAuthPage, appPage, carPage, drivePage, iconSvg, landingPage, manifest, pairPage, privacyPage, qrSharePage, resultPage, saAuthPage, saPage } from './pages';
 import { authenticationOptions, registrationOptions, verifyAuthentication, verifyRegistration, type AuthPurpose } from './passkeys';
 import { checkToken, configurePalgate, listDevices, openGate, PalGateError, waitForLink } from './palgate/api';
 import {
@@ -381,6 +381,12 @@ async function carRoute(req: Request, env: Env, ctx: ExecutionContext, url: URL,
     const dev = await deviceChannel(req, env);
     if (dev) return html(carPage(lang, dev.cfg.gates, dev.channel.enabled && dev.cfg.enabled, dev.channel.name));
     return html(pairPage(lang));
+  }
+  if (route === 'GET /drive') {
+    // Map page for the car's browser: Waze's own embed, and location for this page only.
+    const dev = await deviceChannel(req, env);
+    const page = dev ? drivePage(lang, dev.cfg.gates, dev.channel.enabled && dev.cfg.enabled) : drivePage(lang, [], false);
+    return html(page, 200, { 'permissions-policy': 'camera=(), microphone=(), geolocation=(self), payment=(), usb=(), interest-cohort=()' }, [`frame-src ${WAZE_EMBED}`]);
   }
   if (req.method !== 'POST' || !sameOrigin(req, url)) return json({ ok: false, message: 'forbidden' }, 403);
 

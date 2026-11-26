@@ -292,9 +292,90 @@ $$('.big').forEach(b=>b.addEventListener('click',async()=>{const t=b.querySelect
   return shell(
     lang,
     t.open_gate,
-    `${floatControls(lang, t)}<main>${buttons}<div id="msg" role="status" aria-live="polite"></div><div class="muted small">🔒 ${esc(deviceName)}</div></main>`,
+    `${floatControls(lang, t)}<main>${buttons}<div id="msg" role="status" aria-live="polite"></div><a class="btn btn-ghost" href="/car/drive" style="min-height:56px;font-size:1.1rem">${t.drive_btn}</a><div class="muted small">🔒 ${esc(deviceName)}</div></main>`,
     { css, js, app: true },
   );
+}
+
+/** Waze's official embeddable live map (developers.google.com/waze/iframe). */
+export const WAZE_EMBED = 'https://embed.waze.com';
+
+export function drivePage(lang: Lang, gates: Gate[], active: boolean) {
+  const t = tr(lang);
+  const css = `html,body{height:100%;overflow:hidden}.page{height:100%}
+.drive{position:fixed;inset:0;background:#0b0e11}
+.drive iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+.hud{position:absolute;z-index:5;background:color-mix(in srgb,var(--card) 92%,transparent);border:1px solid var(--line2);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+.top{top:max(12px,env(safe-area-inset-top));inset-inline-start:12px;width:min(560px,calc(100% - 24px));padding:12px;display:grid;gap:10px}
+.top::before,.top::after{content:"";position:absolute;width:14px;height:14px}
+.top::before{top:-1px;inset-inline-end:-1px;border-top:2px solid var(--brand);border-inline-end:2px solid var(--brand)}
+.top::after{bottom:-1px;inset-inline-start:-1px;border-bottom:2px solid var(--brand);border-inline-start:2px solid var(--brand)}
+.top form{display:flex;gap:8px}.top input{flex:1;min-height:56px;font-size:max(18px,1.15rem)}
+.top .btn-primary{min-height:56px;padding:0 26px;font-size:1.15rem}
+.chips2{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none}.chips2::-webkit-scrollbar{display:none}
+.chips2 button{flex:none;min-height:44px;padding:0 14px;border:1px solid var(--line2);background:var(--bg);color:var(--fg);font-weight:600;white-space:nowrap}
+.chips2 button.home{border-color:var(--brand);color:var(--brand)}
+.kick{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.kick button{background:none;border:0;color:var(--muted);font-size:.8rem;min-height:32px;padding:0 4px}
+.side{bottom:calc(14px + env(safe-area-inset-bottom));inset-inline-start:12px;padding:10px 12px;display:flex;flex-direction:column;gap:8px;max-width:calc(100% - 24px)}
+.side .row{display:flex;gap:8px;flex-wrap:wrap}.side .btn{min-height:48px}
+.geo{font-family:var(--mono);font-size:.78rem;letter-spacing:.06em;color:var(--ok);direction:ltr;text-align:start}
+.geo.bad{color:var(--bad);font-family:var(--font);letter-spacing:0;direction:inherit}
+.gatebar{position:absolute;z-index:5;bottom:calc(14px + env(safe-area-inset-bottom));inset-inline-end:12px;display:flex;flex-direction:column;gap:10px}
+.gb{min-width:min(240px,40vw);min-height:84px;padding:10px 18px;border:0;clip-path:var(--cut);background:linear-gradient(180deg,var(--act),var(--act2));color:var(--act-fg);font-family:var(--display);font-size:2rem;line-height:.95;box-shadow:var(--glow)}
+.gb.ok{background:var(--ok)}.gb.bad{background:var(--bad);color:#fff}
+.disc2{font-size:.7rem;color:var(--muted)}
+.ctl-float{top:auto;bottom:calc(14px + env(safe-area-inset-bottom));inset-inline-end:auto;inset-inline-start:50%;transform:translateX(-50%)}
+[dir=rtl] .ctl-float{transform:translateX(50%)}
+@media (max-width:820px){.ctl-float{display:none}}
+@media (max-width:620px){.gatebar{bottom:auto;top:calc(max(12px,env(safe-area-inset-top)) + 190px)}.gb{min-height:64px;font-size:1.5rem;min-width:0}}`;
+  const gateBtns = active && gates.length
+    ? `<div class="gatebar">${gates.map((g) => `<button class="gb" data-alias="${esc(g.alias)}"><span class="t">${esc(g.label || g.alias)}</span></button>`).join('')}</div>`
+    : '';
+  const body = `${floatControls(lang, t)}<main class="drive">
+<iframe id="map" title="Waze" referrerpolicy="no-referrer" sandbox="allow-scripts allow-same-origin allow-popups" src="${WAZE_EMBED}/iframe?zoom=12&amp;lat=32.0853&amp;lon=34.7818&amp;ct=livemap"></iframe>
+<section class="hud top" aria-label="${t.drive_title}">
+  <form id="f" role="search"><input id="q" type="search" enterkeyhint="go" autocomplete="off" placeholder="${t.drive_where}" aria-label="${t.drive_where}" maxlength="200"><button class="btn-primary" type="submit">${t.drive_go}</button></form>
+  <div class="chips2" id="chips"></div>
+  <div class="kick"><span class="kicker">// ${t.drive_hint}</span><button type="button" id="clear" hidden>${t.drive_clear}</button></div>
+</section>
+${gateBtns}
+<section class="hud side">
+  <div class="geo" id="geo" role="status" aria-live="polite">${t.drive_locating}</div>
+  <div class="row"><button class="btn btn-ghost btn-sm" id="loc" type="button">◎ ${t.drive_locate}</button><button class="btn btn-ghost btn-sm" id="sethome" type="button">🏠 ${t.drive_set_home}</button>${gateBtns ? `<a class="btn btn-ghost btn-sm" href="/car">${t.drive_back}</a>` : ''}</div>
+  <div class="disc2">${t.disclaimer}</div>
+</section></main>`;
+  const js = `
+const EMBED=${JSON.stringify(WAZE_EMBED)};
+let fix=null,shown=null,lastLoad=0;
+const store={get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
+function dist(a,b){const R=6371e3,r=Math.PI/180,x=(b.lon-a.lon)*r*Math.cos((a.lat+b.lat)*r/2),y=(b.lat-a.lat)*r;return Math.sqrt(x*x+y*y)*R;}
+function center(p,zoom){$('#map').src=EMBED+'/iframe?zoom='+zoom+'&lat='+p.lat.toFixed(6)+'&lon='+p.lon.toFixed(6)+'&ct=livemap&pin=1';shown=p;lastLoad=Date.now();}
+function go(url){location.href=url;}
+function navQuery(q){q=q.trim();if(!q)return;const r=store.get('hg_recent',[]).filter(x=>x!==q);r.unshift(q);store.set('hg_recent',r.slice(0,6));
+  go('https://www.waze.com/ul?q='+encodeURIComponent(q)+'&navigate=yes');}
+function navLL(p){go('https://www.waze.com/ul?ll='+p.lat.toFixed(6)+'%2C'+p.lon.toFixed(6)+'&navigate=yes');}
+function chips(){const c=$('#chips');c.textContent='';const home=store.get('hg_home',null),rec=store.get('hg_recent',[]);
+  if(home){const b=document.createElement('button');b.type='button';b.className='home';b.textContent='🏠 '+L.drive_home;b.onclick=()=>navLL(home);c.appendChild(b);}
+  rec.forEach(q=>{const b=document.createElement('button');b.type='button';b.textContent='↺ '+q;b.onclick=()=>navQuery(q);c.appendChild(b);});
+  c.hidden=!c.children.length;$('#clear').hidden=!rec.length;}
+$('#f').addEventListener('submit',e=>{e.preventDefault();navQuery($('#q').value);});
+$('#clear').onclick=()=>{store.set('hg_recent',[]);chips();};
+$('#loc').onclick=()=>{if(fix)center(fix,16);else{toast(L.drive_locating);locate();}};
+$('#sethome').onclick=()=>{if(!fix)return toast(L.drive_need_fix,'bad');store.set('hg_home',{lat:fix.lat,lon:fix.lon});chips();toast(L.drive_home_saved,'ok');};
+function onPos(p){const c=p.coords;fix={lat:c.latitude,lon:c.longitude};
+  const sp=c.speed!=null&&c.speed>0?' · '+Math.round(c.speed*3.6)+' km/h':'';
+  const g=$('#geo');g.className='geo';g.textContent=fix.lat.toFixed(5)+', '+fix.lon.toFixed(5)+' · '+F(L.drive_acc,Math.round(c.accuracy))+sp;
+  if(!shown)center(fix,16);else if(dist(shown,fix)>400&&Date.now()-lastLoad>30000)center(fix,16);}
+function onErr(){const g=$('#geo');g.className='geo bad';g.textContent=L.drive_no_geo;}
+let watching=false;
+function locate(){if(!('geolocation' in navigator))return onErr();if(watching)return;watching=true;
+  navigator.geolocation.watchPosition(onPos,e=>{watching=false;onErr(e);},{enableHighAccuracy:true,maximumAge:5000,timeout:20000});}
+$$('.gb').forEach(b=>b.addEventListener('click',async()=>{const t=b.querySelector('.t'),label=t.textContent;b.disabled=true;t.textContent=L.opening;
+  try{await post('/car/open',{alias:b.dataset.alias});b.classList.add('ok');t.textContent=L.opened;}catch(e){b.classList.add('bad');t.textContent='❌';toast(e.message,'bad');}
+  setTimeout(()=>{b.disabled=false;b.classList.remove('ok','bad');t.textContent=label;},3000);}));
+chips();locate();`;
+  return shell(lang, t.drive_title, body, { css, js, app: true, footer: false });
 }
 
 // ------------------------------------------------------------ sign-up & sign-in
