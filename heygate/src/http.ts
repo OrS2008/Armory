@@ -27,6 +27,7 @@ export function html(body: string, status = 200, extra: Record<string, string> =
     `script-src 'nonce-${nonce}'`,
     "style-src 'unsafe-inline'",
     "img-src 'self' data:",
+    "font-src 'self'",
     "manifest-src 'self'",
     "connect-src 'self'",
     "form-action 'self'",

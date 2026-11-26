@@ -1,3 +1,4 @@
+import { FONT_FILES } from './fonts.gen';
 import qrcode from 'qrcode-generator';
 import { accessEnabled, verifyAccess } from './access';
 import {
@@ -268,6 +269,13 @@ async function route(req: Request, env: Env, ctx: ExecutionContext, url: URL, pa
     }
     if (url.pathname === '/robots.txt') return text('User-agent: *\nAllow: /\n');
     if (url.pathname === '/manifest.webmanifest') return new Response(manifest(), { headers: { 'content-type': 'application/manifest+json' } });
+    if (url.pathname.startsWith('/fonts/')) {
+      const name = url.pathname.slice(7);
+      const b64 = Object.prototype.hasOwnProperty.call(FONT_FILES, name) ? FONT_FILES[name] : undefined;
+      if (!b64) return new Response('Not found', { status: 404 });
+      const type = name.endsWith('.woff2') ? 'font/woff2' : 'text/plain; charset=utf-8';
+      return new Response(Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)), { headers: { 'content-type': type, 'cache-control': 'public, max-age=31536000, immutable', 'x-content-type-options': 'nosniff', 'access-control-allow-origin': url.origin } });
+    }
     if (url.pathname === '/icon.svg') return new Response(iconSvg(), { headers: { 'content-type': 'image/svg+xml', 'cache-control': 'public, max-age=86400' } });
     if (!env.ENC_KEY || !env.SETUP_CODE) return text('Service unavailable', 503);
     if (url.pathname.length > 200 || url.search.length > 300) return text('Bad request', 400);
