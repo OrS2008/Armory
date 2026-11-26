@@ -51,6 +51,9 @@ button,input{font:inherit;color:inherit}button{cursor:pointer;touch-action:manip
 #chips{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none}#chips::-webkit-scrollbar{display:none}#chips:empty{display:none}
 #chips button{flex:none;min-height:46px;padding:0 14px;border:1px solid var(--line2);background:var(--bg);font-weight:700;white-space:nowrap;max-width:260px;overflow:hidden;text-overflow:ellipsis}
 #chips button.fav{border-color:var(--brand);color:var(--brand)}#chips button.x{color:var(--muted);font-weight:400}
+.locrow{display:flex;gap:8px;flex-wrap:wrap}.locrow .btn{min-height:46px;font-size:.95rem;padding:0 14px}
+#pickhint{color:var(--brand);letter-spacing:.08em;text-transform:none;font-size:.8rem}
+#search.picking{border-color:var(--brand)}
 #gps{font:700 .78rem var(--mono);letter-spacing:.06em;color:var(--ok);direction:ltr;text-align:start}#gps.bad{color:var(--bad);font-family:var(--font);letter-spacing:0;direction:inherit;font-size:.95rem}
 /* preview */
 #preview{bottom:calc(14px + env(safe-area-inset-bottom));inset-inline-start:14px;width:min(560px,calc(100% - 28px));padding:16px;display:grid;gap:12px}
@@ -157,6 +160,8 @@ function setMode(m){mode=m;show('#search',m==='browse');show('#corner',m==='brow
 
 // ---------- GPS
 function gpsLine(f){const g=$('#gps');if(!f){return;}
+  $('#usegps').hidden=!f.manual;
+  if(f.manual){g.className='';g.textContent='📍 '+L.manual_loc+(f.name?' · '+f.name:'')+' · '+f.pos[1].toFixed(5)+', '+f.pos[0].toFixed(5);return;}
   const weak=f.accuracy>50;g.className=weak?'bad':'';
   g.textContent=(weak?'⚠ '+L.weak_gps+' · ':'')+f.pos[1].toFixed(5)+', '+f.pos[0].toFixed(5)+' · ±'+Math.round(f.accuracy)+' m'+(f.speed>0.5?' · '+Math.round(f.speed*3.6)+' km/h':'');}
 function onFix(f){fix=f;gpsLine(f);
@@ -166,10 +171,22 @@ function onFix(f){fix=f;gpsLine(f);
   if(mode==='browse'&&follow&&!firstFix)map.easeTo({center:f.pos,duration:800});}
 let watchId=null;
 function startGps(){if(!('geolocation' in navigator)){gpsErr();return;}
-  watchId=navigator.geolocation.watchPosition(p=>{if(sim)return;const c=p.coords;
+  watchId=navigator.geolocation.watchPosition(p=>{if(sim)return;const c=p.coords;if(fix&&fix.manual&&!(c.accuracy<=100))return;
     onFix({pos:[c.longitude,c.latitude],accuracy:c.accuracy||999,speed:c.speed,heading:(c.heading!=null&&!isNaN(c.heading))?c.heading:null,time:p.timestamp});},
-    e=>{if(!fix)gpsErr();},{enableHighAccuracy:true,maximumAge:2000,timeout:30000});}
-function gpsErr(){const g=$('#gps');g.className='bad';g.textContent=L.no_geo;}
+    e=>{if(!fix||fix.manual)gpsErr();},{enableHighAccuracy:true,maximumAge:2000,timeout:30000});}
+function gpsErr(){if(fix&&fix.manual)return;const g=$('#gps');g.className='bad';g.textContent=L.no_geo;}
+
+// ---------- manual location: for when GPS is off, denied or wrong
+let picking=false,pendingDest=null;
+function startPick(dest){picking=true;pendingDest=dest||null;$('#search').classList.add('picking');$('#pickhint').hidden=false;$('#q').value='';$('#res').textContent='';
+  $('#q').placeholder=L.where_now;$('#q').focus();}
+function endPick(){picking=false;$('#search').classList.remove('picking');$('#pickhint').hidden=true;$('#q').placeholder=L.where;}
+function setManual(p){const f={pos:[p.lon,p.lat],accuracy:0,speed:null,heading:null,time:Date.now(),manual:true,name:p.name&&p.name!==L.pin_name?p.name:''};
+  store.set('hn_manual',{lon:p.lon,lat:p.lat,name:f.name});firstFix=false;endPick();onFix(f);map.easeTo({center:f.pos,zoom:16,duration:800});toast(L.manual_set);
+  const d=pendingDest;pendingDest=null;if(d)choose(d);}
+$('#setloc').onclick=()=>picking?endPick():startPick();
+$('#usegps').onclick=()=>{store.set('hn_manual',null);fix=null;firstFix=true;$('#usegps').hidden=true;$('#gps').className='';$('#gps').textContent=L.locating;
+  if(watchId!=null)navigator.geolocation.clearWatch(watchId);startGps();};
 
 // ---------- search
 let sTimer,sSeq=0;
@@ -195,7 +212,9 @@ const fmtTime=(s)=>{const m=Math.max(1,Math.round(s/60));return m<60?m+' '+L.min
 const fmtClock=(s)=>{const d=new Date(Date.now()+s*1000);return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');};
 const fmtKm=(m)=>(m/1000).toFixed(m>=10000?0:1)+' '+L.km;
 async function choose(p){$('#res').textContent='';$('#q').blur();
-  if(!fix){toast(L.need_fix,true);return;}
+  if(picking)return setManual(p);
+  if(!fix){startPick(p);return;}
+  $('#pmanual').hidden=!fix.manual;
   dest=p;remember(p);chips();
   const el=document.createElement('div');el.className='pin';
   if(destMarker)destMarker.remove();destMarker=new ml.Marker({element:el,anchor:'bottom'}).setLngLat([p.lon,p.lat]).addTo(map);
@@ -254,7 +273,12 @@ map.on('dragstart',()=>{if(mode==='nav'||mode==='browse'){follow=false;if(mode==
 $('#recenter').onclick=()=>{follow=true;show('#recenter',false);if(lastProg)map.easeTo({center:lastProg.snapped,bearing:lastProg.bearing,pitch:55,zoom:17,padding:padding(),duration:600});};
 $('#overview').onclick=()=>{if(!route)return;follow=false;show('#recenter',true);const b=new ml.LngLatBounds();(remainData||route.geometry).forEach(c=>b.extend(c));map.fitBounds(b,{padding:80,pitch:0,bearing:0,duration:900});};
 map.on('click',(e)=>{if(mode!=='browse')return;const p={name:L.pin_name,detail:e.lngLat.lat.toFixed(5)+', '+e.lngLat.lng.toFixed(5),lon:e.lngLat.lng,lat:e.lngLat.lat};
-  const b=document.createElement('button');b.className='btn primary';b.textContent=L.pin_here;const pop=new ml.Popup({closeButton:false,offset:12}).setLngLat(e.lngLat).setDOMContent(b).addTo(map);b.onclick=()=>{pop.remove();choose(p);};});
+  if(picking)return setManual(p);
+  const box=document.createElement('div');box.style.cssText='display:grid;gap:8px';
+  const b=document.createElement('button');b.className='btn primary';b.textContent=L.pin_here;
+  const h=document.createElement('button');h.className='btn ghost';h.textContent=L.im_here;box.append(b,h);
+  const pop=new ml.Popup({closeButton:false,offset:12}).setLngLat(e.lngLat).setDOMContent(box).addTo(map);
+  b.onclick=()=>{pop.remove();choose(p);};h.onclick=()=>{pop.remove();setManual(p);};});
 
 // ---------- test drive: moves along the route as if driving, through the same guidance code
 function startSim(){const cum=NAVCORE.cumulative(route.geometry);sim={along:0,cum,timer:setInterval(simTick,1000)};}
@@ -267,7 +291,9 @@ function simTick(){if(!sim||!route)return;const st=route.steps.find((s,i)=>s.sta
 function themeBtns(){document.querySelectorAll('[data-theme-opt]').forEach(b=>b.setAttribute('aria-pressed',String((b.dataset.themeOpt==='dark')===dark())));}
 document.querySelectorAll('[data-theme-opt]').forEach(b=>b.onclick=()=>{document.documentElement.setAttribute('data-theme',b.dataset.themeOpt);store.set('hn_theme',b.dataset.themeOpt);themeBtns();map.setStyle(styleUrl());});
 document.querySelectorAll('[data-lang]').forEach(b=>b.onclick=()=>{document.cookie='hn_lang='+b.dataset.lang+'; path=/; max-age=31536000; samesite=lax; secure';location.reload();});
-themeBtns();chips();setMode('browse');startGps();
+themeBtns();chips();setMode('browse');
+{const m=store.get('hn_manual',null);if(m&&typeof m.lon==='number'){firstFix=false;onFix({pos:[m.lon,m.lat],accuracy:0,speed:null,heading:null,time:Date.now(),manual:true,name:m.name||''});map.jumpTo({center:[m.lon,m.lat],zoom:15});}}
+startGps();
 window.__hn={state:()=>({mode,follow,dest,steps:route&&route.steps.length,prog:lastProg,sim:!!sim})};
 `;
 
@@ -289,6 +315,8 @@ export function appPage(lang: Lang, origin: string) {
   <div id="res" role="listbox"></div>
   <div id="chips"></div>
   <div id="gps" role="status" aria-live="polite">${t.locating}</div>
+  <div id="pickhint" class="kicker" hidden>// ${t.where_now}</div>
+  <div class="locrow"><button class="btn ghost" id="setloc" type="button">${t.set_my_loc}</button><button class="btn" id="usegps" type="button" hidden>${t.use_gps}</button></div>
 </section>
 <section id="preview" class="hud br" hidden>
   <div class="kicker">// ROUTE</div>
@@ -296,6 +324,7 @@ export function appPage(lang: Lang, origin: string) {
   <div class="sum" id="psum"></div>
   <div class="row"><button class="btn primary" id="go" type="button">▶ ${t.start}</button><button class="btn ghost" id="sim" type="button">${t.simulate}</button></div>
   <div class="row"><button class="btn" id="sethome" type="button">🏠 ${t.set_home}</button><button class="btn" id="setwork" type="button">💼 ${t.set_work}</button><button class="btn danger" id="cancel" type="button">${t.cancel}</button></div>
+  <div class="small" id="pmanual" hidden>${t.manual_note}</div>
   <div class="small">${t.safety}</div>
 </section>
 <section id="banner" class="hud" hidden aria-live="polite">
