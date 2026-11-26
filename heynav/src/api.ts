@@ -1,3 +1,4 @@
+import type { buildRoute } from './guidance';
 /** Input parsing and result shaping for the API (kept out of the entry module). */
 
 /** "lon,lat" → [lon, lat], or null. */
@@ -25,3 +26,41 @@ export function placeFromPhoton(f: PhotonFeature): Place {
   return { name, detail, lon: f.geometry.coordinates[0], lat: f.geometry.coordinates[1] };
 }
 
+
+export type RouteOut = ReturnType<typeof buildRoute> & { traffic?: { seconds: number; delay: number } };
+
+/** Fastest by traffic time when known (else the router's estimate); shortest by distance. */
+export function rank(routes: RouteOut[]) {
+  const time = (x: RouteOut) => x.traffic?.seconds ?? x.duration;
+  let best = 0, shortest = 0;
+  routes.forEach((x, i) => {
+    if (time(x) < time(routes[best]!)) best = i;
+    if (x.distance < routes[shortest]!.distance) shortest = i;
+  });
+  return { best, shortest };
+}
+
+
+/**
+ * Photon ranks an exact name match first even when it is in another city. Blend its
+ * order with distance from the driver: each ~8 km away costs one place in the list.
+ */
+export function nearFirst(places: Place[], lat: number, lon: number): Place[] {
+  const km = (p: Place) => {
+    const x = (p.lon - lon) * Math.cos(((p.lat + lat) / 2) * (Math.PI / 180)), y = p.lat - lat;
+    return Math.sqrt(x * x + y * y) * 111.2;
+  };
+  return places.map((p, i) => ({ p, s: i + km(p) / 8 })).sort((a, b) => a.s - b.s).map((x) => x.p);
+}
+
+export interface NominatimHit { lat: string; lon: string; name?: string; display_name?: string; address?: Record<string, string | undefined> }
+
+export function placeFromNominatim(h: NominatimHit): Place {
+  const a = h.address ?? {};
+  const street = a.road && !/^\d+$/.test(a.road) ? [a.road, a.house_number].filter(Boolean).join(' ') : '';
+  const city = a.city ?? a.town ?? a.village ?? a.suburb ?? '';
+  const name = h.name || street || (h.display_name ?? '').split(',')[0]!.trim() || city;
+  const detail = [street && street !== name ? street : '', city && city !== name ? city : '', a.country_code && a.country_code !== 'il' ? a.country ?? '' : '']
+    .filter(Boolean).join(', ');
+  return { name, detail, lon: Number(h.lon), lat: Number(h.lat) };
+}

@@ -20,11 +20,11 @@ const ok = (name, cond, extra = '') => { checks.push(!!cond); console.log((cond 
   await p.fill('#q', 'דיזנגוף סנטר');
   await p.waitForSelector('#res button', { timeout: 15000 });
   await p.click('#res button');
-  ok('asks where you are', await p.isVisible('#pickhint'), await p.getAttribute('#q', 'placeholder'));
+  ok('asks where you are (origin row active)', await p.evaluate(() => document.querySelector('#search').classList.contains('picking') && document.activeElement.id === 'from'), await p.getAttribute('#from', 'placeholder'));
   await p.screenshot({ path: `${OUT}/manual-1-ask.png` });
 
   // 2) search your own location and pick it → the route to the waiting destination follows
-  await p.fill('#q', 'כיכר רבין');
+  await p.fill('#from', 'כיכר רבין');
   await p.waitForSelector('#res button', { timeout: 15000 });
   await p.click('#res button');
   await p.waitForFunction(() => !document.querySelector('#go').disabled, null, { timeout: 20000 });
@@ -34,7 +34,7 @@ const ok = (name, cond, extra = '') => { checks.push(!!cond); console.log((cond 
   await p.screenshot({ path: `${OUT}/manual-2-route.png` });
   await p.click('#cancel');
   ok('location line shows the manual location', (await p.textContent('#gps')).includes('📍'), await p.textContent('#gps'));
-  ok('"back to GPS" offered', await p.isVisible('#usegps'));
+  ok('origin row shows the place, with ✕ back to GPS', (await p.inputValue('#from')).includes('כיכר רבין') && await p.isVisible('#fromx'), await p.inputValue('#from'));
 
   // 3) tap the map → "I'm here"
   await p.mouse.click(800, 600);

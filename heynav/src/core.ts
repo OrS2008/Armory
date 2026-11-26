@@ -221,7 +221,74 @@ export function navCore() {
     return { update, intro, total, cum };
   }
 
-  return { dist, bearing, angleDiff, cumulative, project, pointAt, tracker, spokenDistance, shortDistance };
+  interface Cam { id: number; lon: number; lat: number; h: number[]; limit: number | null; kind: string; alert: boolean }
+  interface CamHit { cam: Cam; along: number }
+
+  /**
+   * Cameras that this route actually drives past: close to the line, and facing
+   * the direction of travel there (a camera on the other carriageway is skipped).
+   */
+  function camerasOnRoute(line: LonLat[], cum: number[], cams: Cam[], maxOffset = 35, maxAngle = 60): CamHit[] {
+    if (line.length < 2) return [];
+    let w = 180, s = 90, e = -180, n = -90;
+    for (const [x, y] of line) { if (x < w) w = x; if (x > e) e = x; if (y < s) s = y; if (y > n) n = y; }
+    const pad = 0.002;
+    const hits: CamHit[] = [];
+    for (const c of cams) {
+      if (!c.alert || c.lon < w - pad || c.lon > e + pad || c.lat < s - pad || c.lat > n + pad) continue;
+      const pr = project(line, cum, [c.lon, c.lat]);
+      if (pr.offset > maxOffset) continue;
+      const b = pointAt(line, cum, pr.along).bearing;
+      if (c.h.length && !c.h.some((h) => angleDiff(b, h) <= maxAngle)) continue;
+      hits.push({ cam: c, along: pr.along });
+    }
+    return hits.sort((a, b) => a.along - b.along);
+  }
+
+  const CAM_NAME: Record<string, [string, string]> = {
+    speed: ['מצלמת מהירות', 'Speed camera'], redlight: ['מצלמת רמזור', 'Red-light camera'],
+    average: ['מצלמת מהירות ממוצעת', 'Average-speed camera'], rail: ['מצלמה במעבר רכבת', 'Rail-crossing camera'],
+  };
+  function cameraName(kind: string, lang: string): string {
+    const n = CAM_NAME[kind] ?? CAM_NAME.speed!;
+    return lang === 'he' ? n[0] : n[1];
+  }
+
+  /** Warns once per camera, earlier at higher speed; reports the next one for the screen. */
+  function cameraWatch(hits: CamHit[], lang: string) {
+    const said = new Set<number>();
+    function update(along: number, speed: number | null): { next: CamHit | null; dist: number; say: string | null } {
+      const next = hits.find((h) => h.along >= along - 5) ?? null;
+      if (!next) return { next: null, dist: Infinity, say: null };
+      const dist = Math.max(0, next.along - along);
+      const v = speed != null && speed > 0 ? speed : 13;
+      const warnAt = Math.max(250, Math.min(800, v * 20)); // ~20 seconds ahead
+      let say: string | null = null;
+      if (dist <= warnAt && !said.has(next.cam.id)) {
+        said.add(next.cam.id);
+        const name = cameraName(next.cam.kind, lang);
+        const lim = next.cam.limit ? (lang === 'he' ? `. מהירות מותרת ${next.cam.limit}` : `. Limit ${next.cam.limit}`) : '';
+        say = (lang === 'he' ? `${name} בעוד ${spokenDistance(dist, lang)}` : `${name} in ${spokenDistance(dist, lang)}`) + lim;
+      }
+      return { next, dist, say };
+    }
+    return { update };
+  }
+
+  /** Share of line a (sampled) that runs within tol metres of line b: how much two routes are "the same road". */
+  function overlap(a: LonLat[], b: LonLat[], tol = 40): number {
+    if (a.length < 2 || b.length < 2) return 0;
+    const cb = cumulative(b);
+    const samples = Math.min(30, a.length);
+    let hit = 0;
+    for (let i = 0; i < samples; i++) {
+      const p = a[Math.round((i * (a.length - 1)) / Math.max(1, samples - 1))]!;
+      if (project(b, cb, p).offset <= tol) hit++;
+    }
+    return hit / samples;
+  }
+
+  return { dist, bearing, angleDiff, cumulative, project, pointAt, tracker, spokenDistance, shortDistance, camerasOnRoute, cameraWatch, cameraName, overlap };
 }
 
 export const core = navCore();

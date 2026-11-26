@@ -5,21 +5,29 @@
  * (OSRM): the browser never talks to those services directly, so they don't see
  * the driver's IP, requests carry an honest User-Agent, and there is a per-IP
  * limit in front of them. Map tiles come straight from OpenFreeMap.
+ * Live traffic (TomTom) and speed cameras are optional extras on top.
  */
 import { ASSETS } from './assets.gen';
 import { buildRoute, type OsrmRoute } from './guidance';
 import { pickLang, type Lang } from './i18n';
 import { appPage, iconSvg, manifest } from './page';
-import { lonLat, placeFromPhoton, type PhotonFeature } from './api';
+import { lonLat, nearFirst, placeFromNominatim, placeFromPhoton, rank, type NominatimHit, type PhotonFeature, type Place, type RouteOut } from './api';
+import { getCameras } from './cameras';
+import { incidents, timeRoute, trafficTile } from './traffic';
 
 export interface Env {
   RL_API?: RateLimit;
   ROUTER_BASE?: string;  // dev/tests only
   SEARCH_BASE?: string;  // dev/tests only
+  NOMINATIM_BASE?: string; // dev/tests only
+  TOMTOM_KEY?: string;   // secret: enables live traffic
+  TOMTOM_BASE?: string;  // dev/tests only
+  CAMERAS_URL?: string;  // dev/tests only
 }
 
 const ROUTER = 'https://router.project-osrm.org/route/v1/driving/';
 const SEARCH = 'https://photon.komoot.io/api/';
+const NOMINATIM = 'https://nominatim.openstreetmap.org/search';
 const TILES = 'https://tiles.openfreemap.org';
 const UA = 'HeyNav/1.0 (+https://heynav.ors2008.workers.dev)';
 
@@ -87,23 +95,44 @@ async function search(req: Request, env: Env, url: URL, lang: Lang, ctx: Executi
   if (lat != null && lon != null) { u.searchParams.set('lat', lat.toFixed(2)); u.searchParams.set('lon', lon.toFixed(2)); }
 
   const cache = (globalThis as { caches?: CacheStorage & { default?: Cache } }).caches?.default;
-  const key = new Request(`https://cache.heynav/search/v2?${u.searchParams}`);
+  const key = new Request(`https://cache.heynav/search/v3?${u.searchParams}`);
   const hit = cache ? await cache.match(key) : undefined;
   if (hit) return json(await hit.json(), 200, 'private, max-age=300');
 
-  const r = await fetch(u, { headers: { 'user-agent': UA, accept: 'application/json' } });
-  if (!r.ok) return json({ ok: false, error: 'upstream' }, 502);
-  const d = (await r.json()) as { features?: PhotonFeature[] };
+  // Photon's origin intermittently refuses Workers traffic (HTTP 521): retry a couple
+  // of times, then fall back to Nominatim (OpenStreetMap's own geocoder).
+  let places: Place[] | null = null;
+  for (let attempt = 0; attempt < 3 && !places; attempt++) {
+    if (attempt) await new Promise((res) => setTimeout(res, attempt * 200));
+    const r = await fetch(u, { headers: { 'user-agent': UA, accept: 'application/json' } }).catch(() => null);
+    if (r?.ok) places = ((await r.json()) as { features?: PhotonFeature[] }).features?.map(placeFromPhoton) ?? [];
+    else console.error('search: photon', r?.status ?? 'network');
+  }
+  if (!places) places = await nominatim(env, q, lang, lat, lon);
+  if (!places) return json({ ok: false, error: 'upstream' }, 502);
   const seen = new Set<string>();
-  const places = (d.features ?? []).map(placeFromPhoton).filter((p) => {
+  places = places.filter((p) => {
     const k = `${p.name}|${p.detail}`;
     if (!p.name || seen.has(k)) return false;
     seen.add(k);
     return true;
   });
-  const body = { ok: true, places };
+  const body = { ok: true, places: lat != null && lon != null ? nearFirst(places, lat, lon) : places };
   if (cache) ctx.waitUntil(cache.put(key, new Response(JSON.stringify(body), { headers: { 'cache-control': 'max-age=86400' } })));
   return json(body, 200, 'private, max-age=300');
+}
+
+async function nominatim(env: Env, q: string, lang: Lang, lat: number | null, lon: number | null): Promise<Place[] | null> {
+  const u = new URL(env.NOMINATIM_BASE ?? NOMINATIM);
+  u.searchParams.set('q', q);
+  u.searchParams.set('format', 'jsonv2');
+  u.searchParams.set('limit', '7');
+  u.searchParams.set('addressdetails', '1');
+  u.searchParams.set('accept-language', lang === 'he' ? 'he,en' : 'en,he');
+  if (lat != null && lon != null) u.searchParams.set('viewbox', `${(lon - 0.6).toFixed(2)},${(lat + 0.6).toFixed(2)},${(lon + 0.6).toFixed(2)},${(lat - 0.6).toFixed(2)}`);
+  const r = await fetch(u, { headers: { 'user-agent': UA, accept: 'application/json' } }).catch(() => null);
+  if (!r?.ok) { console.error('search: nominatim', r?.status ?? 'network'); return null; }
+  return ((await r.json()) as NominatimHit[]).map(placeFromNominatim);
 }
 
 async function route(req: Request, env: Env, url: URL, lang: Lang) {
@@ -117,10 +146,52 @@ async function route(req: Request, env: Env, url: URL, lang: Lang) {
   u.searchParams.set('geometries', 'geojson');
   // When rerouting, start in the direction the car is already driving.
   if (b != null) u.searchParams.set('bearings', `${Math.round(b) % 360},60;`);
+  u.searchParams.set('alternatives', '3');
   const r = await fetch(u, { headers: { 'user-agent': UA, accept: 'application/json' } });
   const d = (await r.json().catch(() => null)) as { code?: string; routes?: OsrmRoute[] } | null;
   if (!d || d.code !== 'Ok' || !d.routes?.[0]) return json({ ok: false, error: d?.code === 'NoRoute' ? 'no_route' : 'upstream' }, d?.code === 'NoRoute' ? 404 : 502);
-  return json({ ok: true, route: buildRoute(d.routes[0], lang) });
+  const routes: RouteOut[] = d.routes.slice(0, 3).map((x) => buildRoute(x, lang));
+  // With live traffic: time every candidate on today's roads, and pick by that.
+  const key = env.TOMTOM_KEY;
+  if (key) {
+    const times = await Promise.all(routes.map((x) => timeRoute(key, x.geometry, env.TOMTOM_BASE).catch(() => null)));
+    times.forEach((t, i) => { if (t) routes[i]!.traffic = { seconds: Math.round(t.seconds), delay: Math.round(t.delay) }; });
+  }
+  const { best, shortest } = rank(routes);
+  return json({ ok: true, routes, best, shortest, traffic: routes.some((x) => !!x.traffic), route: routes[best] });
+}
+
+async function cameras(ctx: ExecutionContext, env: Env) {
+  try {
+    const d = await getCameras(ctx, env.CAMERAS_URL);
+    return json({ ok: true, ...d }, 200, 'private, max-age=1800');
+  } catch (e) {
+    console.error('cameras', e instanceof Error ? e.message : String(e));
+    return json({ ok: false, error: 'cameras_unavailable' }, 502);
+  }
+}
+
+async function traffic(req: Request, env: Env, url: URL, parts: string[]) {
+  if (!env.TOMTOM_KEY) return json({ ok: false, error: 'no_traffic' }, 404);
+  const [z, x, yPng] = parts;
+  const y = (yPng ?? '').replace(/\.png$/, '');
+  if (![z, x, y].every((v) => /^\d{1,7}$/.test(v ?? '')) || Number(z) > 22) return json({ ok: false, error: 'bad_tile' }, 400);
+  const r = await trafficTile(env.TOMTOM_KEY, Number(z), Number(x), Number(y), url.searchParams.get('dark') === '1', env.TOMTOM_BASE);
+  const h = new Headers(r.headers);
+  for (const [k, v] of Object.entries(BASE_HEADERS)) h.set(k, v);
+  void req;
+  return new Response(r.body, { status: r.status, headers: h });
+}
+
+async function incidentList(req: Request, env: Env, url: URL) {
+  if (!env.TOMTOM_KEY) return json({ ok: true, incidents: [] });
+  const b = (url.searchParams.get('bbox') ?? '').split(',').map(Number);
+  if (b.length !== 4 || b.some((v) => !Number.isFinite(v))) return json({ ok: false, error: 'bad_bbox' }, 400);
+  const [w, s, e, n] = b as [number, number, number, number];
+  // TomTom caps the area; also keeps one request from asking for half a country.
+  if (e <= w || n <= s || (e - w) * (n - s) > 0.8) return json({ ok: false, error: 'bbox_too_large' }, 400);
+  if (await limited(env, req, 'i')) return json({ ok: false, error: 'rate_limited' }, 429);
+  return json({ ok: true, incidents: await incidents(env.TOMTOM_KEY, [w, s, e, n], env.TOMTOM_BASE) }, 200, 'private, max-age=60');
 }
 
 function asset(path: string): Response | null {
@@ -148,6 +219,10 @@ export default {
         if (req.headers.get('x-hn') !== '1') return json({ ok: false, error: 'forbidden' }, 403);
         if (p === '/api/search') return await search(req, env, url, lang, ctx);
         if (p === '/api/route') return await route(req, env, url, lang);
+        if (p === '/api/config') return json({ ok: true, traffic: !!env.TOMTOM_KEY });
+        if (p === '/api/cameras') return await cameras(ctx, env);
+        if (p === '/api/incidents') return await incidentList(req, env, url);
+        if (p.startsWith('/api/traffic/')) return await traffic(req, env, url, p.slice(13).split('/'));
       }
       return json({ ok: false, error: 'not_found' }, 404);
     } catch (e) {
