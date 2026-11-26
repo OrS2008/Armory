@@ -4,3 +4,4 @@ node_modules/
 qa/state-*/
 qa/*.log
 qa/qa-results.json
+qa/*.png

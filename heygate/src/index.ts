@@ -30,7 +30,7 @@ import { logText, msg, note, pickLang, type Lang } from './i18n';
 import { clientMeta, html, json, readJson, text, type ClientMeta } from './http';
 import { appAuthPage, appPage, carPage, iconSvg, landingPage, manifest, pairPage, privacyPage, qrSharePage, resultPage, saAuthPage, saPage } from './pages';
 import { authenticationOptions, registrationOptions, verifyAuthentication, verifyRegistration, type AuthPurpose } from './passkeys';
-import { checkToken, configurePalgate, listDevices, openGate, waitForLink } from './palgate/api';
+import { checkToken, configurePalgate, listDevices, openGate, PalGateError, waitForLink } from './palgate/api';
 import {
   addLog,
   bump,
@@ -59,6 +59,8 @@ import {
   tenant,
   touch,
   tRaw,
+  tGet,
+  tPut,
   unindexChannel,
   type Channel,
   type ChannelKind,
@@ -591,6 +593,7 @@ async function tenantApi(
         linked: session ? { phone: maskPhone(session.phone), linkedAt: session.linkedAt } : null,
         config: { ...cfg, channels: cfg.channels.map(({ deviceHash: _d, ...c }) => c) },
         armed: Object.fromEntries(armed),
+        linkPending: !session && !!(await tRaw.get(t, 'linkp')),
         passkeys: owner.passkeys.map((p) => ({ id: p.id, name: p.name, createdAt: p.createdAt, lastUsedAt: p.lastUsedAt, backedUp: !!p.backedUp })),
         account: { username: owner.username ?? null, hasPassword: !!owner.pw },
         origin: url.origin,
@@ -603,24 +606,39 @@ async function tenantApi(
       // A short-lived code that shows the same QR on another screen (the Tesla,
       // a computer), for when HeyGate is open on the phone that must scan it.
       const share = Array.from(randomBytes(6), (b) => PAIR_ALPHABET[b % 32]).join('');
-      await putSealed(env, `lq:${share}`, { id }, 600);
+      await putSealed(env, `lq:${share}`, { id }, 900);
+      // Remember the pending link: switching to the PalGate app often freezes or
+      // reloads the page, and the panel must be able to pick the wait back up.
+      await tPut(t, 'linkp', { id, share }, 900);
       return json({ id, svg: qrSvg(`{"id": "${id}"}`), share });
     }
+    case '/link/resume': {
+      const pend = await tGet<{ id: string; share: string }>(t, 'linkp');
+      if (!pend) return json({ ok: false, message: 'code_not_found' }, 404);
+      return json({ id: pend.id, svg: qrSvg(`{"id": "${pend.id}"}`), share: pend.share });
+    }
+    case '/link/cancel':
+      await tRaw.del(t, 'linkp');
+      return json({ ok: true });
     case '/link/wait': {
       const id = str(body.id, 36);
-      if (!/^[0-9a-f-]{36}$/.test(id)) return json({ ok: false, message: 'bad_code' }, 400);
+      const pend = await tGet<{ id: string; share: string }>(t, 'linkp');
+      if (!/^[0-9a-f-]{36}$/.test(id) || !pend || pend.id !== id) return json({ ok: false, message: 'code_not_found' }, 410);
       try {
-        const session = await waitForLink(id, AbortSignal.timeout(90_000));
+        const session = await waitForLink(id, AbortSignal.timeout(60_000));
         await checkToken(session);
         await putSession(t, session);
       } catch (e) {
         const em = e instanceof Error ? e.message : '';
-        if (/timeout|abort/i.test(em) || (e instanceof Error && e.name === 'TimeoutError')) return json({ ok: false, message: 'timeout' }, 504);
+        if (/timeout|abort/i.test(em) || (e instanceof Error && (e.name === 'TimeoutError' || e.name === 'AbortError'))) return json({ ok: false, message: 'timeout' }, 504);
         const r = ref();
-        console.error(`link failed ref ${r}`, em);
+        // What PalGate answered (never the token itself), to diagnose real-world failures.
+        const b = e instanceof PalGateError && e.body && typeof e.body === 'object' ? (e.body as Record<string, unknown>) : {};
+        console.error(`link failed ref ${r}`, em, JSON.stringify({ status: b.status, err: b.err, msg: b.msg, keys: Object.keys(b) }));
         await log(`link_failed|${r}`);
         return json({ ok: false, message: `link_failed|${r}` }, 502);
       }
+      await tRaw.del(t, 'linkp');
       await log('palgate_linked', true);
       return json({ ok: true });
     }

@@ -26,3 +26,7 @@ simple = { limit = 120, period = 60 }
 name = "RL_AUTH" # login, setup and pairing attempts
 namespace_id = "7103"
 simple = { limit = 10, period = 60 }
+
+# Workers Logs: errors and their references, so real-world failures can be diagnosed.
+[observability]
+enabled = true

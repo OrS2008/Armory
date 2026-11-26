@@ -173,13 +173,16 @@ async function tab(p, t) { await p.click(`.tabs [data-tab=${t}]`); await p.waitF
     const st = await state(p);
     grok = st.config.channels.find((c) => c.kind === 'grok');
     check('Grok section shows the existing Grok card (no extra "turn on")', !!grok && !(await p.isVisible('#addgrok')));
-    const instr = await p.textContent('.ch[data-id="' + grok.id + '"] pre');
+    check('Grok card shows 3 simple steps', (await p.$$('[data-grok="' + grok.id + '"] .steps-simple li')).length === 3);
+    const instr = await p.textContent('[data-grok="' + grok.id + '"] pre');
     check('Grok instructions contain the secret link', instr.includes('/o/' + grok.secret));
-    await p.click('.ch[data-id="' + grok.id + '"] [data-copy]'); await sleep(200);
+    await p.click('[data-grok="' + grok.id + '"] [data-copy]'); await sleep(200);
     check('"העתק הוראות ל-Grok" copies them', (await clip(p)).includes('/o/' + grok.secret));
     const o1 = await opens();
     const r = await p.request.get(B + '/o/' + grok.secret + '/home/4821', { headers: { 'user-agent': 'Grok-Fetcher' } });
     check('Grok visiting the link → SUCCESS page and gate opens', (await r.text()).includes('SUCCESS') && (await opens()) === o1 + 1);
+    await p.click('#adv > summary');
+    check('"אפשרויות מתקדמות" opens', await p.isVisible('.ch[data-id="' + grok.id + '"]'));
     await p.click('.ch[data-id="' + grok.id + '"] .en + span'); await waitToast(p, /הושבת/);
     check('on/off switch → disabled; link refused', (await p.request.get(B + '/o/' + grok.secret + '?json')).status() === 403);
     await p.click('.ch[data-id="' + grok.id + '"] .en + span'); await waitToast(p, /הופעל/);
@@ -213,14 +216,14 @@ async function tab(p, t) { await p.click(`.tabs [data-tab=${t}]`); await p.waitF
     check('IL-only default refuses a request from outside Israel', (await p.request.post(B + '/o/' + ph.secret + '/home?json')).status() === 403);
     // …then allow anywhere to exercise the rest.
     await api('channel/update', { id: ph.id, countries: '' }); await p.reload(); await tab(p, 'access');
+    await p.click('#adv > summary'); await p.waitForSelector(box + ' .copy');
     await p.click(box + ' .copy [data-copy]'); await sleep(200);
     const url = await clip(p);
     check('"העתק" copies the automation URL', url.includes('/o/' + ph.secret));
     const o = await opens();
     check('automation POST → gate opens', (await p.request.post(url)).status() === 200 && (await opens()) === o + 1);
     check('automation link refuses GET (no accidental opens)', (await p.request.get(url)).status() === 405);
-    await p.click(box + ' details summary >> nth=0');
-    check('"דריכת Grok מהטלפון" shows the arm URL', (await p.textContent(box)).includes('/arm/' + ph.secret));
+    check('automation card shows the arm URL', (await p.textContent(box)).includes('/arm/' + ph.secret));
     check('arm URL (POST) arms Grok', (await p.request.post(B + '/arm/' + ph.secret)).status() === 200);
   });
 
@@ -249,7 +252,7 @@ async function tab(p, t) { await p.click(`.tabs [data-tab=${t}]`); await p.waitF
     check('car page language switch works', (await cp.textContent('footer.disc')).includes('not affiliated'));
     check('Access shows "+ צמד מכשיר נוסף" once a device exists', (await p.textContent('#pair')).includes('נוסף'));
     const dev = (await state(p)).config.channels.find((c) => c.kind === 'car');
-    await p.click('.ch[data-id="' + dev.id + '"] details summary'); await p.click('.ch[data-id="' + dev.id + '"] .del'); await askYes(p); await waitToast(p, /נמחק/);
+    await p.click('[data-dev="' + dev.id + '"] .devdel'); await askYes(p); await waitToast(p, /נמחק/);
     await cp.reload();
     check('deleting the device revokes it (car back to pairing)', await cp.isVisible('#code'));
     await car.close();
@@ -259,16 +262,16 @@ async function tab(p, t) { await p.click(`.tabs [data-tab=${t}]`); await p.waitF
   sec('Security tab');
   await step('security', async () => {
     await tab(p, 'security');
-    check('protection checklist (7 items)', (await p.$$('#tab-security .check')).length === 7);
+    check('plain security summary (3 lines)', (await p.$$('#tab-security .check')).length === 3);
+    check('suggests turning on notifications', await p.isVisible('#todo-notif'));
     await p.click('#master + span'); await askYes(p); await waitToast(p, /הושבת/);
     check('emergency switch off → all opening refused (423)', (await p.request.get(B + '/o/' + grok.secret + '?json')).status() === 423);
     check('header shows "מושבת"', (await p.textContent('#hstatus')).includes('מושבת'));
     await tab(p, 'home'); await p.click('#reenable'); await waitToast(p, /הופעל/);
     check('"הפעל מחדש" (home) → opening works again', (await p.request.get(B + '/o/' + grok.secret + '?json')).status() === 200);
     await tab(p, 'security');
-    await p.click('.theme-pick [data-theme-opt=dark]'); check('display: "לילה"', (await p.getAttribute('html', 'data-theme')) === 'dark');
-    await p.click('.theme-pick [data-theme-opt=auto]'); check('display: "אוטומטי"', (await p.getAttribute('html', 'data-theme')) === null);
-    await p.click('.theme-pick [data-theme-opt=light]'); check('display: "יום"', (await p.getAttribute('html', 'data-theme')) === 'light');
+    await p.click('.top [data-theme-opt=dark]'); check('panel header: night', (await p.getAttribute('html', 'data-theme')) === 'dark');
+    await p.click('.top [data-theme-opt=light]'); check('panel header: day', (await p.getAttribute('html', 'data-theme')) === 'light');
     await p.fill('#pwf [name=current]', 'wrong wrong wrong'); await p.fill('#pwf [name=next]', 'qa new password 2'); await p.click('#pwf button');
     check('password change with wrong current → error', /שגויה/.test(await waitToast(p, /שגויה/)));
     await p.fill('#pwf [name=current]', password); await p.fill('#pwf [name=next]', 'qa new password 2'); await p.click('#pwf button');
@@ -355,8 +358,9 @@ async function tab(p, t) { await p.click(`.tabs [data-tab=${t}]`); await p.waitF
   sec('System admin (/sa)');
   const sctx = await newCtx(b); const sp = await sctx.newPage(); const sw = await watch(sp, 'SA'); await authenticator(sctx, sp);
   await step('sa', async () => {
-    await sp.goto(B + '/sa'); await sp.fill('[name=setupCode]', 'WRONG'); await sp.click('#f1 button'); await sleep(600);
-    check('wrong setup code → error', (await sp.textContent('#err')).length > 0);
+    await sp.goto(B + '/sa');
+    await sp.fill('[name=setupCode]', 'WRONG'); await sp.click('#f1 button');
+    check('wrong setup code → error', await sp.waitForFunction(() => document.querySelector('#err').textContent.length > 0, null, { timeout: 5000 }).then(() => true, () => false));
     await sp.fill('[name=setupCode]', 'QA-SETUP'); await sp.click('#f1 button'); await sp.waitForSelector('#tenants .ev');
     check('setup code + passkey → admin panel', true);
     check('stats show customers', (await sp.textContent('#stats')).includes('1'));

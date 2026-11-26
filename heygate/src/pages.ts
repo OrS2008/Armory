@@ -409,6 +409,9 @@ body.app footer.disc{padding-bottom:calc(80px + env(safe-area-inset-bottom))}
 .chips{display:flex;gap:8px;flex-wrap:wrap}.chips button{min-height:36px;padding:6px 14px;border-radius:99px;background:var(--bg2);color:var(--muted);font-size:.875rem}
 .chips button[aria-pressed=true]{background:var(--brand);color:#fff}
 .empty{text-align:center;padding:26px 10px}.empty .e{font-size:2.5rem}
+.steps-simple{margin:0;padding:0;list-style:none;counter-reset:st;display:grid;gap:10px}
+.steps-simple>li{counter-increment:st;position:relative;padding-inline-start:42px;min-height:30px;line-height:1.5;padding-top:3px}
+.steps-simple>li:before{content:counter(st);position:absolute;inset-inline-start:0;top:0;width:30px;height:30px;border-radius:50%;background:var(--brand-soft);color:var(--brand);font-weight:700;display:grid;place-items:center}
 hr.sep{border:0;border-top:1px solid var(--line);width:100%}`;
 
 function topBar(lang: Lang, t: T, sub = '<div class="small" id="hstatus"></div>') {
@@ -440,7 +443,8 @@ function show(tab){$$('.tabs [role=tab]').forEach(b=>b.setAttribute('aria-select
   try{localStorage.setItem('tab',tab)}catch{}window.scrollTo(0,0);render();}
 $$('.tabs [role=tab]').forEach(b=>b.onclick=()=>show(b.dataset.tab));
 const cur=()=>$('.tabs [aria-selected=true]').dataset.tab;
-async function load(){S=await api('state');render();}
+let resumed=false;
+async function load(){S=await api('state');render();if(S.linkPending&&!resumed&&!document.querySelector('dialog')){resumed=true;linkFlow(true);}}
 function render(){if(!S)return;header();({home,access,security,log:logTab})[cur()]();syncTheme();}
 function header(){const on=S.config.enabled;$('#hstatus').innerHTML=on?'<span class="ok"><span class="dot"></span> '+L.active+'</span>':'<span class="bad"><span class="dot"></span> '+L.disabled+'</span>';}
 const ready=()=>({linked:!!S.linked,gates:S.config.gates.length>0,access:S.config.channels.some(c=>c.enabled&&c.lastUsedAt)||S.config.channels.some(c=>c.kind==='car')});
@@ -466,7 +470,7 @@ function home(){const el=$('#tab-home'),r=ready(),done=r.linked&&r.gates;let h='
   if(A||B)h+='<div class="home-cols"><div class="stack">'+A+'</div><div class="stack">'+B+'</div></div>';
   el.innerHTML=h;
   $('#reenable')?.addEventListener('click',()=>setMaster(true));
-  $('#w-link')?.addEventListener('click',linkFlow);$('#relink')?.addEventListener('click',linkFlow);
+  $('#w-link')?.addEventListener('click',()=>linkFlow());$('#relink')?.addEventListener('click',()=>linkFlow());
   $('#unlink')?.addEventListener('click',async()=>{if(await ask(L.unlink_q,L.unlink_text.replace('←',AR),L.unlink,true)){await api('unlink');toast(L.unlinked);load();}});
   $('#w-access')?.addEventListener('click',()=>show('access'));
   if($('#w-gates'))gatesEditor($('#w-gates'));
@@ -477,16 +481,30 @@ function home(){const el=$('#tab-home'),r=ready(),done=r.linked&&r.gates;let h='
 const chName=n=>n==='panel'?L.panel:n||'';
 function step(n,t,d,isDone,isCur,action){return '<div class="step '+(isDone?'done':isCur?'cur':'')+'"><div class="n">'+(isDone?'✓':n)+'</div><div class="grow stack"><div><b>'+t+'</b><div class="muted small">'+d+'</div></div>'+(isCur?action:'')+'</div></div>';}
 
-async function linkFlow(){const d=document.createElement('dialog');d.innerHTML='<div class="stack center"><h2>'+L.link_title+'</h2>'+
+async function linkFlow(resume){const d=document.createElement('dialog');d.innerHTML='<div class="stack center"><h2>'+L.link_title+'</h2>'+
   '<ol style="text-align:start;padding-inline-start:20px;margin:0"><li>'+L.link_1+'</li><li>'+L.link_2.replace('←',AR)+'</li><li>'+L.link_3+'</li></ol>'+
   '<div id="lshare" class="stack" hidden><p class="small" style="text-align:start">'+L.link_same_phone+'</p><div class="copy"><code id="lurl" style="font-size:1rem;text-align:center"></code><button class="btn-soft btn-sm" id="lcopy">'+L.copy+'</button></div></div>'+
-  '<p class="muted small" id="lother" hidden>'+L.link_other_screen+'</p><div class="qr" id="lq">⏳</div><p class="muted small" id="lm">'+L.link_waiting+'</p><button class="btn-ghost" id="lc">'+L.close+'</button></div>';
-  document.body.append(d);d.showModal();let open=true;const close=()=>{open=false;d.close();d.remove();};d.querySelector('#lc').onclick=close;d.addEventListener('cancel',close);
-  try{const {id,svg,share}=await api('link/start');d.querySelector('#lq').innerHTML=svg;
-    if(share){const u=location.origin+'/q/'+share;d.querySelector('#lurl').textContent=u.replace(/^https?:\/\//,'');d.querySelector('#lcopy').dataset.copy=u;d.querySelector('#lshare').hidden=false;d.querySelector('#lother').hidden=false;
+  '<p class="muted small" id="lother" hidden>'+L.link_other_screen+'</p><div class="qr" id="lq">⏳</div><p class="muted small" id="lm" aria-live="polite">'+(resume?L.link_resuming:L.link_waiting)+'</p><button class="btn-ghost" id="lc">'+L.close+'</button></div>';
+  document.body.append(d);d.showModal();let open=true,run=0,id='';const started=Date.now();
+  const msg=h=>{const m=d.querySelector('#lm');if(m)m.innerHTML=h;};
+  const close=()=>{open=false;document.removeEventListener('visibilitychange',onVis);d.close();d.remove();};
+  d.querySelector('#lc').onclick=close;d.addEventListener('cancel',close);
+  // Keep asking the server to finish the link until it does: iOS cuts the request off
+  // while you are in the PalGate app, so we simply ask again when you come back.
+  async function wait(){const me=++run;
+    while(open&&me===run&&Date.now()-started<15*60e3){
+      try{await api('link/wait',{id});if(me!==run)return;close();toast(L.link_ok,'ok');DEV=null;load();return;}
+      catch(e){if(!open||me!==run)return;
+        if(e.status===504||e.status===0||e.status===408||e.status===429){await new Promise(r=>setTimeout(r,e.status===0?1500:300));continue;}
+        if(e.status===410){msg(L.link_timeout);return;}
+        msg('<span class="bad">'+esc(e.message)+'</span> <button class="btn-ghost btn-sm" id="lr">'+L.link_failed_retry+'</button>');d.querySelector('#lr').onclick=()=>{msg(L.link_waiting);wait();};return;}}
+    if(open&&me===run)msg(L.link_timeout);}
+  function onVis(){if(document.visibilityState==='visible'&&open&&id){msg(L.link_back);wait();}}
+  document.addEventListener('visibilitychange',onVis);
+  try{const st=resume?await api('link/resume'):await api('link/start');id=st.id;d.querySelector('#lq').innerHTML=st.svg;
+    if(st.share){const u=location.origin+'/q/'+st.share;d.querySelector('#lurl').textContent=u.replace(/^https?:\/\//,'');d.querySelector('#lcopy').dataset.copy=u;d.querySelector('#lshare').hidden=false;d.querySelector('#lother').hidden=false;
       if(matchMedia('(pointer:coarse)').matches)d.querySelector('#lq').before(d.querySelector('#lshare'));}
-    for(let i=0;i<6&&open;i++){try{await api('link/wait',{id});close();toast(L.link_ok,'ok');DEV=null;load();return;}catch(e){if(e.status!==504){d.querySelector('#lm').innerHTML='<span class="bad">'+esc(e.message)+'</span>';return;}}}
-    if(open)d.querySelector('#lm').textContent=L.link_timeout;}catch(e){d.querySelector('#lm').innerHTML='<span class="bad">'+esc(e.message)+'</span>';}}
+    wait();}catch(e){msg('<span class="bad">'+esc(e.message)+'</span>');}}
 
 async function gatesEditor(el){el.innerHTML='<p class="muted">'+L.loading_gates+'</p>';
   if(!DEV){try{DEV=(await api('devices')).devices;}catch(e){el.innerHTML='<p class="bad">'+esc(e.message)+'</p><button class="btn-ghost" id="gr">'+L.retry+'</button>';el.querySelector('#gr').onclick=()=>gatesEditor(el);return;}}
@@ -508,34 +526,53 @@ function access(){const el=$('#tab-access'),c=S.config.channels,g=S.config.gates
   if(!S.linked||!g.length){el.innerHTML='<div class="card empty stack"><div class="e">🚧</div><h2>'+L.access_need_title+'</h2><p class="muted">'+L.access_need_text+'</p>'+
     '<div><button class="btn-primary" id="need">'+(S.linked?L.access_need_gate:L.access_need_btn)+'</button></div></div>';
     $('#need').onclick=()=>{show('home');if(!S.linked)linkFlow();else{const d=$('#gd')||$('#w-gates');if(d){if(d.tagName==='DETAILS')d.open=true;d.scrollIntoView({behavior:'smooth'});}}};return;}
-  const sec=(kind,desc,action)=>{const list=c.filter(x=>x.kind===kind),k=KIND[kind];
-    return '<section class="stack"><div class="row" style="gap:8px"><span style="font-size:1.4rem" aria-hidden="true">'+k.i+'</span><h2>'+k.t+'</h2></div><p class="muted small" style="margin-top:4px">'+desc+'</p>'+
-      (list.length?'<div class="cards">'+list.map(chCard).join('')+'</div>':'')+(action(list)||'')+'</section>';};
-  el.innerHTML='<div class="card"><h2>'+L.ways_title+'</h2><p class="muted small">'+L.ways_sub+'</p></div>'+
-    sec('grok',L.grok_desc,l=>l.length?'':'<div><button class="btn-primary" id="addgrok">'+L.enable_grok+'</button></div>')+
-    sec('car',L.car_desc,l=>'<div><button class="'+(l.length?'btn-ghost btn-sm':'btn-primary')+'" id="pair">'+(l.length?L.pair_more:L.pair_btn)+'</button></div>')+
-    sec('phone',L.phone_desc,l=>l.length?'':'<div><button class="btn-primary" id="addphone">'+L.enable_phone+'</button></div>');
+  const grok=c.filter(x=>x.kind==='grok'),cars=c.filter(x=>x.kind==='car'),phones=c.filter(x=>x.kind==='phone');
+  const carUrl=S.origin.replace(/^https?:\/\//,'')+'/car';
+  let h='<div><h2>'+L.open_how+'</h2><p class="muted small">'+L.open_how_sub+'</p></div>';
+  // 1. Grok
+  h+='<section class="card stack"><div class="row" style="gap:10px"><span style="font-size:1.6rem" aria-hidden="true">🗣️</span><h2 class="grow">'+L.k_grok+'</h2></div>'+
+    (grok.length?grok.map(grokSimple).join(''):'<p class="muted small">'+L.grok_desc+'</p><div><button class="btn-primary" id="addgrok">'+L.enable_grok+'</button></div>')+'</section>';
+  // 2. Tesla screen
+  h+='<section class="card stack"><div class="row" style="gap:10px"><span style="font-size:1.6rem" aria-hidden="true">🚘</span><h2 class="grow">'+L.car_title+'</h2></div>'+
+    cars.map(x=>'<div class="row between ev" data-dev="'+esc(x.id)+'" style="border:0;padding:4px 0"><div class="grow"><b>'+esc(x.name)+'</b> <span class="pill ok">'+L.car_connected+'</span>'+(x.enabled?'':' <span class="pill bad">'+L.disabled+'</span>')+'<div class="hint">'+L.car_open_hint+' <span class="mono">'+esc(carUrl)+'</span></div></div><button class="btn-ghost btn-sm devdel" style="color:var(--bad)">'+L.delete+'</button></div>').join('')+
+    (cars.length?'<div><button class="btn-ghost btn-sm" id="pair">'+L.pair_more+'</button></div>':
+      '<ol class="steps-simple"><li>'+L.car_s1+'<div class="copy" style="margin-top:6px"><code style="font-size:1rem">'+esc(carUrl)+'</code><button class="btn-soft btn-sm" data-copy="'+esc(S.origin+'/car')+'">'+L.copy+'</button></div></li><li>'+L.car_s2+'</li></ol><div><button class="btn-primary" id="pair">'+L.car_enter_code+'</button></div>')+'</section>';
+  // 3. Advanced
+  h+='<details class="card" id="adv"'+(window.ADV_OPEN?' open':'')+'><summary>'+L.more_options+'</summary><p class="muted small">'+L.more_options_sub+'</p><div class="stack" style="margin-top:12px">'+
+    '<h3>📱 '+L.phone_title+'</h3>'+(phones.length?'<div class="cards">'+phones.map(chCard).join('')+'</div>':'<p class="muted small">'+L.phone_desc+'</p><div><button class="btn-soft" id="addphone">'+L.enable_phone+'</button></div>')+
+    (grok.length?'<hr class="sep"><h3>🗣️ '+L.settings_of+': '+L.k_grok+'</h3><div class="cards">'+grok.map(chCard).join('')+'</div>':'')+
+    (cars.length?'<hr class="sep"><h3>🚘 '+L.settings_of+': '+L.car_title+'</h3><div class="cards">'+cars.map(chCard).join('')+'</div>':'')+'</div></details>';
+  el.innerHTML=h;
+  $('#adv').addEventListener('toggle',e=>{window.ADV_OPEN=e.target.open;});
   $('#pair').onclick=pairDialog;$('#addgrok')?.addEventListener('click',e=>busy(e.currentTarget,()=>addCh('grok')));$('#addphone')?.addEventListener('click',e=>busy(e.currentTarget,()=>addCh('phone')));
-  $$('.ch').forEach(box=>{const ch=c.find(x=>x.id===box.dataset.id),act=async(p,b,msg)=>{try{await api(p,Object.assign({id:ch.id},b||{}));if(msg)toast(msg,'ok');await load();}catch(e){toast(e.message,'bad');}};
-    box.querySelector('.en').onchange=e=>act('channel/update',{enabled:e.target.checked},e.target.checked?L.enabled_t:L.disabled_t);
-    box.querySelector('.del').onclick=async()=>{if(await ask(F(L.del_q,ch.name),ch.kind==='car'?L.del_device:L.del_link,L.delete,true))act('channel/delete',{},L.deleted);};
-    box.querySelector('.rot')?.addEventListener('click',async()=>{if(await ask(L.rotate_q,F(L.rotate_text,ch.name),L.rotate))act('channel/rotate',{},L.rotated);});
-    box.querySelector('.arm')?.addEventListener('change',e=>act('channel/update',{requireArm:e.target.checked},e.target.checked?L.arm_on:L.arm_off));
+  const act=async(id,p,b,msg)=>{try{await api(p,Object.assign({id},b||{}));if(msg)toast(msg,'ok');await load();}catch(e){toast(e.message,'bad');}};
+  $$('[data-dev] .devdel').forEach(btn=>{const id=btn.closest('[data-dev]').dataset.dev,x=c.find(y=>y.id===id);btn.onclick=async()=>{if(await ask(F(L.del_q,x.name),L.del_device,L.delete,true))act(id,'channel/delete',{},L.deleted);};});
+  $$('.ch').forEach(box=>{const ch=c.find(x=>x.id===box.dataset.id),a=(p,b,m)=>act(ch.id,p,b,m);
+    box.querySelector('.en').onchange=e=>a('channel/update',{enabled:e.target.checked},e.target.checked?L.enabled_t:L.disabled_t);
+    box.querySelector('.del').onclick=async()=>{if(await ask(F(L.del_q,ch.name),ch.kind==='car'?L.del_device:L.del_link,L.delete,true))a('channel/delete',{},L.deleted);};
+    box.querySelector('.rot')?.addEventListener('click',async()=>{if(await ask(L.rotate_q,F(L.rotate_text,ch.name),L.rotate))a('channel/rotate',{},L.rotated);});
+    box.querySelector('.arm')?.addEventListener('change',e=>a('channel/update',{requireArm:e.target.checked},e.target.checked?L.arm_on:L.arm_off));
     box.querySelector('.armnow')?.addEventListener('click',async()=>{try{const d=await api('arm');toast(F(L.armed_for,d.armedMinutes),'ok');load();}catch(e){toast(e.message,'bad');}});
-    box.querySelector('.saveadv')?.addEventListener('click',()=>act('channel/update',{name:box.querySelector('.nm').value,countries:box.querySelector('.cc').value,maxPerHour:+box.querySelector('.mx').value,armMinutes:+(box.querySelector('.am')?.value||10)},L.saved));});
-  if(window.FOCUS_CH){const b=$('.ch[data-id="'+window.FOCUS_CH+'"]');window.FOCUS_CH=null;if(b){b.scrollIntoView({behavior:'smooth',block:'center'});b.style.outline='3px solid var(--brand)';setTimeout(()=>b.style.outline='',2500);}}}
+    box.querySelector('.saveadv')?.addEventListener('click',()=>a('channel/update',{name:box.querySelector('.nm').value,countries:box.querySelector('.cc').value,maxPerHour:+box.querySelector('.mx').value,armMinutes:+(box.querySelector('.am')?.value||10)},L.saved));});
+  if(window.FOCUS_CH){const b=$('[data-grok="'+window.FOCUS_CH+'"]')||$('.ch[data-id="'+window.FOCUS_CH+'"]');window.FOCUS_CH=null;if(b){b.scrollIntoView({behavior:'smooth',block:'center'});b.style.outline='3px solid var(--brand)';setTimeout(()=>b.style.outline='',2500);}}}
 
+/** The everyday Grok card: three steps and one button. */
+function grokSimple(ch){const g=S.config.gates,base=S.origin+'/o/'+ch.secret;
+  const more=g.length>1?L.grok_more+'\n'+g.slice(1).map(x=>'- "'+x.label+'": '+base+'/'+x.alias+'/'+L.random_n).join('\n')+'\n':'';
+  const instr=F(L.grok_instr,base+'/'+g[0].alias+'/'+L.random_n,more);
+  if(!ch.enabled)return '<p class="muted small" data-grok="'+esc(ch.id)+'">'+L.off_text+'</p>';
+  return '<div class="stack" data-grok="'+esc(ch.id)+'"><ol class="steps-simple"><li>'+L.grok_s1+'</li><li>'+L.grok_s2.replace(/←/g,AR)+'</li><li>'+L.grok_s3+'</li></ol>'+
+    '<button class="btn-primary btn-block" data-copy="'+esc(instr)+'" style="min-height:54px">'+L.copy_instr_big+'</button>'+
+    '<details><summary>'+L.show_text+'</summary><pre style="margin-top:8px">'+esc(instr)+'</pre></details></div>';}
+
+/** Full settings for one access method (shown under "advanced"). */
 function chCard(ch){const k=KIND[ch.kind],g=S.config.gates,base=S.origin+'/o/'+ch.secret;let body='';
   if(ch.enabled&&g.length){
-    if(ch.kind==='grok'){const more=g.length>1?L.grok_more+'\n'+g.slice(1).map(x=>'- "'+x.label+'": '+base+'/'+x.alias+'/'+L.random_n).join('\n')+'\n':'';
-      const instr=F(L.grok_instr,base+'/'+g[0].alias+'/'+L.random_n,more);
-      body='<ol class="small" style="padding-inline-start:20px;margin:0"><li>'+L.grok_1+'</li><li>'+L.grok_2.replace(/←/g,AR)+'</li></ol><pre>'+esc(instr)+'</pre><button class="btn-soft btn-block" data-copy="'+esc(instr)+'">'+L.copy_grok+'</button>'+
-      '<div class="row between" style="padding-top:8px;border-top:1px solid var(--line)"><div class="grow"><b>'+L.arm_title+'</b><div class="hint">'+L.arm_hint+'</div></div><label class="switch"><input type="checkbox" class="arm" '+(ch.requireArm?'checked':'')+'><span></span><b class="sr">'+L.arming+'</b></label></div>'+
-      (ch.requireArm?'<div class="row"><span class="pill '+(S.armed[ch.id]?'ok':'')+'"><span class="dot"></span>'+(S.armed[ch.id]?L.armed_now:L.not_armed)+'</span><button class="btn-ghost btn-sm armnow">'+L.arm_now+'</button></div>':'');}
-    if(ch.kind==='phone'){body='<p class="small">'+L.phone_instr.replace(/←/g,AR)+'</p>'+copyBox(base+'/'+g[0].alias+'?json')+
-      '<details><summary>'+L.phone_arm+'</summary><p class="small">'+L.phone_arm_text+'</p>'+copyBox(S.origin+'/arm/'+ch.secret)+'</details><p class="hint">'+L.phone_tip+'</p>';}
-    if(ch.kind==='car')body='<p class="small muted">'+L.car_paired+' <span class="mono">'+esc(S.origin)+'/car</span></p>';}
-  return '<div class="card ch stack'+(ch.enabled?'':' off')+'" data-id="'+esc(ch.id)+'"><div class="head"><div class="ico" aria-hidden="true">'+k.i+'</div><div class="grow"><b>'+esc(ch.name)+'</b><div class="muted small">'+k.t+' · '+L.last_used+': '+fmt(ch.lastUsedAt)+'</div></div>'+
+    if(ch.kind==='grok')body='<div class="row between"><div class="grow"><b>'+L.arm_title+'</b><div class="hint">'+L.arm_hint+'</div></div><label class="switch"><input type="checkbox" class="arm" '+(ch.requireArm?'checked':'')+'><span></span><b class="sr">'+L.arming+'</b></label></div>'+
+      (ch.requireArm?'<div class="row"><span class="pill '+(S.armed[ch.id]?'ok':'')+'"><span class="dot"></span>'+(S.armed[ch.id]?L.armed_now:L.not_armed)+'</span><button class="btn-ghost btn-sm armnow">'+L.arm_now+'</button></div>':'');
+    if(ch.kind==='phone')body='<p class="small">'+L.phone_instr.replace(/←/g,AR)+'</p>'+copyBox(base+'/'+g[0].alias+'?json')+
+      '<p class="small">'+L.phone_arm_text+'</p>'+copyBox(S.origin+'/arm/'+ch.secret)+'<p class="hint">'+L.phone_tip+'</p>';}
+  return '<div class="card ch stack'+(ch.enabled?'':' off')+'" data-id="'+esc(ch.id)+'" style="box-shadow:none"><div class="head"><div class="ico" aria-hidden="true">'+k.i+'</div><div class="grow"><b>'+esc(ch.name)+'</b><div class="muted small">'+L.last_used+': '+fmt(ch.lastUsedAt)+'</div></div>'+
     '<label class="switch" title="'+L.active+'"><input type="checkbox" class="en" '+(ch.enabled?'checked':'')+'><span></span><b class="sr">'+L.active+'</b></label></div>'+
     (ch.enabled?body:'<p class="muted small">'+L.off_text+'</p>')+
     '<details><summary>'+L.advanced+'</summary><div class="stack" style="margin-top:10px"><label>'+L.name+'<input class="nm" value="'+esc(ch.name)+'" maxlength="40"></label>'+
@@ -558,14 +595,12 @@ function pairDialog(){const d=document.createElement('dialog');d.innerHTML='<for
 
 // ---------- security
 function security(){const el=$('#tab-security'),cfg=S.config,acc=S.account,hasPk=S.passkeys.length>0;
-  const checks=[[hasPk,F(L.chk_login,bioName()),L.chk_login_hint],[(S.passkeys.length+(acc.hasPassword?1:0))>1||S.passkeys.some(p=>p.backedUp),L.chk_backup,L.chk_backup_hint],
-    [true,L.chk_enc],[true,L.chk_rate],[true,L.chk_https],[!!cfg.notifyUrl,L.chk_notify,L.chk_notify_hint],[cfg.channels.filter(c=>c.kind==='grok').every(c=>c.requireArm),L.chk_arm,L.chk_arm_hint]];
-  const score=checks.filter(c=>c[0]).length,good=checks.length-1;
-  el.innerHTML='<div class="cards"><div class="card stack"><div class="row between"><h2>'+L.protection+'</h2><span class="pill '+(score>=good?'ok':score>=good-1?'warn':'bad')+'">'+score+'/'+checks.length+'</span></div>'+
-    checks.map(c=>'<div class="check"><span class="s">'+(c[0]?'✅':'⚪')+'</span><div>'+esc(c[1])+(c[2]&&!c[0]?'<div class="hint">'+c[2]+'</div>':'')+'</div></div>').join('')+'</div>'+
-  '<div class="stack"><div class="card"><div class="row between"><div class="grow"><b>'+L.emergency+'</b><div class="muted small">'+L.emergency_sub+'</div></div><label class="switch"><input type="checkbox" id="master" '+(cfg.enabled?'checked':'')+'><span></span><b class="sr">'+L.opening_active+'</b></label></div></div>'+
-  '<div class="card stack"><h2>'+L.display+'</h2><p class="muted small">'+L.display_sub+'</p><div class="theme-pick" role="group" aria-label="'+L.theme+'">'+
-    '<button type="button" data-theme-opt="light">☀️ '+L.day+'</button><button type="button" data-theme-opt="dark">🌙 '+L.night+'</button><button type="button" data-theme-opt="auto">🖥️ '+L.auto+'</button></div></div></div>'+
+  const todo=[];if(!hasPk&&pkSupported())todo.push('<button class="btn-soft btn-sm" id="todo-pk">🔐 '+esc(F(L.add_bio_btn,bioName()))+'</button>');
+  if(!cfg.notifyUrl)todo.push('<button class="btn-soft btn-sm" id="todo-notif">🔔 '+L.enable_notif_btn+'</button>');
+  el.innerHTML='<div class="cards"><div class="card stack"><h2>'+L.safe_title+'</h2><div class="check"><span class="s">✅</span><div>'+L.safe_line+'</div></div>'+
+    '<div class="check"><span class="s">'+(hasPk?'✅':'⚪')+'</span><div>'+esc(F(L.chk_login,bioName()))+'</div></div>'+
+    '<div class="check"><span class="s">'+(cfg.notifyUrl?'✅':'⚪')+'</span><div>'+L.chk_notify+'</div></div>'+(todo.length?'<div class="row">'+todo.join('')+'</div>':'')+'</div>'+
+  '<div class="card"><div class="row between"><div class="grow"><b>'+L.emergency+'</b><div class="muted small">'+L.emergency_sub+'</div></div><label class="switch"><input type="checkbox" id="master" '+(cfg.enabled?'checked':'')+'><span></span><b class="sr">'+L.opening_active+'</b></label></div></div>'+
   '<div class="card stack"><h2>'+L.account+'</h2>'+(acc.username?'<div class="row"><span class="muted small">'+L.username+':</span> <b class="mono">'+esc(acc.username)+'</b></div>':'')+
     '<form id="pwf" class="stack"><b>'+(acc.hasPassword?L.change_password:L.set_password)+'</b>'+(acc.hasPassword?'':'<p class="hint">'+L.no_password_yet+'</p>')+
     (acc.hasPassword?'<input name="current" type="password" placeholder="'+L.current_password+'" autocomplete="current-password" required>':'')+
@@ -585,6 +620,8 @@ function security(){const el=$('#tab-security'),cfg=S.config,acc=S.account,hasPk
   const rnd=crypto.getRandomValues(new Uint8Array(10));const topic='gate-'+[...rnd].map(x=>x.toString(36)).join('').slice(0,18);
   $('#topic').textContent=cfg.notifyUrl?cfg.notifyUrl.replace('https://ntfy.sh/',''):topic;if(!cfg.notifyUrl)$('#notify').value='https://ntfy.sh/'+topic;
   $('#master').onchange=e=>setMaster(e.target.checked);
+  $('#todo-pk')?.addEventListener('click',e=>busy(e.currentTarget,async()=>{try{await addPasskey();toast(L.pk_added,'ok');await load();}catch(err){toast(err.message,'bad');}}));
+  $('#todo-notif')?.addEventListener('click',()=>{const n=$('#notify');n.scrollIntoView({behavior:'smooth',block:'center'});n.focus();});
   $('#sn').onclick=e=>busy(e.currentTarget,async()=>{try{await api('settings',{notifyUrl:$('#notify').value});toast(L.saved,'ok');load();}catch(err){toast(err.message,'bad');}});
   $('#tn').onclick=async()=>{await api('notify-test');toast(L.test_sent);};
   $('#scd').onclick=async()=>{try{await api('settings',{cooldownSec:+$('#cd').value});toast(L.saved,'ok');}catch(e){toast(e.message,'bad');}};
@@ -629,7 +666,8 @@ export function saPage(lang: Lang) {
   const js = `window.API_BASE='/sa/api/';const LOCALE=${JSON.stringify(lang === 'he' ? 'he-IL' : 'en-GB')};
 let S=null;
 const fmt=iso=>iso?new Date(iso).toLocaleDateString(LOCALE,{day:'numeric',month:'short',year:'numeric'}):'—';
-async function load(){S=await api('state');render();}
+let resumed=false;
+async function load(){S=await api('state');render();if(S.linkPending&&!resumed&&!document.querySelector('dialog')){resumed=true;linkFlow(true);}}
 function render(){const T=S.tenants,act=T.filter(t=>t.status==='active').length,week=T.filter(t=>t.lastActiveAt&&Date.now()-new Date(t.lastActiveAt)<7*864e5).length;
   $('#stats').innerHTML=[[L.customers,T.length],[L.active_week,week],[L.blocked,T.length-act],[L.signups_today,S.signupsToday+'/'+S.platform.maxSignupsPerDay]].map(x=>'<div class="stat"><span class="muted small">'+x[0]+'</span><b>'+x[1]+'</b></div>').join('');
   $('#platform').innerHTML='<h2>'+L.signup_box+'</h2><div class="row between"><div class="grow"><b>'+L.signup_open+'</b><div class="hint">'+L.signup_open_hint+'</div></div><label class="switch"><input type="checkbox" id="open" '+(S.platform.signupsOpen?'checked':'')+'><span></span><b class="sr">'+L.signup_open+'</b></label></div>'+
